@@ -1,6 +1,6 @@
 /**
  * Simple WebSocket server for PlaySocket
- * Handles both signaling and data transfer between peers
+ * Handles room creation and room logic
  */
 
 const WebSocket = require('ws');
@@ -82,7 +82,8 @@ wsServer.on('connection', ws => {
                         // Notify the joiner and send initial storage update
                         ws.send(JSON.stringify({
                             type: 'connection_accepted',
-                            storage: rooms[roomId].storage
+                            storage: rooms[roomId].storage,
+                            participantCount: rooms[roomId].participants?.length
                         }));
 
                         // Notify all room participants (except the one that just joined)
@@ -93,6 +94,7 @@ wsServer.on('connection', ws => {
                                     client.send(JSON.stringify({
                                         type: 'client_connected',
                                         client: ws.clientId,
+                                        participantCount: rooms[roomId].participants?.length
                                     }));
                                 }
                             }
@@ -188,13 +190,14 @@ wsServer.on('connection', ws => {
                         client.send(JSON.stringify({
                             type: 'client_disconnected',
                             updatedHost: clientRoom.participants?.[0],
-                            client: p,
+                            client: ws.clientId,
+                            participantCount: clientRoom.participants?.length
                         }));
                     } catch (error) {
                         console.error(`Error notifying peer ${otherPeerId} of disconnection:`, error);
                     }
                 }
-            })
+            });
         }
 
         // Close / delete room if nobody is in it anymore

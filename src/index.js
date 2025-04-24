@@ -117,6 +117,7 @@ export default class PlaySocket {
                         // Connected to room
                         if (this.#pendingJoin) {
                             this.#storage = message.storage;
+                            this.#connectionCount = message.participantCount - 1;
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             this.#pendingJoin.resolve();
@@ -174,8 +175,8 @@ export default class PlaySocket {
                         break;
 
                     case 'client_disconnected':
-                        this.#connectionCount--;
                         this.#isHost = this.#id == message.updatedHost;
+                        this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
 
                         // If host has changed...
                         if (this.#roomHost != message.updatedHost) {
@@ -188,7 +189,7 @@ export default class PlaySocket {
                         break;
 
                     case 'client_connected':
-                        this.#connectionCount++;
+                        this.#connectionCount = message.participantCount - 1;
                         this.#triggerEvent("clientConnected", message.client);
                         this.#triggerEvent("status", `Client ${message.client} connected.`);
                         break;
