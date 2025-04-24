@@ -137,7 +137,7 @@ export default class PlaySocket {
 
                     case 'room_created':
                         if (this.#pendingHost) {
-                            this.#pendingHost.resolve();
+                            this.#pendingHost.resolve(this.#roomId);
                             this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}` : ''}`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             this.#pendingHost = null;

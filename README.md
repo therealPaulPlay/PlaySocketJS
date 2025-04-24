@@ -19,38 +19,38 @@ npm install playsocketjs
 
 ## Usage
 
-Note that in production, you should **always try...catch** these promises, such as peer.init(), to ensure your application continues to run if errors occur.
+Note that in production, you should **always try...catch** these promises, such as socket.init(), to ensure your application continues to run if errors occur.
 
 ```javascript
 import PlaySocket from 'playsocketjs';
 
 // Create a new instance
-const peer = new PlaySocket('unique-client-id', {
+const socket = new PlaySocket('unique-client-id', {
     endpoint: 'wss://example.com/socket'
 });
 
 // Set up event handlers
-peer.onEvent('status', status => console.log('Status:', status));
-peer.onEvent('storageUpdated', storage => console.log('Storage update received:', storage));
+socket.onEvent('status', status => console.log('Status:', status));
+socket.onEvent('storageUpdated', storage => console.log('Storage update received:', storage));
 
-// Initialize the peer
-await peer.init();
+// Initialize the socket
+await socket.init();
 
 // Create a new room
-const hostId = await peer.createRoom({
+const hostId = await socket.createRoom({
     players: [],
 });
 
 // Or, join room
-await peer.joinRoom('room-id'); // Same as the host's id
+await socket.joinRoom('room-id'); // Same as the host's id
 
 // Interact with the synced storage
-const currentState = peer.getStorage;
-peer.updateStorageArray('players', 'add-unique', { username: 'Player4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
-peer.updateStorage('latestPlayer', 'Player4'); // Regular synced storage update
+const currentState = socket.getStorage;
+socket.updateStorageArray('players', 'add-unique', { username: 'Player4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
+socket.updateStorage('latestPlayer', 'Player4'); // Regular synced storage update
 
 // To leave the room, destroy the instance
-peer.destroy();
+socket.destroy();
 ```
 
 ## API Reference
@@ -61,7 +61,7 @@ peer.destroy();
 new PlaySocket(id: string, options: PlaySocketOptions)
 ```
 
-Creates a new PlaySocket instance with a specified peer ID and configuration options.
+Creates a new PlaySocket instance with a specified ID and configuration options.
 
 #### Options object properties
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://your-server.com/socket')
@@ -97,8 +97,8 @@ The `id` is used to distinguish the client from other clients on the WebSocket s
 Using a UUID is recommended, but it is also fine to use any other random string. If you're using a public WebSocket server, including your application's name in the `id` can help to prevent overlap (e.g. your-app-012345abcdef). 
 
 - `id`: Client's unique identifier
-- `isHost`: If this peer is currently hosting or not
-- `connectionCount`: Number of active peer connections (without you)
+- `isHost`: If this user is currently assigned the host role
+- `connectionCount`: Number of active client connections in room (without you)
 - `getStorage`: Retrieve storage object
 
 ## Server
