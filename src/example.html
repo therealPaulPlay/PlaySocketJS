@@ -82,12 +82,8 @@
             document.getElementById("join-container").style.opacity = "0.5";
             if (!hostId) return alert('Please enter the Room code (Host ID)');
 
-            try {
-                if (!peer) await initPeer(peerId);
-                await peer.joinRoom(hostId);
-            } catch (error) {
-                alert('Failed to join: ' + error.message);
-            }
+            if (!peer) await initPeer(peerId);
+            await peer.joinRoom(hostId);
         }
 
         function sendMessage() {
@@ -101,6 +97,7 @@
                 text: text
             };
 
+            console.log("Connection count:", peer.connectionCount);
             peer.updateStorageArray('messages', 'add', newMessage);
         }
 

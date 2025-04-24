@@ -25,9 +25,17 @@ wsServer.on('connection', ws => {
                 case 'register':
                     // Register peer ID
                     if (data.id) {
-                        // TODO: ensure that there cannot be duplicate ids
+                        if (clients.get(data.id)) {
+                            ws.send(JSON.stringify({
+                                type: 'id_taken'
+                            }));
+                            return;
+                        }
                         ws.clientId = data.id; // Store ID directly on the websocket
                         clients.set(data.id, ws);
+                        ws.send(JSON.stringify({
+                            type: 'registered'
+                        }));
                     }
                     break;
 

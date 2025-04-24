@@ -25,6 +25,7 @@ export default class PlaySocket {
     // Async server operations
     #pendingJoin;
     #pendingHost;
+    #pendingInit;
 
     /**
      * Create a new PlaySocket instance
@@ -72,43 +73,41 @@ export default class PlaySocket {
      * @returns {Promise} Resolves when connected to server
      */
     async init() {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             if (this.#initialized) return reject(new Error("Already initialized."));
-            if (!this.#id) console.warn(WARNING_PREFIX + "No ID provided.");
-
             this.#triggerEvent("status", "Initializing...");
-            this.#socket = new WebSocket(this.#endpoint);
+            await this.connect();
+            resolve();
+        });
+    }
 
-            // Socket open handler
+    async connect() {
+        return new Promise((resolve, reject) => {
+            this.#socket = new WebSocket(this.#endpoint);
+            this.#setupSocketHandlers(); // Message & close events
+
+            // Resolve or reject depending on answer to registration msg
+            this.#pendingInit = {
+                resolve: resolve,
+                reject: reject
+            }
+
+            // Register with server
             this.#socket.onopen = () => {
                 this.#initialized = true;
-                this.#setupSocketHandlers();
-                this.#triggerEvent("status", "Connected to server.");
-
-                // Register with server
-                // TODO: Only resolve if id is not taken
                 this.#sendToServer({
                     type: 'register',
                     id: this.#id
                 });
-
-                resolve();
-            };
-
-            // Socket error handler
-            this.#socket.onerror = (error) => {
-                this.#triggerEvent("error", "WebSocket error: " + error.message);
-                reject(new Error("WebSocket error: " + error.message));
             };
         });
     }
 
     /**
-     * Set up WebSocket message handlers
+     * Set up WebSocket message & close handlers
      * @private
      */
     #setupSocketHandlers() {
-        // Handle incoming messages
         this.#socket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
@@ -130,7 +129,7 @@ export default class PlaySocket {
                         // Connection to room faiiled
                         if (this.#pendingJoin) {
                             this.#triggerEvent("outgoingPeerError", this.#roomId);
-                            this.#triggerEvent("error", `Connection rejected: ${message.reason || 'Unknown reason'}`);
+                            this.#triggerEvent("status", `Connection rejected: ${message.reason || 'Unknown reason'}`);
                             this.#pendingJoin.reject(new Error("Connection rejected."));
                             this.#pendingJoin = null;
                         }
@@ -142,16 +141,31 @@ export default class PlaySocket {
                             this.#pendingHost.resolve();
                             this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}` : ''}`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            this.#pendingHost = null;
                         }
                         break;
 
                     case 'room_taken':
-                        // The room code is already taken
                         if (this.#pendingHost) {
                             this.#pendingHost.reject(new Error("Room with this id exists."));
                             this.#triggerEvent("error", "Room with this id is taken.");
+                            this.#pendingHost = null;
                         }
                         break;
+
+                    case 'id_taken':
+                        if (this.#pendingInit) {
+                            this.#pendingInit.reject(new Error("This id is already being used."));
+                            this.#triggerEvent("error", "This id is taken.");
+                            this.#pendingInit = null;
+                        }
+                        break;
+                    case 'registered':
+                        if (this.#pendingInit) {
+                            this.#pendingInit.resolve();
+                            this.#triggerEvent("status", "Connected to server.");
+                            this.#pendingInit = null;
+                        }
 
                     case 'storage_sync':
                         if (message.storage && JSON.stringify(this.#storage) !== JSON.stringify(message.storage)) {
@@ -185,15 +199,34 @@ export default class PlaySocket {
             }
         };
 
-        // Handle socket close
-        // TODO: attempt reconnect first
+        // Handle socket errors
+        this.#socket.onerror = () => {
+            this.#triggerEvent("error", "WebSocket error.");
+            if (this.#pendingInit) this.#pendingInit.reject(new Error("WebSocket error."));
+        }
+
+        // Handle socket close & attempt reconnect
         this.#socket.onclose = () => {
-            this.#socket = null;
-            this.destroy();
-            this.#triggerEvent("status", "Disconnected from server.");
-            this.#triggerEvent("error", "WebSocket connection closed.");
-        };
-    }
+            this.#triggerEvent("status", "Disconnected, attempting reconnect...");
+
+            setTimeout(async () => {
+                if (!this.#initialized || !this.#socket) return;
+                try {
+                    await this.connect(); // Will set status to connected if successful
+
+                    // Rejoin room if needed
+                    if (this.#roomId) {
+                        this.#triggerEvent("status", "Rejoining room...");
+                        await this.joinRoom(this.#roomId); // If this fails, it will be caught by the outer catch
+                    }
+                } catch (error) {
+                    this.#triggerEvent("error", "WebSocket connection closed: " + error);
+                    this.#socket = null;
+                    this.destroy();
+                }
+            }, 1000);
+        }
+    };
 
     /**
      * Send a message to the server

@@ -1,15 +1,15 @@
 # PlaySocket
 
-A WebSocket-based multiplayer library that simplifies game development by abstracting away the room logic and moving it to the frontend.
+A WebSocket-based multiplayer library that simplifies game development by abstracting away the backend logic and moving it to the frontend.
 
 ## Why use PlaySocket?
 
 PlaySocket eliminates the traditional complexity of multiplayer implementations:
 
-- **Simplified Architecture**: No need for separate server/client logic
+- **Streamlined Architecture**: No additional backend code is required
 - **State Synchronization**: Built-in storage system keeps game state synchronized across all users
 - **Resilient Connections**: Automatic reconnection handling
-- **Lightweight**: Uses WebSockets for efficient, reliable communication with little code
+- **Lightweight**: Uses WebSockets for efficient, predictable & reliable communication with little code required
 
 ## Installation
 
@@ -75,7 +75,7 @@ Creates a new PlaySocket instance with a specified peer ID and configuration opt
 - `joinRoom(hostId: string)`: Join an existing room. Returns promise (async)
 - `destroy()`: Use this to leave a room and close the connection
 
-#### State Management
+#### State management
 
 - `updateStorage(key: string, value: any)`: Update a value in the synchronized storage
 - `updateStorageArray(key: string, operation: 'add' | 'add-unique' | 'remove-matching' | 'update-matching', value: any, updateValue?: any)`: Safely update arrays in storage by adding, removing, or updating items. This is necessary for when array updates might be happening simultaneously to ensure changes are being applied and not overwritten. Using add-unique instead of add ensures that this value can only be in the array once.
