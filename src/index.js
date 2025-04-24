@@ -58,7 +58,6 @@ export default class PlaySocket {
     #triggerEvent(event, ...args) {
         const callbacks = this.#callbacks.get(event);
         if (!callbacks || callbacks.length === 0) return;
-
         callbacks.forEach(callback => {
             try {
                 callback(...args);
@@ -136,7 +135,6 @@ export default class PlaySocket {
                         break;
 
                     case 'room_created':
-                        // The server created the room
                         if (this.#pendingHost) {
                             this.#pendingHost.resolve();
                             this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}` : ''}`);
@@ -166,6 +164,7 @@ export default class PlaySocket {
                             this.#triggerEvent("status", "Connected to server.");
                             this.#pendingInit = null;
                         }
+                        break
 
                     case 'storage_sync':
                         if (message.storage && JSON.stringify(this.#storage) !== JSON.stringify(message.storage)) {
@@ -291,15 +290,13 @@ export default class PlaySocket {
             this.#isHost = false;
             this.#roomId = roomId;
             this.#roomHost = roomId;
-            this.#triggerEvent("status", `Connecting to room ${roomId}...`);
-
-            // Set pending join state
             this.#pendingJoin = {
                 resolve: resolve,
                 reject: reject
             };
 
             // Send connection request
+            this.#triggerEvent("status", `Connecting to room ${roomId}...`);
             this.#sendToServer({
                 type: 'join_room',
                 roomId
