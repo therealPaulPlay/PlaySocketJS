@@ -105,7 +105,7 @@ wsServer.on('connection', ws => {
 
                 case 'room_storage_update':
                     if (data.roomId && rooms[data.roomId] && rooms[data.roomId]?.participants?.includes(ws.clientId)) {
-                        rooms[data.roomId].storage = data.updatedStorage;
+                        rooms[data.roomId].storage[data.key] = data.value;
                         roomStorageSync(data.roomId);
                     }
                     break;

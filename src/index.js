@@ -8,7 +8,7 @@ const WARNING_PREFIX = "PlaySocket warning: ";
 export default class PlaySocket {
     // Core properties
     #id; // Unique peer ID
-    #endpoint = "wss://your-server.com/socket"; // Default WebSocket endpoint
+    #endpoint = "wss://example.com/socket"; // Default endpoint
     #socket; // WebSocket connection
     #initialized = false; // Initialization status
 
@@ -317,7 +317,8 @@ export default class PlaySocket {
         this.#sendToServer({
             type: 'room_storage_update',
             roomId: this.#roomId,
-            updatedStorage: this.#storage
+            key,
+            value
         })
     }
 

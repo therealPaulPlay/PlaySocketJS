@@ -26,7 +26,7 @@ import PlaySocket from 'playsocketjs';
 
 // Create a new instance
 const peer = new PlaySocket('unique-client-id', {
-    endpoint: 'wss://your-websocket-server.com/socket'
+    endpoint: 'wss://example.com/socket'
 });
 
 // Set up event handlers
@@ -58,12 +58,12 @@ peer.destroy();
 ### Constructor
 
 ```javascript
-new PlaySocket(id: string, options?: PlaySocketOptions)
+new PlaySocket(id: string, options: PlaySocketOptions)
 ```
 
 Creates a new PlaySocket instance with a specified peer ID and configuration options.
 
-#### Options
+#### Options object properties
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://your-server.com/socket')
 
 ### Methods
