@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PlaySocket Chat Example</title>
+
+    <style>
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+
+        #chatInput {
+            width: 80%;
+            padding: 5px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="controls">
+        <p id="peerIdDisplay"></p>
+        <div id="host-container">
+            <button onclick="host()">Host Room</button>
+        </div>
+        <br>
+        <div id="join-container">
+            <input type="text" id="hostId" placeholder="Host ID">
+            <button onclick="join()">Join Room</button>
+        </div>
+    </div>
+
+    <div id="messages"></div>
+    <input type="text" id="chatInput" placeholder="Type message...">
+    <button onclick="sendMessage()">Send</button>
+    <button onclick="clearChat()">Clear chat</button>
+
+    <script type="module">
+        import PlaySocket from '../dist/playsocket.js';
+
+        let peer;
+
+        // Automatically generate and display the ID
+        const peerId = Math.random().toString(36).substring(2, 12);
+
+        document.getElementById('peerIdDisplay').textContent = `Your peer ID: ${peerId}`;
+
+        async function initPeer(id) {
+            peer = new PlaySocket(id, { endpoint: "ws://localhost:3000" });
+            peer.onEvent('status', status => console.log('Status:', status));
+            peer.onEvent('storageUpdated', (storage) => {
+                const messages = document.getElementById('messages');
+                messages.innerHTML = storage.messages?.map(msg =>
+                    `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`
+                ).join('') || '';
+                messages.scrollTop = messages.scrollHeight;
+            });
+
+            await peer.init();
+        }
+
+        async function host() {
+            document.getElementById("join-container").style.display = "none";
+            document.getElementById("host-container").style.pointerEvents = "none";
+            document.getElementById("host-container").style.opacity = "0.5";
+
+            if (!peer) await initPeer(peerId);
+            await peer.createRoom({ messages: [] });
+        }
+
+        async function join() {
+            const hostId = document.getElementById('hostId').value;
+            document.getElementById("host-container").style.display = "none";
+            document.getElementById("join-container").style.pointerEvents = "none";
+            document.getElementById("join-container").style.opacity = "0.5";
+            if (!hostId) return alert('Please enter the Room code (Host ID)');
+
+            try {
+                if (!peer) await initPeer(peerId);
+                await peer.joinRoom(hostId);
+            } catch (error) {
+                alert('Failed to join: ' + error.message);
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            input.value = '';
+            if (!text) return;
+
+            const newMessage = {
+                sender: peer.id,
+                text: text
+            };
+
+            peer.updateStorageArray('messages', 'add', newMessage);
+        }
+
+        function clearChat() {
+            peer.updateStorage('messages', []);
+        }
+
+        // Make functions globally available
+        window.host = host;
+        window.join = join;
+        window.sendMessage = sendMessage;
+        window.clearChat = clearChat;
+
+        // Enter key to send
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+
+</html>
