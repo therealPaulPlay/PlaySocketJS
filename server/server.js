@@ -11,9 +11,9 @@ const server = http.createServer();
 const wsServer = new WebSocket.Server({ server });
 
 // Store connected peers, rooms
-const clients = new Map(); // peerId -> WebSocket
+const clients = new Map(); // ClientId -> WebSocket instance
 const rooms = {};
-const clientRooms = new Map(); // Clients matched to rooms
+const clientRooms = new Map(); // ClientId -> RoomId
 
 // Handle new WebSocket connections
 wsServer.on('connection', ws => {
