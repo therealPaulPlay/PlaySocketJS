@@ -144,10 +144,10 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'room_taken':
+                    case 'room_creation_failed':
                         if (this.#pendingHost) {
-                            this.#pendingHost.reject(new Error("Room with this id exists."));
-                            this.#triggerEvent("error", "Room with this id is taken.");
+                            this.#pendingHost.reject(new Error("Error creating room: " + message.reason || 'Unknown reason'));
+                            this.#triggerEvent("error", "Failed to create room.");
                             this.#pendingHost = null;
                         }
                         break;
@@ -207,7 +207,7 @@ export default class PlaySocket {
 
         // Handle socket close & attempt reconnect
         this.#socket.onclose = () => {
-            this.#triggerEvent("status", "Disconnected, attempting reconnect...");
+            this.#triggerEvent("status", "Disconnected from server.");
 
             setTimeout(async () => {
                 if (!this.#initialized || !this.#socket) return;
@@ -220,7 +220,7 @@ export default class PlaySocket {
                         await this.joinRoom(this.#roomId); // If this fails, it will be caught by the outer catch
                     }
                 } catch (error) {
-                    this.#triggerEvent("error", "WebSocket connection closed: " + error);
+                    this.#triggerEvent("error", "WebSocket connection permanently closed: " + error);
                     this.#socket = null;
                     this.destroy();
                 }
@@ -316,7 +316,6 @@ export default class PlaySocket {
         this.#triggerEvent("storageUpdated", { ...this.#storage });
         this.#sendToServer({
             type: 'room_storage_update',
-            roomId: this.#roomId,
             key,
             value
         })
@@ -332,7 +331,6 @@ export default class PlaySocket {
     updateStorageArray(key, operation, value, updateValue) {
         this.#sendToServer({
             type: 'room_storage_array_update',
-            roomId: this.#roomId,
             key,
             operation,
             value,

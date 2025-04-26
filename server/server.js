@@ -13,10 +13,10 @@ const wsServer = new WebSocket.Server({ server });
 // Store connected peers, rooms
 const clients = new Map(); // peerId -> WebSocket
 const rooms = {};
+const clientRooms = new Map(); // Clients matched to rooms
 
 // Handle new WebSocket connections
 wsServer.on('connection', ws => {
-    // Set up message handler
     ws.on('message', message => {
         try {
             const data = JSON.parse(message);
@@ -41,19 +41,27 @@ wsServer.on('connection', ws => {
 
                 case 'create_room':
                     if (ws.clientId) {
-                        const from = ws.clientId;
-                        if (rooms[from]) {
+                        const newRoomId = ws.clientId;
+                        if (clientRooms.get(ws.clientId)) {
                             ws.send(JSON.stringify({
-                                type: 'room_taken'
+                                type: 'room_creation_failed',
+                                reason: 'Already in a room'
                             }));
                             return;
-                        } else {
-                            rooms[from] = {
-                                participants: [data.from],
-                                maxSize: data.size || null,
-                                storage: data.storage,
-                            }
                         }
+                        if (rooms[newRoomId]) {
+                            ws.send(JSON.stringify({
+                                type: 'room_creation_failed',
+                                reason: 'Room id is taken'
+                            }));
+                            return;
+                        }
+                        rooms[newRoomId] = {
+                            participants: [ws.clientId],
+                            maxSize: data.size || null,
+                            storage: data.storage,
+                        }
+                        clientRooms.set(ws.clientId, newRoomId);
                         ws.send(JSON.stringify({
                             type: 'room_created'
                         }));
@@ -77,7 +85,16 @@ wsServer.on('connection', ws => {
                             }));
                             return;
                         }
+                        if (clientRooms.get(ws.clientId)) {
+                            ws.send(JSON.stringify({
+                                type: 'connection_rejected',
+                                reason: 'Already in a room'
+                            }));
+                            return;
+                        }
+
                         rooms[roomId].participants.push(ws.clientId);
+                        clientRooms.set(ws.clientId, roomId);
 
                         // Notify the joiner and send initial storage update
                         ws.send(JSON.stringify({
@@ -88,15 +105,14 @@ wsServer.on('connection', ws => {
 
                         // Notify all room participants (except the one that just joined)
                         rooms[roomId].participants.forEach((p) => {
-                            if (p !== ws.clientId) {
-                                const client = clients.get(p);
-                                if (client) {
-                                    client.send(JSON.stringify({
-                                        type: 'client_connected',
-                                        client: ws.clientId,
-                                        participantCount: rooms[roomId].participants?.length
-                                    }));
-                                }
+                            if (p === ws.clientId) return;
+                            const client = clients.get(p);
+                            if (client) {
+                                client.send(JSON.stringify({
+                                    type: 'client_connected',
+                                    client: ws.clientId,
+                                    participantCount: rooms[roomId].participants?.length
+                                }));
                             }
                         });
 
@@ -104,16 +120,20 @@ wsServer.on('connection', ws => {
                     break;
 
                 case 'room_storage_update':
-                    if (data.roomId && rooms[data.roomId] && rooms[data.roomId]?.participants?.includes(ws.clientId)) {
-                        rooms[data.roomId].storage[data.key] = data.value;
-                        roomStorageSync(data.roomId);
+                    const updateKey = clientRooms.get(ws.clientId);
+                    const updateRoom = updateKey ? rooms[updateKey] : null;
+                    if (updateRoom) {
+                        updateRoom.storage[data.key] = data.value;
+                        roomStorageSync(updateKey);
                     }
                     break;
 
                 case 'room_storage_array_update':
-                    if (data.roomId && rooms[data.roomId] && rooms[data.roomId]?.participants?.includes(ws.clientId)) {
-                        arrayUpdate(rooms[data.roomId].storage, data.key, data.operation, data.value, data.updateValue);
-                        roomStorageSync(data.roomId);
+                    const arrayUpdateKey = clientRooms.get(ws.clientId);
+                    const arrayUpdateRoom = arrayUpdateKey ? rooms[arrayUpdateKey] : null;
+                    if (arrayUpdateRoom) {
+                        arrayUpdate(arrayUpdateRoom.storage, data.key, data.operation, data.value, data.updateValue);
+                        roomStorageSync(arrayUpdateKey);
                     }
                     break;
             }
@@ -168,42 +188,34 @@ wsServer.on('connection', ws => {
     // Handle disconnection
     ws.on('close', () => {
         if (!ws.clientId) return;
-        clients.delete(ws.clientId); // Remove
+        clients.delete(ws.clientId); // Remove from connected clients
 
-        let clientRoom;
-        let clientRoomKey;
-        for (const [key, value] of Object.entries(rooms)) {
-            if (value?.participants?.includes(ws.clientId)) {
-                clientRoomKey = key;
-                clientRoom = rooms[clientRoomKey];
-                break;
-            }
-        }
+        const key = clientRooms.get(ws.clientId);
+        const room = key ? rooms[key] : null;
 
         // Notify all participants about the disconnection
-        if (clientRoom) {
-            clientRoom.participants = clientRoom.participants?.filter((p) => p !== ws.clientId)
-            clientRoom.participants?.forEach((p) => {
+        if (room) {
+            room.participants = room.participants?.filter((p) => p !== ws.clientId); // Remove from room
+            clientRooms.delete(ws.clientId); // Remove from lookup map
+            room.participants?.forEach((p) => {
                 const client = clients.get(p);
                 if (client) {
                     try {
                         client.send(JSON.stringify({
                             type: 'client_disconnected',
-                            updatedHost: clientRoom.participants?.[0],
+                            updatedHost: room.participants?.[0],
                             client: ws.clientId,
-                            participantCount: clientRoom.participants?.length
+                            participantCount: room.participants?.length
                         }));
                     } catch (error) {
-                        console.error(`Error notifying peer ${otherPeerId} of disconnection:`, error);
+                        console.error(`Error notifying peer of disconnection:`, error);
                     }
                 }
             });
         }
 
         // Close / delete room if nobody is in it anymore
-        if (clientRoom && clientRoom.participants?.length == 0) {
-            delete rooms[clientRoomKey];
-        }
+        if (room && room.participants?.length == 0) delete rooms[key];
     });
 });
 
