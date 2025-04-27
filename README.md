@@ -8,7 +8,7 @@ PlaySocket eliminates the traditional complexity of multiplayer implementations:
 
 - **Streamlined Architecture**: No additional backend code is required
 - **State Synchronization**: Built-in storage system keeps game state synchronized across all users
-- **Resilient Connections**: Automatic reconnection handling
+- **Resilient & Secure Connections**: Automatic reconnection handling and rate limiting
 - **Lightweight**: Uses WebSockets for efficient, predictable & reliable communication with little code required
 
 ## Installation

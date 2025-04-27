@@ -1,10 +1,10 @@
 /**
- * Simple WebSocket server for PlaySocket
- * Handles room creation and room logic
+ * Simple WebSocket server for PlaySocket with rate limiting
  */
 
 const WebSocket = require('ws');
 const http = require('http');
+const { checkRateLimit, removeFromRateLimits } = require("./wsRateLimit.js");
 
 // Create server
 const server = http.createServer();
@@ -21,21 +21,20 @@ wsServer.on('connection', ws => {
         try {
             const data = JSON.parse(message);
 
+            // Apply rate limiting after client is registered
+            if (ws.clientId && !checkRateLimit(ws.clientId, data.type)) return console.error(`Client ${ws.clientId} is sending too many messages.`);
+
             switch (data.type) {
                 case 'register':
                     // Register peer ID
                     if (data.id) {
                         if (clients.get(data.id)) {
-                            ws.send(JSON.stringify({
-                                type: 'id_taken'
-                            }));
+                            ws.send(JSON.stringify({ type: 'id_taken' }));
                             return;
                         }
                         ws.clientId = data.id; // Store ID directly on the websocket
                         clients.set(data.id, ws);
-                        ws.send(JSON.stringify({
-                            type: 'registered'
-                        }));
+                        ws.send(JSON.stringify({ type: 'registered' }));
                     }
                     break;
 
@@ -62,9 +61,7 @@ wsServer.on('connection', ws => {
                             storage: data.storage,
                         }
                         clientRooms.set(ws.clientId, newRoomId);
-                        ws.send(JSON.stringify({
-                            type: 'room_created'
-                        }));
+                        ws.send(JSON.stringify({ type: 'room_created' }));
                     }
                     break;
 
@@ -115,7 +112,6 @@ wsServer.on('connection', ws => {
                                 }));
                             }
                         });
-
                     }
                     break;
 
@@ -189,6 +185,7 @@ wsServer.on('connection', ws => {
     ws.on('close', () => {
         if (!ws.clientId) return;
         clients.delete(ws.clientId); // Remove from connected clients
+        removeFromRateLimits(ws.clientId); // Clean up rate limit data
 
         const key = clientRooms.get(ws.clientId);
         const room = key ? rooms[key] : null;

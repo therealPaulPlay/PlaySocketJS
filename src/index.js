@@ -4,6 +4,7 @@
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
+const TIMEOUT_MS = 3000; // 3 second timeout for operations
 
 export default class PlaySocket {
     // Core properties
@@ -35,6 +36,16 @@ export default class PlaySocket {
     constructor(id, options = {}) {
         this.#id = id;
         if (options.endpoint) this.#endpoint = options.endpoint;
+    }
+
+    /**
+     * Helper to create timeout promises for create room, join room etc.
+     * @private
+     */
+    #createTimeout(operation) {
+        return new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${operation} timed out`)), TIMEOUT_MS)
+        );
     }
 
     /**
@@ -72,12 +83,13 @@ export default class PlaySocket {
      * @returns {Promise} Resolves when connected to server
      */
     async init() {
-        return new Promise(async (resolve, reject) => {
-            if (this.#initialized) return reject(new Error("Already initialized."));
-            this.#triggerEvent("status", "Initializing...");
-            await this.connect();
-            resolve();
-        });
+        if (this.#initialized) return Promise.reject(new Error("Already initialized."));
+        this.#triggerEvent("status", "Initializing...");
+
+        return Promise.race([
+            this.connect(),
+            this.#createTimeout("Initialization")
+        ]);
     }
 
     async connect() {
@@ -86,10 +98,7 @@ export default class PlaySocket {
             this.#setupSocketHandlers(); // Message & close events
 
             // Resolve or reject depending on answer to registration msg
-            this.#pendingInit = {
-                resolve: resolve,
-                reject: reject
-            }
+            this.#pendingInit = { resolve, reject };
 
             // Register with server
             this.#socket.onopen = () => {
@@ -126,11 +135,11 @@ export default class PlaySocket {
                         break;
 
                     case 'connection_rejected':
-                        // Connection to room faiiled
+                        // Connection to room failed
                         if (this.#pendingJoin) {
                             this.#triggerEvent("outgoingPeerError", this.#roomId);
-                            this.#triggerEvent("status", `Connection rejected: ${message.reason || 'Unknown reason'}`);
-                            this.#pendingJoin.reject(new Error("Connection rejected."));
+                            this.#triggerEvent("status", "Connection rejected: " + message.reason || 'Unknown reason');
+                            this.#pendingJoin.reject(new Error("Connection rejected: " + message.reason || 'Unknown reason'));
                             this.#pendingJoin = null;
                         }
                         break;
@@ -138,7 +147,7 @@ export default class PlaySocket {
                     case 'room_created':
                         if (this.#pendingHost) {
                             this.#pendingHost.resolve(this.#roomId);
-                            this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}` : ''}`);
+                            this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}.` : '.'}`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             this.#pendingHost = null;
                         }
@@ -146,26 +155,27 @@ export default class PlaySocket {
 
                     case 'room_creation_failed':
                         if (this.#pendingHost) {
-                            this.#pendingHost.reject(new Error("Error creating room: " + message.reason || 'Unknown reason'));
-                            this.#triggerEvent("error", "Failed to create room.");
+                            this.#pendingHost.reject(new Error("Failed to create room: " + message.reason || 'Unknown reason'));
+                            this.#triggerEvent("error", "Failed to create room: " + message.reason || 'Unknown reason');
                             this.#pendingHost = null;
                         }
                         break;
 
                     case 'id_taken':
                         if (this.#pendingInit) {
-                            this.#pendingInit.reject(new Error("This id is already being used."));
+                            this.#pendingInit.reject(new Error("This id is already in use."));
                             this.#triggerEvent("error", "This id is taken.");
                             this.#pendingInit = null;
                         }
                         break;
+
                     case 'registered':
                         if (this.#pendingInit) {
                             this.#pendingInit.resolve();
                             this.#triggerEvent("status", "Connected to server.");
                             this.#pendingInit = null;
                         }
-                        break
+                        break;
 
                     case 'storage_sync':
                         if (message.storage && JSON.stringify(this.#storage) !== JSON.stringify(message.storage)) {
@@ -251,29 +261,28 @@ export default class PlaySocket {
      * @returns {Promise} Resolves with room ID
      */
     createRoom(initialStorage = {}, maxSize) {
-        return new Promise((resolve, reject) => {
-            if (!this.#initialized) {
-                this.#triggerEvent("error", "Cannot create room - not initialized");
-                return reject(new Error("Not initialized"));
-            }
+        if (!this.#initialized) {
+            this.#triggerEvent("error", "Cannot create room - not initialized");
+            return Promise.reject(new Error("Not initialized"));
+        }
 
-            this.#isHost = true;
-            this.#storage = initialStorage;
-            this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
-            this.#roomHost = this.#id;
-            this.#pendingHost = {
-                maxSize,
-                resolve: resolve,
-                reject: reject
-            };
+        return Promise.race([
+            new Promise((resolve, reject) => {
+                this.#isHost = true;
+                this.#storage = initialStorage;
+                this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
+                this.#roomHost = this.#id;
+                this.#pendingHost = { maxSize, resolve, reject };
 
-            this.#sendToServer({
-                type: 'create_room',
-                storage: initialStorage,
-                size: maxSize,
-                from: this.#id,
-            });
-        });
+                this.#sendToServer({
+                    type: 'create_room',
+                    storage: initialStorage,
+                    size: maxSize,
+                    from: this.#id,
+                });
+            }),
+            this.#createTimeout("Room creation")
+        ]);
     }
 
     /**
@@ -282,27 +291,27 @@ export default class PlaySocket {
      * @returns {Promise} Resolves when connected
      */
     joinRoom(roomId) {
-        return new Promise((resolve, reject) => {
-            if (!this.#initialized) {
-                this.#triggerEvent("error", "Cannot join room - not initialized");
-                return reject(new Error("Not initialized"));
-            }
+        if (!this.#initialized) {
+            this.#triggerEvent("error", "Cannot join room - not initialized");
+            return Promise.reject(new Error("Not initialized"));
+        }
 
-            this.#isHost = false;
-            this.#roomId = roomId;
-            this.#roomHost = roomId;
-            this.#pendingJoin = {
-                resolve: resolve,
-                reject: reject
-            };
+        return Promise.race([
+            new Promise((resolve, reject) => {
+                this.#isHost = false;
+                this.#roomId = roomId;
+                this.#roomHost = roomId;
+                this.#pendingJoin = { resolve, reject };
 
-            // Send connection request
-            this.#triggerEvent("status", `Connecting to room ${roomId}...`);
-            this.#sendToServer({
-                type: 'join_room',
-                roomId
-            });
-        });
+                // Send connection request
+                this.#triggerEvent("status", `Connecting to room ${roomId}...`);
+                this.#sendToServer({
+                    type: 'join_room',
+                    roomId
+                });
+            }),
+            this.#createTimeout("Room join")
+        ]);
     }
 
     /**
@@ -318,7 +327,7 @@ export default class PlaySocket {
             type: 'room_storage_update',
             key,
             value
-        })
+        });
     }
 
     /**
@@ -340,7 +349,7 @@ export default class PlaySocket {
     }
 
     /**
-     * Handle array operations
+     * Handle array operations client-side
      * @private
      */
     #handleArrayUpdate(key, operation, value, updateValue) {
@@ -399,7 +408,7 @@ export default class PlaySocket {
     }
 
     // Public getters
-    get connectionCount() { return this.#connectionCount }
+    get connectionCount() { return this.#connectionCount; }
     get getStorage() { return { ...this.#storage }; }
     get isHost() { return this.#isHost; }
     get id() { return this.#id; }
