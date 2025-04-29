@@ -178,8 +178,8 @@ export default class PlaySocket {
                         break;
 
                     case 'storage_sync':
-                        if (message.storage && JSON.stringify(this.#storage) !== JSON.stringify(message.storage)) {
-                            this.#storage = message.storage;
+                        if (message.key && JSON.stringify(this.#storage[message.key]) !== JSON.stringify(message.value)) {
+                            this.#storage[message.key] = message.value;
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                         }
                         break;
@@ -276,7 +276,7 @@ export default class PlaySocket {
 
                 this.#sendToServer({
                     type: 'create_room',
-                    storage: initialStorage,
+                    storage: { ...initialStorage },
                     size: maxSize,
                     from: this.#id,
                 });
@@ -338,6 +338,7 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
+        this.#handleArrayUpdate(key, operation, value, updateValue);
         this.#sendToServer({
             type: 'room_storage_array_update',
             key,
@@ -345,7 +346,6 @@ export default class PlaySocket {
             value,
             updateValue
         });
-        this.#handleArrayUpdate(key, operation, value, updateValue);
     }
 
     /**

@@ -58,7 +58,7 @@ wsServer.on('connection', ws => {
                         rooms[newRoomId] = {
                             participants: [ws.clientId],
                             maxSize: data.size || null,
-                            storage: data.storage,
+                            storage: data.storage || {},
                         }
                         clientRooms.set(ws.clientId, newRoomId);
                         ws.send(JSON.stringify({ type: 'room_created' }));
@@ -116,20 +116,20 @@ wsServer.on('connection', ws => {
                     break;
 
                 case 'room_storage_update':
-                    const updateKey = clientRooms.get(ws.clientId);
-                    const updateRoom = updateKey ? rooms[updateKey] : null;
-                    if (updateRoom) {
-                        updateRoom.storage[data.key] = data.value;
-                        roomStorageSync(updateKey);
+                    const updateRoomId = clientRooms.get(ws.clientId);
+                    const updateRoom = updateRoomId ? rooms[updateRoomId] : null;
+                    if (updateRoom && data.key) {
+                        updateRoom.storage[data.key] = data.value; // Value can be null or undefined on purpose!
+                        roomStorageKeySync(updateRoomId, data.key);
                     }
                     break;
 
                 case 'room_storage_array_update':
-                    const arrayUpdateKey = clientRooms.get(ws.clientId);
-                    const arrayUpdateRoom = arrayUpdateKey ? rooms[arrayUpdateKey] : null;
-                    if (arrayUpdateRoom) {
+                    const arrayUpdateRoomId = clientRooms.get(ws.clientId);
+                    const arrayUpdateRoom = arrayUpdateRoomId ? rooms[arrayUpdateRoomId] : null;
+                    if (arrayUpdateRoom && data.key) {
                         arrayUpdate(arrayUpdateRoom.storage, data.key, data.operation, data.value, data.updateValue);
-                        roomStorageSync(arrayUpdateKey);
+                        roomStorageKeySync(arrayUpdateRoomId, data.key);
                     }
                     break;
             }
@@ -139,14 +139,15 @@ wsServer.on('connection', ws => {
     });
 
     // Send a storage update to all room participants
-    function roomStorageSync(roomId) {
+    function roomStorageKeySync(roomId, key) {
         if (!rooms[roomId]) return;
         rooms[roomId].participants.forEach((p) => {
             const client = clients.get(p);
             if (client) {
                 client.send(JSON.stringify({
                     type: 'storage_sync',
-                    storage: rooms[roomId].storage
+                    key,
+                    value: rooms[roomId].storage[key]
                 }));
             }
         });
