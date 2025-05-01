@@ -63,8 +63,8 @@ new PlaySocket(id: string, options: PlaySocketOptions)
 
 Creates a new PlaySocket instance with a specified ID and configuration options.
 
-#### Options object properties
-- `endpoint`: WebSocket server endpoint (e.g., 'wss://your-server.com/socket')
+#### Configuration options
+- `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
 
 ### Methods
 
@@ -103,7 +103,56 @@ Using a UUID is recommended, but it is also fine to use any other random string.
 
 ## Server
 
-PlaySocket requires a compatible WebSocket server. A simple implementation example is provided in this library under `/server`.
+PlaySocket includes a server implementation that can be set up in seconds.
+
+### Installation
+
+To use the server component, you'll need to install the required node dependencies (if not installed already):
+
+```bash
+npm install express cors ws
+```
+
+### Standalone server
+
+```javascript
+const PlaySocketServer = require('playsocketjs/server');
+
+// Create and start the server
+const server = new PlaySocketServer();
+```
+
+### With Express app
+
+```javascript
+const express = require('express');
+const http = require('http');
+const PlaySocketServer = require('playsocketjs/server');
+const port = 3000;
+
+const app = express();
+const httpServer = http.createServer(app);
+
+// Create PlaySocket server with your HTTP server
+// Uses a custom path here (which you'll likely want to do if used this way)
+const playSocketServer = new PlaySocketServer({ 
+  port,
+  server: httpServer,
+  path: '/socket'
+});
+
+// Start the server
+httpServer.listen(port, () => {
+  console.log('Server running on port 3000');
+});
+```
+
+### Configuration options
+
+- `port`: Port to listen on (default: 3000, used only if no app provided)
+- `cors`: CORS configuration object (default: { origin: '*' }, only used if no app provided)
+- `path`: WebSocket endpoint path (default: '/')
+- `app`: Existing Express application instance
 
 ## License
 
