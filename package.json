@@ -25,9 +25,9 @@
   "keywords": [
     "WebSocket",
     "data channel",
-    "PeerJS",
+    "Socket",
+    "PlayPeerJS",
     "multiplayer",
-    "peer-peer",
     "game"
   ],
   "author": "PaulPlay",
