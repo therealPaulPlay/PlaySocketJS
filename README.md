@@ -108,10 +108,10 @@ PlaySocket includes a server implementation that can be set up in seconds.
 
 ## Installation
 
-To use the server component, you'll need to install the ws package:
+To use the server component, you'll need to install playsocketjs and the ws package:
 
 ```bash
-npm install ws
+npm install playsocketjs ws
 ```
 
 ## Usage
