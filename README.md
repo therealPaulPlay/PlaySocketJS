@@ -145,9 +145,8 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // Create PlaySocket server with your HTTP server
-// Uses a custom path here (which you'll likely want to do if used this way)
-const playSocketServer = new PlaySocketServer({ 
-  port,
+// You'll likely want to use a custom path in this scenario
+const playSocketServer = new PlaySocketServer({
   server: httpServer,
   path: '/socket'
 });
