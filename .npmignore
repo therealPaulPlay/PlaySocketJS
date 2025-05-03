@@ -1,2 +1,5 @@
 resources/
 src/
+example/
+.github/
+rollup.config.mjs

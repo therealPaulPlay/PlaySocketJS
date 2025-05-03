@@ -1,6 +1,4 @@
 const WebSocket = require('ws');
-const express = require('express');
-const cors = require('cors');
 const http = require('http');
 
 /**
@@ -13,37 +11,26 @@ class PlaySocketServer {
     #rooms = {};
     #clientRooms = new Map(); // ClientId -> RoomId
     #rateLimits = new Map(); // Rate limiting storage
+    #callbacks = new Map();
 
     /**
      * Create a new PlaySocketServer instance
      * @param {Object} options - Server configuration options
-     * @param {express.Application} [options.app] - Existing Express app (optional)
-     * @param {number} [options.port=3000] - Port to listen on (if no app provided)
+     * @param {HttpServer} [options.server] - Existing http server
+     * @param {number} [options.port=3000] - Port to listen on (if no server provided)
      * @param {string} [options.path='/socket'] - WebSocket endpoint path
-     * @param {Object} [options.cors] - CORS options for Express
      */
     constructor(options = {}) {
-        const { app, server, port = 3000, path = '/', cors: corsOptions = { origin: '*' } } = options;
+        const { server, port = 3000, path = '/' } = options;
 
-        // Handle server/app priority
+        // Handle server creation / usage
         if (server) {
             this.#server = server; // Use provided HTTP server
         } else {
-            const expressApp = app || express(); // Use provided Express app or create one
-            if (!app) {
-                // If app was created by PlaySocket, apply middleware
-                expressApp.use(cors(corsOptions));
-                expressApp.use(express.json());
-            }
-
-            this.#server = http.createServer(expressApp); // Create HTTP server
-
-            // Start server if created by PlaySocket
-            if (!app) {
-                this.#server.listen(port, () => {
-                    console.log(`PlaySocket server running on port ${port}`);
-                });
-            }
+            this.#server = http.createServer(); // Create HTTP server and start it
+            this.#server.listen(port, () => {
+                console.log(`PlaySocket server running on port ${port}`);
+            });
         }
 
         // Create WebSocket server
@@ -76,15 +63,16 @@ class PlaySocketServer {
 
             switch (data.type) {
                 case 'register':
-                    // Register peer ID
+                    // Register client ID
                     if (!data.id) return;
                     if (this.#clients.get(data.id)) {
                         ws.send(JSON.stringify({ type: 'id_taken' }));
                         return;
                     }
-                    ws.clientId = data.id;
+                    ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
                     ws.send(JSON.stringify({ type: 'registered' }));
+                    this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
                 case 'create_room':
@@ -106,6 +94,7 @@ class PlaySocketServer {
 
                     this.#clientRooms.set(ws.clientId, newRoomId);
                     ws.send(JSON.stringify({ type: 'room_created' }));
+                    this.#triggerEvent("roomCreated", ws.clientId); // Client id = room id
                     break;
 
                 case 'join_room':
@@ -147,6 +136,7 @@ class PlaySocketServer {
                             }));
                         }
                     });
+                    this.#triggerEvent("roomJoined", ws.clientId, roomId);
                     break;
 
                 case 'room_storage_update':
@@ -281,14 +271,37 @@ class PlaySocketServer {
                             participantCount: room.participants?.length
                         }));
                     } catch (error) {
-                        console.error(`Error notifying peer of disconnection:`, error);
+                        console.error(`Error notifying client of disconnection:`, error);
                     }
                 }
             });
-
-            // Delete room if now empty
-            if (room.participants?.length === 0) delete this.#rooms[roomId];
+            if (room.participants?.length === 0) delete this.#rooms[roomId]; // Delete room if now empty
         }
+
+        this.#triggerEvent("clientDisconnected", ws.clientId);
+    }
+
+    /**
+     * Register an event callback
+     * @param {string} event - Event name
+     * @param {Function} callback - Callback function
+     */
+    onEvent(event, callback) {
+        const validEvents = ["clientRegistered", "clientDisconnected", "roomCreated", "roomJoined"];
+        if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
+        if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
+        this.#callbacks.get(event).push(callback);
+    }
+
+    /**
+     * Trigger an event to registered callbacks
+     * @private
+     */
+    #triggerEvent(event, ...args) {
+        const callbacks = this.#callbacks.get(event);
+        callbacks?.forEach(callback => {
+            try { callback(...args) } catch (error) { console.error(`PlaySocket ${event} callback error:`, error) }
+        });
     }
 
     /**
@@ -307,6 +320,8 @@ class PlaySocketServer {
             });
         }
     }
+
+    get getRooms() { return { ...this.#rooms } }
 }
 
 module.exports = PlaySocketServer;

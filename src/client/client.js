@@ -8,14 +8,15 @@ const TIMEOUT_MS = 3000; // 3 second timeout for operations
 
 export default class PlaySocket {
     // Core properties
-    #id; // Unique peer ID
+    #id; // Unique client ID
     #endpoint = "wss://example.com/socket"; // Default endpoint
     #socket; // WebSocket connection
     #initialized = false; // Initialization status
+    #customData;
 
     // Room properties
     #storage = {}; // Shared storage object
-    #isHost = false; // Whether this peer is host
+    #isHost = false; // Whether this client is host
     #roomHost;
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
@@ -30,12 +31,13 @@ export default class PlaySocket {
 
     /**
      * Create a new PlaySocket instance
-     * @param {string} id - Unique identifier for this peer
+     * @param {string} id - Unique identifier for this client
      * @param {object} options - Connection options
      */
     constructor(id, options = {}) {
         this.#id = id;
         if (options.endpoint) this.#endpoint = options.endpoint;
+        if (options.customData) this.#customData = { ...options.customData };
     }
 
     /**
@@ -57,7 +59,7 @@ export default class PlaySocket {
         const validEvents = [
             "status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected",
         ];
-        if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}."`);
+        if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
     }
@@ -68,8 +70,7 @@ export default class PlaySocket {
      */
     #triggerEvent(event, ...args) {
         const callbacks = this.#callbacks.get(event);
-        if (!callbacks || callbacks.length === 0) return;
-        callbacks.forEach(callback => {
+        callbacks?.forEach(callback => {
             try {
                 callback(...args);
             } catch (error) {
@@ -80,19 +81,25 @@ export default class PlaySocket {
 
     /**
      * Initialize the PlaySocket instance by connecting to the WS server
-     * @returns {Promise} Resolves when connected to server
+     * @returns {Promise} Resolves when connection is established
      */
     async init() {
         if (this.#initialized) return Promise.reject(new Error("Already initialized."));
         this.#triggerEvent("status", "Initializing...");
 
         return Promise.race([
-            this.connect(),
+            this.#connect(),
             this.#createTimeout("Initialization")
         ]);
     }
 
-    async connect() {
+
+    /**
+     * Connect to the WS server and register
+     * @returns {Promise} Resolves when user is registered on the WS server
+     * @private 
+     */
+    async #connect() {
         return new Promise((resolve, reject) => {
             this.#socket = new WebSocket(this.#endpoint);
             this.#setupSocketHandlers(); // Message & close events
@@ -105,7 +112,8 @@ export default class PlaySocket {
                 this.#initialized = true;
                 this.#sendToServer({
                     type: 'register',
-                    id: this.#id
+                    id: this.#id,
+                    customData: this.#customData || undefined
                 });
             };
         });
@@ -137,7 +145,6 @@ export default class PlaySocket {
                     case 'connection_rejected':
                         // Connection to room failed
                         if (this.#pendingJoin) {
-                            this.#triggerEvent("outgoingPeerError", this.#roomId);
                             this.#triggerEvent("status", "Connection rejected: " + message.reason || 'Unknown reason');
                             this.#pendingJoin.reject(new Error("Connection rejected: " + message.reason || 'Unknown reason'));
                             this.#pendingJoin = null;
@@ -222,7 +229,7 @@ export default class PlaySocket {
             setTimeout(async () => {
                 if (!this.#initialized || !this.#socket) return;
                 try {
-                    await this.connect(); // Will set status to connected if successful
+                    await this.#connect(); // Will set status to connected if successful
 
                     // Rejoin room if needed
                     if (this.#roomId) {
@@ -257,7 +264,7 @@ export default class PlaySocket {
     /**
      * Create a new room and become host
      * @param {object} initialStorage - Initial state
-     * @param {number} maxSize - Max number of peers
+     * @param {number} maxSize - Max number of participants
      * @returns {Promise} Resolves with room ID
      */
     createRoom(initialStorage = {}, maxSize) {

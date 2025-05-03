@@ -46,7 +46,7 @@ await socket.joinRoom('room-id'); // Same as the host's id
 
 // Interact with the synced storage
 const currentState = socket.getStorage;
-socket.updateStorageArray('players', 'add-unique', { username: 'Player4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
+socket.updateStorageArray('players', 'add-unique', { username: 'Player4', level: 2 }); // Special method to enable safe, simultaneous storage updates for arrays
 socket.updateStorage('latestPlayer', 'Player4'); // Regular synced storage update
 
 // To leave the room, destroy the instance
@@ -65,14 +65,15 @@ Creates a new PlaySocket instance with a specified ID and configuration options.
 
 #### Configuration options
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
+- `customData`: You can pass arbitrary data to the "clientRegistered" server event (optional)
 
 ### Methods
 
 #### Core
 
-- `init()`: Initialize the WebSocket connection (async)
-- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host (async)
-- `joinRoom(hostId: string)`: Join an existing room. Returns promise (async)
+- `init()`: Initialize the WebSocket connection – Returns Promise (async)
+- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room id (matches the creator's id)
+- `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
 
 #### State management
@@ -91,7 +92,7 @@ Creates a new PlaySocket instance with a specified ID and configuration options.
 - `clientConnected`: New client connected to the room (returns client-id `string`)
 - `clientDisconnected`: Client disconnected from the room (returns client-id `string`)
 
-### Properties
+### Properties (Read-only)
 
 The `id` is used to distinguish the client from other clients on the WebSocket server. 
 Using a UUID is recommended, but it is also fine to use any other random string. If you're using a public WebSocket server, including your application's name in the `id` can help to prevent overlap (e.g. your-app-012345abcdef). 
@@ -101,17 +102,22 @@ Using a UUID is recommended, but it is also fine to use any other random string.
 - `connectionCount`: Number of active client connections in room (without you)
 - `getStorage`: Retrieve storage object
 
-## Server
+# PlaySocket Server
 
 PlaySocket includes a server implementation that can be set up in seconds.
 
-### Installation
+## Installation
 
-To use the server component, you'll need to install the required node dependencies (if not installed already):
+To use the server component, you'll need to install the ws package:
 
 ```bash
-npm install express cors ws
+npm install ws
 ```
+
+## Usage
+
+Here are usage examples for a standalone server and an express application. The implementation is 
+framework agnostic and the Express example can be adapted to any other backend solution.
 
 ### Standalone server
 
@@ -122,7 +128,7 @@ const PlaySocketServer = require('playsocketjs/server');
 const server = new PlaySocketServer();
 ```
 
-### With Express app
+### With Express
 
 ```javascript
 const express = require('express');
@@ -147,17 +153,41 @@ httpServer.listen(port, () => {
 });
 ```
 
+## API Reference
+
+### Constructor
+
+```javascript
+new PlaySocket(options: PlaySocketServerOptions)
+```
+
+Creates a new PlaySocket Server instance with a specified ID and configuration options. 
+
 ### Configuration options
 
 - `port`: Port to listen on (default: 3000, used only if no app provided)
-- `cors`: CORS configuration object (default: { origin: '*' }, only used if no app provided)
 - `path`: WebSocket endpoint path (default: '/')
-- `app`: Existing Express application instance
+- `server`: Existing http server (optional)
 
-## License
+### Methods
+
+- `onEvent(event: string, callback: Function)`: Register a server-side event callback
+
+##### Event types
+
+- `clientRegistered`: Client registered with the server (returns the client's id `string`, customData `object`)
+- `clientDisconnected`: Client disconnected from the server (returns the client's id `string`)
+- `roomCreated`: Client created a room (returns room id `string`)
+- `roomJoined`: Client created a room (returns the client's id `string`, room id `string`)
+
+### Properties (Read-only)
+
+- `getRooms`: Retrieve rooms object
+
+# License
 
 MIT
 
-## Contributing
+# Contributing
 
 Please feel free to fork the repository and submit a Pull Request.
