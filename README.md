@@ -37,14 +37,19 @@ socket.onEvent('storageUpdated', storage => console.log('Storage update received
 await socket.init();
 
 // Create a new room
-const hostId = await socket.createRoom({
-    players: [],
+const roomId = await socket.createRoom();
+
+// Optionally, you can create a room with an initial storage object
+const roomId = await socket.createRoom({
+  players: [],
+  moreThings: {},
+  latestPlayer: null,
 });
 
-// Or, join room
-await socket.joinRoom('room-id'); // Same as the host's id
+// Join an existing room
+await socket.joinRoom('room-id');
 
-// Interact with the synced storage
+// Interact with the synced storage (available if in room)
 const currentState = socket.getStorage;
 socket.updateStorageArray('players', 'add-unique', { username: 'Player4', level: 2 }); // Special method to enable safe, simultaneous storage updates for arrays
 socket.updateStorage('latestPlayer', 'Player4'); // Regular synced storage update
@@ -88,7 +93,7 @@ Creates a new PlaySocket instance with a specified ID and configuration options.
 - `error`: Error events (returns error `string`)
 - `instanceDestroyed`: Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects
 - `storageUpdated`: Storage state changes (returns storage `object`)
-- `hostMigrated`: Host changes (returns host id / room code `string`)
+- `hostMigrated`: Host changes (returns the new host's id `string`) – As compared to PlayPeerJS, the room id does NOT change when the host changes
 - `clientConnected`: New client connected to the room (returns client-id `string`)
 - `clientDisconnected`: Client disconnected from the room (returns client-id `string`)
 
@@ -128,7 +133,7 @@ const PlaySocketServer = require('playsocketjs/server');
 const server = new PlaySocketServer();
 ```
 
-### With Express
+### With Express.js
 
 ```javascript
 const express = require('express');
@@ -161,11 +166,11 @@ httpServer.listen(port, () => {
 new PlaySocket(options: PlaySocketServerOptions)
 ```
 
-Creates a new PlaySocket Server instance with a specified ID and configuration options. 
+Creates a new PlaySocket Server instance with configuration options.
 
 ### Configuration options
 
-- `port`: Port to listen on (default: 3000, used only if no app provided)
+- `port`: Port to listen on (default: 3000, used only if no server provided)
 - `path`: WebSocket endpoint path (default: '/')
 - `server`: Existing http server (optional)
 
@@ -178,11 +183,11 @@ Creates a new PlaySocket Server instance with a specified ID and configuration o
 - `clientRegistered`: Client registered with the server (returns the client's id `string`, customData `object`)
 - `clientDisconnected`: Client disconnected from the server (returns the client's id `string`)
 - `roomCreated`: Client created a room (returns room id `string`)
-- `roomJoined`: Client created a room (returns the client's id `string`, room id `string`)
+- `roomJoined`: Client joined a room (returns the client's id `string`, room id `string`)
 
 ### Properties (Read-only)
 
-- `getRooms`: Retrieve rooms object
+- `getRooms`: Retrieve the rooms object
 
 # License
 

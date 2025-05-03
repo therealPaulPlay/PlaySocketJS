@@ -9,7 +9,7 @@ const TIMEOUT_MS = 3000; // 3 second timeout for operations
 export default class PlaySocket {
     // Core properties
     #id; // Unique client ID
-    #endpoint = "wss://example.com/socket"; // Default endpoint
+    #endpoint;
     #socket; // WebSocket connection
     #initialized = false; // Initialization status
     #customData;
@@ -33,6 +33,8 @@ export default class PlaySocket {
      * Create a new PlaySocket instance
      * @param {string} id - Unique identifier for this client
      * @param {object} options - Connection options
+     * @param {string} options.endpoint - WebSocket endpoint path
+     * @param {object} [options.customData] - Custom registration data
      */
     constructor(id, options = {}) {
         this.#id = id;
@@ -85,6 +87,7 @@ export default class PlaySocket {
      */
     async init() {
         if (this.#initialized) return Promise.reject(new Error("Already initialized."));
+        if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided."));
         this.#triggerEvent("status", "Initializing...");
 
         return Promise.race([
