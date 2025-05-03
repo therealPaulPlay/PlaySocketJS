@@ -320,7 +320,7 @@ class PlaySocketServer {
      * Close all client connections, then close the websocket and http server
      */
     stop() {
-        if (this.#heartbeatInterval) clearInterval(this.#heartbeatInterval);
+        clearInterval(this.#heartbeatInterval);
         if (this.#wss) {
             this.#wss.clients.forEach(client => client.close());
             this.#wss.close();

@@ -134,7 +134,6 @@ const server = new PlaySocketServer();
 
 // Gracefully disconnect all clients and close the server (optional)
 function shutdown() {
-    console.log('Shutting down gracefully...');
     server.stop();
     process.exit(0);
 }
@@ -169,7 +168,6 @@ httpServer.listen(port, () => {
 
 // Gracefully disconnect all clients and close the server (optional)
 function shutdown() {
-    console.log('Shutting down gracefully...');
     server.stop();
     process.exit(0);
 }

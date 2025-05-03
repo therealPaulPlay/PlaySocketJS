@@ -4,7 +4,7 @@
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
-const TIMEOUT_MS = 3000; // 3 second timeout for operations
+const TIMEOUT_MS = 5000; // 5 second timeout for operations
 
 export default class PlaySocket {
     // Core properties
@@ -28,6 +28,9 @@ export default class PlaySocket {
     #pendingJoin;
     #pendingHost;
     #pendingInit;
+
+    // Timeouts or intervals
+    #reconnectTimeout;
 
     /**
      * Create a new PlaySocket instance
@@ -227,10 +230,10 @@ export default class PlaySocket {
 
         // Handle socket close & attempt reconnect
         this.#socket.onclose = () => {
+            if (!this.#initialized) return;
             this.#triggerEvent("status", "Disconnected from server.");
 
-            setTimeout(async () => {
-                if (!this.#initialized || !this.#socket) return;
+            this.#reconnectTimeout = setTimeout(async () => {
                 try {
                     await this.#connect(); // Will set status to connected if successful
 
@@ -241,7 +244,6 @@ export default class PlaySocket {
                     }
                 } catch (error) {
                     this.#triggerEvent("error", "WebSocket connection permanently closed: " + error);
-                    this.#socket = null;
                     this.destroy();
                 }
             }, 1000);
@@ -400,6 +402,8 @@ export default class PlaySocket {
      * Destroy the PlaySocket instance and disconnect
      */
     destroy() {
+        this.#initialized = false; // Set this immediately to prevent automatic reconnection
+
         if (this.#socket) {
             this.#socket.close();
             this.#socket = null;
@@ -410,12 +414,12 @@ export default class PlaySocket {
         }
 
         // Reset state
-        this.#initialized = false;
         this.#isHost = false;
         this.#roomHost = null;
         this.#storage = {};
         this.#roomId = null;
         this.#connectionCount = 0;
+        clearTimeout(this.#reconnectTimeout);
     }
 
     // Public getters

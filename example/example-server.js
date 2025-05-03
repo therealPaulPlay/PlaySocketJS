@@ -10,7 +10,7 @@ const server = new PlaySocketServer();
 
 // Gracefully disconnect all clients and close the server
 function shutdown() {
-    console.log('Shutting down gracefully...');
+    console.log('\nShutting down gracefully...');
     server.stop();
     process.exit(0);
 }
