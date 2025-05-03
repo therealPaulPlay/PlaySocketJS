@@ -13,6 +13,7 @@ class PlaySocketServer {
     #clientRooms = new Map(); // ClientId -> RoomId
     #rateLimits = new Map(); // Rate limiting storage
     #callbacks = new Map();
+    #heartbeatInterval;
 
     /**
      * Create a new PlaySocketServer instance
@@ -43,9 +44,20 @@ class PlaySocketServer {
 
         // Set up ws event handlers
         this.#wss.on('connection', ws => {
+            ws.isAlive = true;
+            ws.on('pong', () => { ws.isAlive = true; });
             ws.on('message', msg => this.#handleMessage(ws, msg));
             ws.on('close', () => this.#handleDisconnection(ws));
         });
+
+        // Start heartbeat
+        this.#heartbeatInterval = setInterval(() => {
+            this.#wss.clients.forEach(ws => {
+                if (!ws.isAlive) return ws.terminate();
+                ws.isAlive = false;
+                ws.ping();
+            });
+        }, 30000);
     }
 
     /**
@@ -308,11 +320,11 @@ class PlaySocketServer {
      * Close all client connections, then close the websocket and http server
      */
     stop() {
+        if (this.#heartbeatInterval) clearInterval(this.#heartbeatInterval);
         if (this.#wss) {
             this.#wss.clients.forEach(client => client.close());
             this.#wss.close();
         }
-
         if (this.#server && this.#ownsServer) {
             this.#server.close(() => {
                 console.log('PlaySocket server stopped');
