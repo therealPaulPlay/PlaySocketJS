@@ -403,6 +403,10 @@ export default class PlaySocket {
         if (this.#socket) {
             this.#socket.close();
             this.#socket = null;
+
+            // Trigger events
+            this.#triggerEvent("status", "Destroyed.");
+            this.#triggerEvent("instanceDestroyed");
         }
 
         // Reset state
@@ -412,9 +416,6 @@ export default class PlaySocket {
         this.#storage = {};
         this.#roomId = null;
         this.#connectionCount = 0;
-
-        this.#triggerEvent("status", "Destroyed.");
-        this.#triggerEvent("instanceDestroyed");
     }
 
     // Public getters
