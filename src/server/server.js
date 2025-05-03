@@ -6,6 +6,7 @@ const http = require('http');
  */
 class PlaySocketServer {
     #server;
+    #ownsServer = false;
     #wss;
     #clients = new Map(); // ClientId -> WebSocket instance
     #rooms = {};
@@ -27,6 +28,7 @@ class PlaySocketServer {
         if (server) {
             this.#server = server; // Use provided HTTP server
         } else {
+            this.#ownsServer = true;
             this.#server = http.createServer(); // Create HTTP server and start it
             this.#server.listen(port, () => {
                 console.log(`PlaySocket server running on port ${port}`);
@@ -44,8 +46,6 @@ class PlaySocketServer {
             ws.on('message', msg => this.#handleMessage(ws, msg));
             ws.on('close', () => this.#handleDisconnection(ws));
         });
-
-        process.on('SIGINT', () => this.#stop()); // Graceful shutdown
     }
 
     /**
@@ -305,16 +305,15 @@ class PlaySocketServer {
     }
 
     /**
-     * Stop the server
-     * @private
+     * Close all client connections, then close the websocket and http server
      */
-    #stop() {
+    stop() {
         if (this.#wss) {
             this.#wss.clients.forEach(client => client.close());
-            this.#wss.close(); // TODO necessary?
+            this.#wss.close();
         }
 
-        if (this.#server) {
+        if (this.#server && this.#ownsServer) {
             this.#server.close(() => {
                 console.log('PlaySocket server stopped');
             });

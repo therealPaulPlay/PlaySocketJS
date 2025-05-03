@@ -131,6 +131,17 @@ const PlaySocketServer = require('playsocketjs/server');
 
 // Create and start the server
 const server = new PlaySocketServer();
+
+// Gracefully disconnect all clients and close the server (optional)
+function shutdown() {
+    console.log('Shutting down gracefully...');
+    server.stop();
+    process.exit(0);
+}
+
+// Handle both SIGINT (Ctrl+C) and SIGTERM (Docker stop)
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 ```
 
 ### With Express.js
@@ -155,6 +166,17 @@ const playSocketServer = new PlaySocketServer({
 httpServer.listen(port, () => {
   console.log('Server running on port 3000');
 });
+
+// Gracefully disconnect all clients and close the server (optional)
+function shutdown() {
+    console.log('Shutting down gracefully...');
+    server.stop();
+    process.exit(0);
+}
+
+// Handle both SIGINT (Ctrl+C) and SIGTERM (Docker stop)
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 ```
 
 ## API Reference
@@ -175,6 +197,7 @@ Creates a new PlaySocket Server instance with configuration options.
 
 ### Methods
 
+- `stop`: Closes all active client connections, the websocket server and the underlying http server if it's standalone
 - `onEvent(event: string, callback: Function)`: Register a server-side event callback
 
 ##### Event types
