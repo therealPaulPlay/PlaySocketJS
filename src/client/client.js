@@ -332,13 +332,12 @@ export default class PlaySocket {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return;
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // Prevent updates without changes
         this.#sendToServer({
             type: 'room_storage_update',
             key,
             value
         });
-        // Optimistic update AFTER sendToServer to preserve order if messages are being sent in the event callback
         this.#storage[key] = value;
         this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
@@ -351,6 +350,8 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
+        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
         this.#sendToServer({
             type: 'room_storage_array_update',
             key,
@@ -358,8 +359,8 @@ export default class PlaySocket {
             value,
             updateValue
         });
-        // Optimistic update AFTER sendToServer to preserve order if messages are being sent in the event callback
-        this.#handleArrayUpdate(key, operation, value, updateValue);
+        this.#storage[key] = updatedArray;
+        this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
 
     /**
@@ -367,12 +368,9 @@ export default class PlaySocket {
      * @private
      */
     #handleArrayUpdate(key, operation, value, updateValue) {
-        if (!this.#storage[key] || !Array.isArray(this.#storage[key])) this.#storage[key] = [];
-        let array = this.#storage[key];
-
+        let array = (!this.#storage[key] || !Array.isArray(this.#storage[key])) ? [] : [...this.#storage[key]];
         const isObject = typeof value === 'object' && value !== null;
-        const compare = (item) => isObject ?
-            JSON.stringify(item) === JSON.stringify(value) : item === value;
+        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
 
         switch (operation) {
             case 'add':
@@ -384,7 +382,7 @@ export default class PlaySocket {
                 break;
 
             case 'remove-matching':
-                this.#storage[key] = array.filter(item => !compare(item));
+                array = array.filter(item => !compare(item));
                 break;
 
             case 'update-matching':
@@ -394,10 +392,9 @@ export default class PlaySocket {
 
             default:
                 console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
-                return;
         }
 
-        this.#triggerEvent("storageUpdated", { ...this.#storage });
+        return array;
     }
 
     /**

@@ -154,7 +154,7 @@ class PlaySocketServer {
                 case 'room_storage_update':
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
-                    if (updateRoom && data.key) {
+                    if (updateRoom && data.key && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
                         updateRoom.storage[data.key] = data.value;
                         this.#syncRoomStorageKey(updateRoomId, data.key);
                     }
@@ -164,8 +164,11 @@ class PlaySocketServer {
                     const arrayRoomId = this.#clientRooms.get(ws.clientId);
                     const arrayRoom = arrayRoomId ? this.#rooms[arrayRoomId] : null;
                     if (arrayRoom && data.key) {
-                        this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
-                        this.#syncRoomStorageKey(arrayRoomId, data.key);
+                        const updatedArray = this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
+                        if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
+                            arrayRoom.storage[data.key] = updatedArray;
+                            this.#syncRoomStorageKey(arrayRoomId, data.key);
+                        }
                     }
                     break;
             }
@@ -209,7 +212,6 @@ class PlaySocketServer {
     #syncRoomStorageKey(roomId, key) {
         const room = this.#rooms[roomId];
         if (!room) return;
-
         room.participants.forEach(p => {
             const client = this.#clients.get(p);
             if (client) {
@@ -227,12 +229,9 @@ class PlaySocketServer {
      * @private
      */
     #arrayUpdate(storage, key, operation, value, updateValue) {
-        if (!storage[key] || !Array.isArray(storage[key])) storage[key] = [];
-        let array = storage[key];
-
+        let array = (!storage[key] || !Array.isArray(storage[key])) ? [] : [...storage[key]];
         const isObject = typeof value === 'object' && value !== null;
-        const compare = (item) => isObject ?
-            JSON.stringify(item) === JSON.stringify(value) : item === value;
+        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
 
         switch (operation) {
             case 'add':
@@ -252,6 +251,8 @@ class PlaySocketServer {
                 if (index !== -1) array[index] = updateValue;
                 break;
         }
+
+        return array;
     }
 
     /**
