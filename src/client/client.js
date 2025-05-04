@@ -333,13 +333,14 @@ export default class PlaySocket {
      */
     updateStorage(key, value) {
         if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return;
-        this.#storage[key] = value;
-        this.#triggerEvent("storageUpdated", { ...this.#storage });
         this.#sendToServer({
             type: 'room_storage_update',
             key,
             value
         });
+        // Optimistic update AFTER sendToServer to preserve order if messages are being sent in the event callback
+        this.#storage[key] = value;
+        this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
 
     /**
@@ -350,7 +351,6 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        this.#handleArrayUpdate(key, operation, value, updateValue);
         this.#sendToServer({
             type: 'room_storage_array_update',
             key,
@@ -358,6 +358,8 @@ export default class PlaySocket {
             value,
             updateValue
         });
+        // Optimistic update AFTER sendToServer to preserve order if messages are being sent in the event callback
+        this.#handleArrayUpdate(key, operation, value, updateValue);
     }
 
     /**
