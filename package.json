@@ -1,6 +1,6 @@
 {
   "name": "playsocketjs",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
   "module": "dist/playsocket-client.js",
   "exports": {
@@ -15,6 +15,7 @@
     "dist"
   ],
   "scripts": {
+    "start": "node example/example-server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rollup -c rollup.config.mjs"
   },

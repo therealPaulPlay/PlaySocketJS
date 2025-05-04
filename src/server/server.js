@@ -243,7 +243,7 @@ class PlaySocketServer {
                 break;
 
             case 'remove-matching':
-                storage[key] = array.filter(item => !compare(item));
+                array = array.filter(item => !compare(item));
                 break;
 
             case 'update-matching':
