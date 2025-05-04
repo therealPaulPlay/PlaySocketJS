@@ -83,7 +83,7 @@ class PlaySocketServer {
                     }
                     ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
-                    ws.send(JSON.stringify({ type: 'registered' }));
+                    ws.send(JSON.stringify({ type: 'registered', serverTime: Date.now(), clientTime: data.clientTime }));
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
@@ -102,6 +102,7 @@ class PlaySocketServer {
                         participants: [ws.clientId],
                         maxSize: data.size || null,
                         storage: data.storage || {},
+                        storageTimestamps: {},
                     };
 
                     this.#clientRooms.set(ws.clientId, newRoomId);
@@ -133,6 +134,7 @@ class PlaySocketServer {
                     ws.send(JSON.stringify({
                         type: 'connection_accepted',
                         storage: room.storage,
+                        storageTimestamps: room.storageTimestamps,
                         participantCount: room.participants.length
                     }));
 
@@ -154,9 +156,13 @@ class PlaySocketServer {
                 case 'room_storage_update':
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
-                    if (updateRoom && data.key && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
-                        updateRoom.storage[data.key] = data.value;
-                        this.#syncRoomStorageKey(updateRoomId, data.key);
+                    if (updateRoom && data.key) {
+                        const existingTimestamp = updateRoom.storageTimestamps[data.key] || 0;
+                        if (data.timestamp > existingTimestamp && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
+                            updateRoom.storage[data.key] = data.value;
+                            updateRoom.storageTimestamps[data.key] = data.timestamp;
+                            this.#syncRoomStorageKey(updateRoomId, data.key, data.timestamp);
+                        }
                     }
                     break;
 
@@ -167,7 +173,8 @@ class PlaySocketServer {
                         const updatedArray = this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
                             arrayRoom.storage[data.key] = updatedArray;
-                            this.#syncRoomStorageKey(arrayRoomId, data.key);
+                            arrayRoom.storageTimestamps[data.key] = Date.now(); // New date to ensure that they are applied regardless of age (they don't overwrite – they transform)
+                            this.#syncRoomStorageKey(arrayRoomId, data.key, Date.now());
                         }
                     }
                     break;
@@ -209,7 +216,7 @@ class PlaySocketServer {
      * Sync storage key to all clients in room
      * @private
      */
-    #syncRoomStorageKey(roomId, key) {
+    #syncRoomStorageKey(roomId, key, timestamp) {
         const room = this.#rooms[roomId];
         if (!room) return;
         room.participants.forEach(p => {
@@ -218,7 +225,8 @@ class PlaySocketServer {
                 client.send(JSON.stringify({
                     type: 'storage_sync',
                     key,
-                    value: room.storage[key]
+                    value: room.storage[key],
+                    timestamp
                 }));
             }
         });
