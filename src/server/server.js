@@ -12,9 +12,10 @@ class PlaySocketServer {
     #rooms = {};
     #clientRooms = new Map(); // ClientId -> RoomId
     #rateLimits = new Map(); // Rate limiting storage
-    #callbacks = new Map();
+    #callbacks = new Map(); // Event -> [callback functions]
     #heartbeatInterval;
     #pendingDisconnects = new Map(); // ClientId -> {timeout, roomId}
+    #clientTokens = new Map(); // ClientId -> Token
 
     /**
      * Create a new PlaySocketServer instance
@@ -84,14 +85,20 @@ class PlaySocketServer {
                     }
                     ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
-                    ws.send(JSON.stringify({ type: 'registered', serverTime: Date.now(), clientTime: data.clientTime }));
+                    const sessionToken = this.#generateSessionToken();
+                    this.#clientTokens.set(data.id, sessionToken); // Token is used when reconnecting to prevent impersonation attacks
+                    ws.send(JSON.stringify({ type: 'registered', sessionToken, serverTime: Date.now(), clientTime: data.clientTime }));
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
                 case 'reconnect':
                     // If user is pending disconnect, respond (otherwise it's too late)
                     const pd = this.#pendingDisconnects.get(data.id);
-                    if (pd) {
+                    if (pd && data.sessionToken) {
+                        if (data.sessionToken !== this.#clientTokens.get(data.id)) {
+                            ws.send(JSON.stringify({ type: 'reconnection_failed', reason: "Session token does not match" }));
+                            return;
+                        }
                         clearTimeout(pd.timeout);
                         this.#pendingDisconnects.delete(data.id);
 
@@ -101,7 +108,7 @@ class PlaySocketServer {
 
                         // If they were in a room, provide updated room data
                         let roomData;
-                        const formerRoom = this.#rooms[this.#clientRooms.get(ws.clientId)];
+                        const formerRoom = this.#rooms[this.#clientRooms.get(data.id)];
                         if (formerRoom) {
                             roomData = {
                                 storage: formerRoom.storage,
@@ -216,6 +223,16 @@ class PlaySocketServer {
     }
 
     /**
+     * Generate a random token to prevent malicious reconnect attempts
+     * @returns {string} - Token
+     */
+    #generateSessionToken() {
+        let token = '';
+        for (let i = 0; i < 16; i++) token += Math.floor(Math.random() * 16).toString(16);
+        return token;
+    }
+
+    /**
      * Check rate limit using token bucket algorithm
      * @private
      */
@@ -300,13 +317,14 @@ class PlaySocketServer {
      */
     #handleDisconnection(ws) {
         if (!ws.clientId) return;
-        this.#clients.delete(ws.clientId);
+        this.#clients.delete(ws.clientId); // Immediately remove from active clients (otherwise, server would try to message this client)
 
-        // Pending disconnection with 2s grace period to allow for seamless reconnections
+        // Pending disconnection with 2s grace period to allow for reconnections
         this.#pendingDisconnects.set(ws.clientId, {
             timeout: setTimeout(() => {
                 this.#pendingDisconnects.delete(ws.clientId);
                 this.#rateLimits.delete(ws.clientId);
+                this.#clientTokens.delete(ws.clientId);
                 const roomId = this.#clientRooms.get(ws.clientId);
                 const room = this.#rooms[roomId];
 

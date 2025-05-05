@@ -9,6 +9,7 @@ const TIMEOUT_MS = 5000; // 5 second timeout for operations
 export default class PlaySocket {
     // Core properties
     #id; // Unique client ID
+    #sessionToken; // Unique session token
     #endpoint;
     #socket; // WebSocket connection
     #initialized = false; // Initialization status
@@ -238,6 +239,7 @@ export default class PlaySocket {
                             const roundTripTime = Date.now() - message.clientTime;
                             const serverTimeAtClientNow = message.serverTime + (roundTripTime / 2);
                             this.#serverTimeOffset = serverTimeAtClientNow - Date.now();
+                            this.#sessionToken = message.sessionToken;
                             this.#initialized = true;
                             this.#pendingRegistration.resolve();
                             this.#pendingRegistration = null;
@@ -309,7 +311,8 @@ export default class PlaySocket {
                     this.#pendingReconnect = { resolve, reject };
                     this.#sendToServer({
                         type: 'reconnect',
-                        id: this.#id
+                        id: this.#id,
+                        sessionToken: this.#sessionToken
                     });
                 }),
                 this.#createTimeout("Reconnection request")
