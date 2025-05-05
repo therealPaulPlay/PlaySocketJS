@@ -14,6 +14,7 @@ class PlaySocketServer {
     #rateLimits = new Map(); // Rate limiting storage
     #callbacks = new Map();
     #heartbeatInterval;
+    #pendingDisconnects = new Map(); // ClientId -> {timeout, roomId}
 
     /**
      * Create a new PlaySocketServer instance
@@ -87,6 +88,35 @@ class PlaySocketServer {
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
+                case 'reconnect':
+                    // If user is pending disconnect, respond (otherwise it's too late)
+                    const pd = this.#pendingDisconnects.get(data.id);
+                    if (pd) {
+                        clearTimeout(pd.timeout);
+                        this.#pendingDisconnects.delete(data.id);
+
+                        // Re-assign old client id to the new ws connection
+                        ws.clientId = data.id;
+                        this.#clients.set(data.id, ws);
+
+                        // If they were in a room, provide updated room data
+                        let roomData;
+                        const formerRoom = this.#rooms[this.#clientRooms.get(ws.clientId)];
+                        if (formerRoom) {
+                            roomData = {
+                                storage: formerRoom.storage,
+                                storageTimestamps: formerRoom.storageTimestamps,
+                                participantCount: formerRoom.participants.length,
+                                host: formerRoom.participants[0]
+                            }
+                        }
+
+                        ws.send(JSON.stringify({ type: 'reconnected', roomData }));
+                    } else {
+                        ws.send(JSON.stringify({ type: 'reconnection_failed', reason: "Client unknown to server" }));
+                    }
+                    break;
+
                 case 'create_room':
                     if (!ws.clientId) return;
                     const newRoomId = ws.clientId;
@@ -111,7 +141,7 @@ class PlaySocketServer {
                     break;
 
                 case 'join_room':
-                    if (!data.roomId) return;
+                    if (!data.roomId || !ws.clientId) return;
                     const roomId = data.roomId;
                     const room = this.#rooms[roomId];
 
@@ -119,7 +149,7 @@ class PlaySocketServer {
                         (room.maxSize && room.participants.length >= room.maxSize) ||
                         this.#clientRooms.get(ws.clientId)) {
                         ws.send(JSON.stringify({
-                            type: 'connection_rejected',
+                            type: 'join_rejected',
                             reason: !room ? 'Room not found' :
                                 room.maxSize && room.participants.length >= room.maxSize ? 'Room full' :
                                     'Already in a room'
@@ -132,10 +162,11 @@ class PlaySocketServer {
 
                     // Notify joiner with initial storage
                     ws.send(JSON.stringify({
-                        type: 'connection_accepted',
+                        type: 'join_accepted',
                         storage: room.storage,
                         storageTimestamps: room.storageTimestamps,
-                        participantCount: room.participants.length
+                        participantCount: room.participants.length,
+                        host: room.participants[0]
                     }));
 
                     // Notify existing participants
@@ -269,37 +300,39 @@ class PlaySocketServer {
      */
     #handleDisconnection(ws) {
         if (!ws.clientId) return;
-
         this.#clients.delete(ws.clientId);
-        this.#rateLimits.delete(ws.clientId);
 
-        const roomId = this.#clientRooms.get(ws.clientId);
-        const room = roomId ? this.#rooms[roomId] : null;
+        // Pending disconnection with 2s grace period to allow for seamless reconnections
+        this.#pendingDisconnects.set(ws.clientId, {
+            timeout: setTimeout(() => {
+                this.#pendingDisconnects.delete(ws.clientId);
+                this.#rateLimits.delete(ws.clientId);
+                const roomId = this.#clientRooms.get(ws.clientId);
+                const room = this.#rooms[roomId];
 
-        if (room) {
-            room.participants = room.participants?.filter(p => p !== ws.clientId);
-            this.#clientRooms.delete(ws.clientId);
+                if (room) {
+                    room.participants = room.participants.filter(p => p !== ws.clientId); // Remove client from room
+                    this.#clientRooms.delete(ws.clientId);
 
-            // Notify remaining participants
-            room.participants?.forEach(p => {
-                const client = this.#clients.get(p);
-                if (client) {
-                    try {
-                        client.send(JSON.stringify({
-                            type: 'client_disconnected',
-                            updatedHost: room.participants?.[0],
-                            client: ws.clientId,
-                            participantCount: room.participants?.length
-                        }));
-                    } catch (error) {
-                        console.error(`Error notifying client of disconnection:`, error);
+                    if (room.participants?.length === 0) {
+                        delete this.#rooms[roomId]; // Delete room if now empty
+                    } else {
+                        // Notify remaining participants
+                        room.participants.forEach(p => {
+                            const client = this.#clients.get(p);
+                            if (client) client.send(JSON.stringify({
+                                type: 'client_disconnected',
+                                client: ws.clientId,
+                                host: room.participants[0],
+                                participantCount: room.participants.length
+                            }));
+                        });
                     }
                 }
-            });
-            if (room.participants?.length === 0) delete this.#rooms[roomId]; // Delete room if now empty
-        }
 
-        this.#triggerEvent("clientDisconnected", ws.clientId);
+                this.#triggerEvent("clientDisconnected", ws.clientId);
+            }, 2000)
+        });
     }
 
     /**
@@ -339,6 +372,9 @@ class PlaySocketServer {
                 console.log('PlaySocket server stopped');
             });
         }
+        this.#pendingDisconnects.forEach((data) => {
+            clearTimeout(data.timeout);
+        });
     }
 
     get getRooms() { return { ...this.#rooms } }

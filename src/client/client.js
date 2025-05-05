@@ -17,7 +17,6 @@ export default class PlaySocket {
     // Room properties
     #storage = {}; // Shared storage object
     #storageTimestamps = {}; // Tracks update timestamps per key
-    #isHost = false; // Whether this client is host
     #roomHost;
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
@@ -29,10 +28,14 @@ export default class PlaySocket {
     // Async server operations
     #pendingJoin;
     #pendingHost;
-    #pendingInit;
+    #pendingRegistration;
+    #pendingConnect;
+    #pendingReconnect;
 
     // Timeouts or intervals
     #reconnectTimeout;
+    #reconnectCount = 0;
+    #isReconnecting = false;
 
     /**
      * Create a new PlaySocket instance
@@ -72,7 +75,7 @@ export default class PlaySocket {
      */
     onEvent(event, callback) {
         const validEvents = [
-            "status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected",
+            "status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"
         ];
         if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
@@ -99,41 +102,45 @@ export default class PlaySocket {
      * @returns {Promise} Resolves when connection is established
      */
     async init() {
-        if (this.#initialized) return Promise.reject(new Error("Already initialized."));
-        if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided."));
+        if (this.#initialized) return Promise.reject(new Error("Already initialized"));
+        if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided"));
         this.#triggerEvent("status", "Initializing...");
 
-        return Promise.race([
-            this.#connect(),
-            this.#createTimeout("Initialization")
-        ]);
-    }
+        // Connect to WS server
+        await this.#connect();
 
+        // Register with server
+        await Promise.race([
+            new Promise(async (resolve, reject) => {
+                this.#pendingRegistration = { resolve, reject }; // Resolve or reject depending on answer to registration msg
 
-    /**
-     * Connect to the WS server and register
-     * @returns {Promise} Resolves when user is registered on the WS server
-     * @private 
-     */
-    async #connect() {
-        return new Promise((resolve, reject) => {
-            this.#socket = new WebSocket(this.#endpoint);
-            this.#setupSocketHandlers(); // Message & close events
-
-            // Resolve or reject depending on answer to registration msg
-            this.#pendingInit = { resolve, reject };
-
-            // Register with server
-            this.#socket.onopen = () => {
-                this.#initialized = true;
+                // Register with server
                 this.#sendToServer({
                     type: 'register',
                     id: this.#id,
                     customData: this.#customData || undefined,
                     clientTime: Date.now()
                 });
-            };
-        });
+            }),
+            this.#createTimeout("Registration")
+        ]);
+    }
+
+    /**
+     * Connect to the WS server and
+     * @returns {Promise} Resolves when the connection was established
+     * @private 
+     */
+    async #connect() {
+        return Promise.race([
+            new Promise((resolve, reject) => {
+                this.#pendingConnect = { reject };
+                this.#socket = new WebSocket(this.#endpoint);
+                this.#setupSocketHandlers(); // Message & close events
+                this.#socket.onopen = resolve;
+            }),
+            this.#createTimeout("Connection attempt")
+        ]);
     }
 
     /**
@@ -147,12 +154,13 @@ export default class PlaySocket {
                 if (!message.type) return;
 
                 switch (message.type) {
-                    case 'connection_accepted':
+                    case 'join_accepted':
                         // Connected to room
                         if (this.#pendingJoin) {
                             this.#storage = message.storage;
                             this.#storageTimestamps = message.storageTimestamps;
-                            this.#connectionCount = message.participantCount - 1;
+                            this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
+                            this.#roomHost = message.host;
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             this.#pendingJoin.resolve();
@@ -160,12 +168,43 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'connection_rejected':
+                    case 'join_rejected':
                         // Connection to room failed
                         if (this.#pendingJoin) {
                             this.#triggerEvent("status", "Connection rejected: " + message.reason || 'Unknown reason');
                             this.#pendingJoin.reject(new Error("Connection rejected: " + message.reason || 'Unknown reason'));
                             this.#pendingJoin = null;
+                        }
+                        break;
+
+                    case 'reconnected':
+                        // Successfully reconnected
+                        if (this.#pendingReconnect) {
+                            this.#isReconnecting = false;
+                            this.#reconnectCount = 0;
+                            if (message.roomData) {
+                                this.#storage = message.roomData.storage;
+                                this.#storageTimestamps = message.roomData.storageTimestamps;
+                                this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
+                                this.#setHost(message.roomData.host);
+                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            } else {
+                                if (this.#roomId) {
+                                    this.#triggerEvent("error", "Reconnected, but room no longer exists.");
+                                    return this.destroy();
+                                }
+                            }
+                            this.#triggerEvent("status", "Reconnected.");
+                            this.#pendingReconnect.resolve();
+                            this.#pendingReconnect = null;
+                        }
+                        break;
+
+                    case 'reconnection_failed':
+                        if (this.#pendingReconnect) {
+                            this.#triggerEvent("status", `Reconnection failed: ${message.reason}`);
+                            this.#pendingReconnect.resolve();
+                            this.#pendingReconnect = null;
                         }
                         break;
 
@@ -187,21 +226,22 @@ export default class PlaySocket {
                         break;
 
                     case 'id_taken':
-                        if (this.#pendingInit) {
-                            this.#pendingInit.reject(new Error("This id is already in use."));
+                        if (this.#pendingRegistration) {
+                            this.#pendingRegistration.reject(new Error("This id is already in use"));
+                            this.#pendingRegistration = null;
                             this.#triggerEvent("error", "This id is taken.");
-                            this.#pendingInit = null;
                         }
                         break;
 
                     case 'registered':
-                        if (this.#pendingInit) {
+                        if (this.#pendingRegistration) {
                             const roundTripTime = Date.now() - message.clientTime;
                             const serverTimeAtClientNow = message.serverTime + (roundTripTime / 2);
                             this.#serverTimeOffset = serverTimeAtClientNow - Date.now();
-                            this.#pendingInit.resolve();
+                            this.#initialized = true;
+                            this.#pendingRegistration.resolve();
+                            this.#pendingRegistration = null;
                             this.#triggerEvent("status", "Connected to server.");
-                            this.#pendingInit = null;
                         }
                         break;
 
@@ -217,21 +257,15 @@ export default class PlaySocket {
                         break;
 
                     case 'client_disconnected':
-                        this.#isHost = this.#id == message.updatedHost;
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-
-                        // If host has changed...
-                        if (this.#roomHost != message.updatedHost) {
-                            this.#roomHost = message.updatedHost;
-                            this.#triggerEvent("hostMigrated", this.#roomHost);
-                        }
+                        this.#setHost(message.host);
 
                         this.#triggerEvent("clientDisconnected", message.client);
                         this.#triggerEvent("status", `Client ${message.client} disconnected.`);
                         break;
 
                     case 'client_connected':
-                        this.#connectionCount = message.participantCount - 1;
+                        this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                         this.#triggerEvent("clientConnected", message.client);
                         this.#triggerEvent("status", `Client ${message.client} connected.`);
                         break;
@@ -244,37 +278,66 @@ export default class PlaySocket {
         // Handle socket errors
         this.#socket.onerror = () => {
             this.#triggerEvent("error", "WebSocket error.");
-            if (this.#pendingInit) this.#pendingInit.reject(new Error("WebSocket error."));
+            if (this.#pendingConnect) this.#pendingConnect.reject(new Error("WebSocket error"));
         }
 
         // Handle socket close & attempt reconnect
         this.#socket.onclose = () => {
-            if (!this.#initialized) return;
-            this.#triggerEvent("status", "Disconnected from server.");
-
-            this.#reconnectTimeout = setTimeout(async () => {
-                try {
-                    await this.#connect(); // Will set status to connected if successful
-
-                    // Rejoin room if needed
-                    if (this.#roomId) {
-                        this.#triggerEvent("status", "Rejoining room...");
-                        await this.joinRoom(this.#roomId); // If this fails, it will be caught by the outer catch
-                    }
-                } catch (error) {
-                    this.#triggerEvent("error", "WebSocket connection permanently closed: " + error);
-                    this.destroy();
-                }
-            }, 1000);
+            if (!this.#initialized || this.#isReconnecting) return;
+            this.#triggerEvent("status", "Disconnected.");
+            this.#reconnectCount = 0;
+            this.#attemptReconnect();
         }
     };
+
+    /**
+     * Attempt to reconnect with a fixed number of retries
+     * @private
+     */
+    async #attemptReconnect() {
+        if (this.#reconnectCount++ >= 3) {
+            this.#triggerEvent("error", "Disconnected from server.");
+            return this.destroy();
+        }
+
+        this.#triggerEvent("status", `Attempting to reconnect... (${this.#reconnectCount})`);
+        this.#isReconnecting = true;
+        try {
+            await this.#connect();
+            await Promise.race([
+                new Promise(async (resolve, reject) => {
+                    this.#pendingReconnect = { resolve, reject };
+                    this.#sendToServer({
+                        type: 'reconnect',
+                        id: this.#id
+                    });
+                }),
+                this.#createTimeout("Reconnection request")
+            ]);
+        } catch (error) {
+            this.#triggerEvent("status", "Reconnection failed: " + error.message);
+            this.#reconnectTimeout = setTimeout(() => this.#attemptReconnect(), 500);
+        }
+    }
+
+    /**
+     * Update the host in case a new one was chosen
+     * @param {string} hostId - Client id of new host
+     * @private
+     */
+    #setHost(hostId) {
+        if (this.#roomHost != hostId) {
+            this.#roomHost = hostId;
+            this.#triggerEvent("hostMigrated", hostId);
+        }
+    }
 
     /**
      * Send a message to the server
      * @private
      */
     #sendToServer(data) {
-        if (!this.#initialized || !this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
+        if (!this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
             return console.error(ERROR_PREFIX + "Cannot send message - not connected.");
         }
         try {
@@ -299,7 +362,6 @@ export default class PlaySocket {
 
         return Promise.race([
             new Promise((resolve, reject) => {
-                this.#isHost = true;
                 this.#storage = initialStorage;
                 this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
                 this.#roomHost = this.#id;
@@ -329,9 +391,7 @@ export default class PlaySocket {
 
         return Promise.race([
             new Promise((resolve, reject) => {
-                this.#isHost = false;
                 this.#roomId = roomId;
-                this.#roomHost = roomId;
                 this.#pendingJoin = { resolve, reject };
 
                 // Send connection request
@@ -436,18 +496,19 @@ export default class PlaySocket {
         }
 
         // Reset state
-        this.#isHost = false;
+        clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
         this.#storage = {};
         this.#storageTimestamps = {};
         this.#roomId = null;
         this.#connectionCount = 0;
-        clearTimeout(this.#reconnectTimeout);
+        this.#isReconnecting = false;
+        this.#reconnectCount = 0;
     }
 
     // Public getters
     get connectionCount() { return this.#connectionCount; }
     get getStorage() { return { ...this.#storage }; }
-    get isHost() { return this.#isHost; }
+    get isHost() { return this.#id == this.#roomHost; }
     get id() { return this.#id; }
 }
