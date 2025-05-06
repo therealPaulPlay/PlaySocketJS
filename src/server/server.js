@@ -212,8 +212,8 @@ class PlaySocketServer {
                         const updatedArray = this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
                             arrayRoom.storage[data.key] = updatedArray;
-                            arrayRoom.storageTimestamps[data.key] = data.timestamp;
-                            this.#syncRoomStorageKey(arrayRoom, data.key, data.timestamp);
+                            arrayRoom.storageTimestamps[data.key] = Date.now();
+                            this.#syncRoomStorageKey(arrayRoom, data.key, Date.now());
                         }
                     }
                     break;

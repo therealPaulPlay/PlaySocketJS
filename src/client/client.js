@@ -440,14 +440,12 @@ export default class PlaySocket {
     updateStorageArray(key, operation, value, updateValue) {
         // Send operation to server (no optimistic update – we can't guarantee that it is correct)
         // If another client has sent an update to the server that is processed first, the end result will differ.
-        const timestamp = this.#getTimestamp();
         this.#sendToServer({
             type: 'room_storage_array_update',
             key,
             operation,
             value,
-            updateValue,
-            timestamp
+            updateValue
         });
     }
 
