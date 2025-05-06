@@ -199,7 +199,7 @@ class PlaySocketServer {
                         if (data.timestamp > existingTimestamp && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
                             updateRoom.storage[data.key] = data.value;
                             updateRoom.storageTimestamps[data.key] = data.timestamp;
-                            this.#syncRoomStorageKey(updateRoomId, data.key, data.timestamp);
+                            this.#syncRoomStorageKey(updateRoomId, ws.clientId, data.key, data.timestamp);
                         }
                     }
                     break;
@@ -208,13 +208,19 @@ class PlaySocketServer {
                     const arrayRoomId = this.#clientRooms.get(ws.clientId);
                     const arrayRoom = arrayRoomId ? this.#rooms[arrayRoomId] : null;
                     if (arrayRoom && data.key) {
+                        // No timestamp check for array operations as they are designed to work unordered
                         const updatedArray = this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
                             arrayRoom.storage[data.key] = updatedArray;
-                            arrayRoom.storageTimestamps[data.key] = Date.now(); // New date to ensure that they are applied regardless of age (they don't overwrite – they transform)
-                            this.#syncRoomStorageKey(arrayRoomId, data.key, Date.now());
+                            arrayRoom.storageTimestamps[data.key] = data.timestamp;
+                            this.#syncRoomStorageOperation(arrayRoomId, ws.clientId, data.key, data.operation, data.value, data.updateValue, data.timestamp);
                         }
                     }
+                    break;
+
+                case 'disconnect':
+                    // Client signals to server that it will will willfully disconnect soon
+                    ws.willfulDisconnect = true;
                     break;
             }
         } catch (error) {
@@ -261,19 +267,54 @@ class PlaySocketServer {
     }
 
     /**
-     * Sync storage key to all clients in room
+     * Sync storage key with all clients in room
      * @private
+     * @param {string} roomId 
+     * @param {string} requesterId - Client id of whom initiated the operation
+     * @param {string} key 
+     * @param {number} timestamp - In milliseconds
      */
-    #syncRoomStorageKey(roomId, key, timestamp) {
+    #syncRoomStorageKey(roomId, requesterId, key, timestamp) {
         const room = this.#rooms[roomId];
         if (!room) return;
         room.participants.forEach(p => {
+            if (p == requesterId) return; // Don't sync with the requester
             const client = this.#clients.get(p);
             if (client) {
                 client.send(JSON.stringify({
                     type: 'storage_sync',
                     key,
                     value: room.storage[key],
+                    timestamp
+                }));
+            }
+        });
+    }
+
+    /**
+     * Sync storage operations with all clients in room
+     * @private
+     * @param {string} roomId 
+     * @param {string} requesterId - Client id of whom initiated the operation
+     * @param {string} key 
+     * @param {string} operation 
+     * @param {*} value 
+     * @param {*} updateValue 
+     * @param {number} timestamp - In milliseconds
+     */
+    #syncRoomStorageOperation(roomId, requesterId, key, operation, value, updateValue, timestamp) {
+        const room = this.#rooms[roomId];
+        if (!room) return;
+        room.participants.forEach(p => {
+            if (p == requesterId) return; // Don't send the operation to the requester
+            const client = this.#clients.get(p);
+            if (client) {
+                client.send(JSON.stringify({
+                    type: 'storage_operation',
+                    key,
+                    operation,
+                    value,
+                    updateValue,
                     timestamp
                 }));
             }
@@ -319,38 +360,51 @@ class PlaySocketServer {
         if (!ws.clientId) return;
         this.#clients.delete(ws.clientId); // Immediately remove from active clients (otherwise, server would try to message this client)
 
-        // Pending disconnection with 2s grace period to allow for reconnections
-        this.#pendingDisconnects.set(ws.clientId, {
-            timeout: setTimeout(() => {
-                this.#pendingDisconnects.delete(ws.clientId);
-                this.#rateLimits.delete(ws.clientId);
-                this.#clientTokens.delete(ws.clientId);
-                const roomId = this.#clientRooms.get(ws.clientId);
-                const room = this.#rooms[roomId];
+        if (ws.willfulDisconnect) {
+            this.#disconnectClient(ws); // Immediate disconnection
+        } else {
+            // Pending complete disconnection with 2s grace period to allow for reconnections
+            this.#pendingDisconnects.set(ws.clientId, {
+                timeout: setTimeout(() => {
+                    this.#disconnectClient(ws);
+                }, 2000)
+            });
+        }
+    }
 
-                if (room) {
-                    room.participants = room.participants.filter(p => p !== ws.clientId); // Remove client from room
-                    this.#clientRooms.delete(ws.clientId);
+    /**
+     * Disconnect a client
+     * @private
+     * @param {Object} ws 
+     */
+    #disconnectClient(ws) {
+        this.#pendingDisconnects.delete(ws.clientId);
+        this.#rateLimits.delete(ws.clientId);
+        this.#clientTokens.delete(ws.clientId);
+        const roomId = this.#clientRooms.get(ws.clientId);
+        const room = this.#rooms[roomId];
 
-                    if (room.participants?.length === 0) {
-                        delete this.#rooms[roomId]; // Delete room if now empty
-                    } else {
-                        // Notify remaining participants
-                        room.participants.forEach(p => {
-                            const client = this.#clients.get(p);
-                            if (client) client.send(JSON.stringify({
-                                type: 'client_disconnected',
-                                client: ws.clientId,
-                                host: room.participants[0],
-                                participantCount: room.participants.length
-                            }));
-                        });
-                    }
-                }
+        if (room) {
+            room.participants = room.participants.filter(p => p !== ws.clientId); // Remove client from room
+            this.#clientRooms.delete(ws.clientId);
 
-                this.#triggerEvent("clientDisconnected", ws.clientId);
-            }, 2000)
-        });
+            if (room.participants?.length === 0) {
+                delete this.#rooms[roomId]; // Delete room if now empty
+            } else {
+                // Notify remaining participants
+                room.participants.forEach(p => {
+                    const client = this.#clients.get(p);
+                    if (client) client.send(JSON.stringify({
+                        type: 'client_disconnected',
+                        client: ws.clientId,
+                        host: room.participants[0],
+                        participantCount: room.participants.length
+                    }));
+                });
+            }
+        }
+
+        this.#triggerEvent("clientDisconnected", ws.clientId);
     }
 
     /**

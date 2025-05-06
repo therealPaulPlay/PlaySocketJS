@@ -17,7 +17,7 @@ export default class PlaySocket {
 
     // Room properties
     #storage = {}; // Shared storage object
-    #storageTimestamps = {}; // Tracks update timestamps per key
+    #storageTimestamps = {}; // Tracks update timestamps per key to ensure that not-yet synced updates don't get overwritten
     #roomHost;
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
@@ -124,7 +124,9 @@ export default class PlaySocket {
                 });
             }),
             this.#createTimeout("Registration")
-        ]);
+        ]).finally(() => {
+            this.#pendingRegistration = null;
+        });
     }
 
     /**
@@ -141,7 +143,9 @@ export default class PlaySocket {
                 this.#socket.onopen = resolve;
             }),
             this.#createTimeout("Connection attempt")
-        ]);
+        ]).finally(() => {
+            this.#pendingConnect = null;
+        });
     }
 
     /**
@@ -165,16 +169,14 @@ export default class PlaySocket {
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             this.#pendingJoin.resolve();
-                            this.#pendingJoin = null;
                         }
                         break;
 
                     case 'join_rejected':
                         // Connection to room failed
                         if (this.#pendingJoin) {
-                            this.#triggerEvent("status", "Connection rejected: " + message.reason || 'Unknown reason');
-                            this.#pendingJoin.reject(new Error("Connection rejected: " + message.reason || 'Unknown reason'));
-                            this.#pendingJoin = null;
+                            this.#triggerEvent("status", "Connection rejected: " + message.reason);
+                            this.#pendingJoin.reject(new Error("Connection rejected: " + message.reason));
                         }
                         break;
 
@@ -197,15 +199,13 @@ export default class PlaySocket {
                             }
                             this.#triggerEvent("status", "Reconnected.");
                             this.#pendingReconnect.resolve();
-                            this.#pendingReconnect = null;
                         }
                         break;
 
                     case 'reconnection_failed':
                         if (this.#pendingReconnect) {
                             this.#triggerEvent("status", `Reconnection failed: ${message.reason}`);
-                            this.#pendingReconnect.resolve();
-                            this.#pendingReconnect = null;
+                            this.#pendingReconnect.reject(new Error("Reconnection failed: " + message.reason));
                         }
                         break;
 
@@ -214,22 +214,19 @@ export default class PlaySocket {
                             this.#pendingHost.resolve(this.#roomId);
                             this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}.` : '.'}`);
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
-                            this.#pendingHost = null;
                         }
                         break;
 
                     case 'room_creation_failed':
                         if (this.#pendingHost) {
-                            this.#pendingHost.reject(new Error("Failed to create room: " + message.reason || 'Unknown reason'));
-                            this.#triggerEvent("error", "Failed to create room: " + message.reason || 'Unknown reason');
-                            this.#pendingHost = null;
+                            this.#pendingHost.reject(new Error("Failed to create room: " + message.reason));
+                            this.#triggerEvent("error", "Failed to create room: " + message.reason);
                         }
                         break;
 
                     case 'id_taken':
                         if (this.#pendingRegistration) {
                             this.#pendingRegistration.reject(new Error("This id is already in use"));
-                            this.#pendingRegistration = null;
                             this.#triggerEvent("error", "This id is taken.");
                         }
                         break;
@@ -242,7 +239,6 @@ export default class PlaySocket {
                             this.#sessionToken = message.sessionToken;
                             this.#initialized = true;
                             this.#pendingRegistration.resolve();
-                            this.#pendingRegistration = null;
                             this.#triggerEvent("status", "Connected to server.");
                         }
                         break;
@@ -252,6 +248,17 @@ export default class PlaySocket {
                             const localTimestamp = this.#storageTimestamps[message.key] || 0;
                             if (message.timestamp > localTimestamp && JSON.stringify(this.#storage[message.key]) !== JSON.stringify(message.value)) {
                                 this.#storage[message.key] = message.value;
+                                this.#storageTimestamps[message.key] = message.timestamp;
+                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            }
+                        }
+                        break;
+
+                    case 'storage_operation':
+                        if (message.key) {
+                            const updatedArray = this.#handleArrayUpdate(message.key, message.operation, message.value, message.updateValue);
+                            if (JSON.stringify(this.#storage[message.key]) !== JSON.stringify(updatedArray)) {
+                                this.#storage[message.key] = updatedArray;
                                 this.#storageTimestamps[message.key] = message.timestamp;
                                 this.#triggerEvent("storageUpdated", { ...this.#storage });
                             }
@@ -316,7 +323,9 @@ export default class PlaySocket {
                     });
                 }),
                 this.#createTimeout("Reconnection request")
-            ]);
+            ]).finally(() => {
+                this.#pendingReconnect = null;
+            });
         } catch (error) {
             this.#triggerEvent("status", "Reconnection failed: " + error.message);
             this.#reconnectTimeout = setTimeout(() => this.#attemptReconnect(), 500);
@@ -378,7 +387,9 @@ export default class PlaySocket {
                 });
             }),
             this.#createTimeout("Room creation")
-        ]);
+        ]).finally(() => {
+            this.#pendingHost = null;
+        });
     }
 
     /**
@@ -405,7 +416,9 @@ export default class PlaySocket {
                 });
             }),
             this.#createTimeout("Room join")
-        ]);
+        ]).finally(() => {
+            this.#pendingJoin = null;
+        });
     }
 
     /**
@@ -437,15 +450,17 @@ export default class PlaySocket {
     updateStorageArray(key, operation, value, updateValue) {
         const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
         if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
+        const timestamp = this.#getTimestamp();
         this.#sendToServer({
             type: 'room_storage_array_update',
             key,
             operation,
             value,
-            updateValue
+            updateValue,
+            timestamp
         });
         this.#storage[key] = updatedArray;
-        this.#storageTimestamps[key] = this.#getTimestamp();
+        this.#storageTimestamps[key] = timestamp;
         this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
 
@@ -490,6 +505,8 @@ export default class PlaySocket {
         this.#initialized = false; // Set this immediately to prevent automatic reconnection
 
         if (this.#socket) {
+            // Signal to the server that it can immediately disconnect this user
+            if (this.#socket.readyState === WebSocket.OPEN) this.#sendToServer({ type: 'disconnect' });
             this.#socket.close();
             this.#socket = null;
 
@@ -503,6 +520,7 @@ export default class PlaySocket {
         this.#roomHost = null;
         this.#storage = {};
         this.#storageTimestamps = {};
+        this.#serverTimeOffset = 0;
         this.#roomId = null;
         this.#connectionCount = 0;
         this.#isReconnecting = false;
