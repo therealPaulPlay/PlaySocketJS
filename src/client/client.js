@@ -404,7 +404,7 @@ export default class PlaySocket {
             key,
             value
         });
-        // Optimistic update for regular storage updates
+        // Optimistic update
         this.#storage[key] = value;
         this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
@@ -417,8 +417,8 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        // Send operation to server (no optimistic update – we can't guarantee that it is correct)
-        // If another client has sent an update to the server that is processed first, the end result will differ.
+        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
         this.#sendToServer({
             type: 'room_storage_array_update',
             key,
@@ -426,6 +426,43 @@ export default class PlaySocket {
             value,
             updateValue
         });
+        // Optimistic update
+        this.#storage[key] = updatedArray;
+        this.#triggerEvent("storageUpdated", { ...this.#storage });
+    }
+
+    /**
+     * Handle array operations client-side
+     * @private
+     */
+    #handleArrayUpdate(key, operation, value, updateValue) {
+        let array = (!this.#storage[key] || !Array.isArray(this.#storage[key])) ? [] : [...this.#storage[key]];
+        const isObject = typeof value === 'object' && value !== null;
+        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
+
+        switch (operation) {
+            case 'add':
+                array.push(value);
+                break;
+
+            case 'add-unique':
+                if (!array.some(compare)) array.push(value);
+                break;
+
+            case 'remove-matching':
+                array = array.filter(item => !compare(item));
+                break;
+
+            case 'update-matching':
+                const index = array.findIndex(compare);
+                if (index !== -1) array[index] = updateValue;
+                break;
+
+            default:
+                console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
+        }
+
+        return array;
     }
 
     /**
@@ -457,7 +494,7 @@ export default class PlaySocket {
 
     // Public getters
     get connectionCount() { return this.#connectionCount; }
-    get getStorage() { return { ...this.#storage }; }
+    get getStorage() { return JSON.parse(JSON.stringify(this.#storage)); }
     get isHost() { return this.#id == this.#roomHost; }
     get id() { return this.#id; }
 }
