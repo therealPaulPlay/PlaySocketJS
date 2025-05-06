@@ -199,7 +199,7 @@ class PlaySocketServer {
                         if (data.timestamp > existingTimestamp && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
                             updateRoom.storage[data.key] = data.value;
                             updateRoom.storageTimestamps[data.key] = data.timestamp;
-                            this.#syncRoomStorageKey(updateRoomId, ws.clientId, data.key, data.timestamp);
+                            this.#syncRoomStorageKey(updateRoom, data.key, data.timestamp);
                         }
                     }
                     break;
@@ -213,7 +213,7 @@ class PlaySocketServer {
                         if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
                             arrayRoom.storage[data.key] = updatedArray;
                             arrayRoom.storageTimestamps[data.key] = data.timestamp;
-                            this.#syncRoomStorageOperation(arrayRoomId, ws.clientId, data.key, data.operation, data.value, data.updateValue, data.timestamp);
+                            this.#syncRoomStorageKey(arrayRoom, data.key, data.timestamp);
                         }
                     }
                     break;
@@ -269,52 +269,18 @@ class PlaySocketServer {
     /**
      * Sync storage key with all clients in room
      * @private
-     * @param {string} roomId 
-     * @param {string} requesterId - Client id of whom initiated the operation
+     * @param {Object} room
      * @param {string} key 
      * @param {number} timestamp - In milliseconds
      */
-    #syncRoomStorageKey(roomId, requesterId, key, timestamp) {
-        const room = this.#rooms[roomId];
-        if (!room) return;
-        room.participants.forEach(p => {
-            if (p == requesterId) return; // Don't sync with the requester
+    #syncRoomStorageKey(room, key, timestamp) {
+        room?.participants?.forEach(p => {
             const client = this.#clients.get(p);
             if (client) {
                 client.send(JSON.stringify({
                     type: 'storage_sync',
                     key,
-                    value: room.storage[key],
-                    timestamp
-                }));
-            }
-        });
-    }
-
-    /**
-     * Sync storage operations with all clients in room
-     * @private
-     * @param {string} roomId 
-     * @param {string} requesterId - Client id of whom initiated the operation
-     * @param {string} key 
-     * @param {string} operation 
-     * @param {*} value 
-     * @param {*} updateValue 
-     * @param {number} timestamp - In milliseconds
-     */
-    #syncRoomStorageOperation(roomId, requesterId, key, operation, value, updateValue, timestamp) {
-        const room = this.#rooms[roomId];
-        if (!room) return;
-        room.participants.forEach(p => {
-            if (p == requesterId) return; // Don't send the operation to the requester
-            const client = this.#clients.get(p);
-            if (client) {
-                client.send(JSON.stringify({
-                    type: 'storage_operation',
-                    key,
-                    operation,
-                    value,
-                    updateValue,
+                    value: room?.storage?.[key],
                     timestamp
                 }));
             }

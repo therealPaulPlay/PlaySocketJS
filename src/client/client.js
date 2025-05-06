@@ -254,17 +254,6 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'storage_operation':
-                        if (message.key) {
-                            const updatedArray = this.#handleArrayUpdate(message.key, message.operation, message.value, message.updateValue);
-                            if (JSON.stringify(this.#storage[message.key]) !== JSON.stringify(updatedArray)) {
-                                this.#storage[message.key] = updatedArray;
-                                this.#storageTimestamps[message.key] = message.timestamp;
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
-                            }
-                        }
-                        break;
-
                     case 'client_disconnected':
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                         this.#setHost(message.host);
@@ -366,7 +355,7 @@ export default class PlaySocket {
      * @param {number} maxSize - Max number of participants
      * @returns {Promise} Resolves with room ID
      */
-    createRoom(initialStorage = {}, maxSize) {
+    async createRoom(initialStorage = {}, maxSize) {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Cannot create room - not initialized");
             return Promise.reject(new Error("Not initialized"));
@@ -397,7 +386,7 @@ export default class PlaySocket {
      * @param {string} roomId - ID of the room
      * @returns {Promise} Resolves when connected
      */
-    joinRoom(roomId) {
+    async joinRoom(roomId) {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Cannot join room - not initialized");
             return Promise.reject(new Error("Not initialized"));
@@ -435,6 +424,7 @@ export default class PlaySocket {
             value,
             timestamp
         });
+        // Optimistic update for regular storage updates
         this.#storage[key] = value;
         this.#storageTimestamps[key] = timestamp;
         this.#triggerEvent("storageUpdated", { ...this.#storage });
@@ -448,8 +438,8 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
+        // Send operation to server (no optimistic update – we can't guarantee that it is correct)
+        // If another client has sent an update to the server that is processed first, the end result will differ.
         const timestamp = this.#getTimestamp();
         this.#sendToServer({
             type: 'room_storage_array_update',
@@ -459,43 +449,6 @@ export default class PlaySocket {
             updateValue,
             timestamp
         });
-        this.#storage[key] = updatedArray;
-        this.#storageTimestamps[key] = timestamp;
-        this.#triggerEvent("storageUpdated", { ...this.#storage });
-    }
-
-    /**
-     * Handle array operations client-side
-     * @private
-     */
-    #handleArrayUpdate(key, operation, value, updateValue) {
-        let array = (!this.#storage[key] || !Array.isArray(this.#storage[key])) ? [] : [...this.#storage[key]];
-        const isObject = typeof value === 'object' && value !== null;
-        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
-
-        switch (operation) {
-            case 'add':
-                array.push(value);
-                break;
-
-            case 'add-unique':
-                if (!array.some(compare)) array.push(value);
-                break;
-
-            case 'remove-matching':
-                array = array.filter(item => !compare(item));
-                break;
-
-            case 'update-matching':
-                const index = array.findIndex(compare);
-                if (index !== -1) array[index] = updateValue;
-                break;
-
-            default:
-                console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
-        }
-
-        return array;
     }
 
     /**
