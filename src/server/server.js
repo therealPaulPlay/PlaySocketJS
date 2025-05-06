@@ -87,7 +87,7 @@ class PlaySocketServer {
                     this.#clients.set(data.id, ws);
                     const sessionToken = this.#generateSessionToken();
                     this.#clientTokens.set(data.id, sessionToken); // Token is used when reconnecting to prevent impersonation attacks
-                    ws.send(JSON.stringify({ type: 'registered', sessionToken, serverTime: Date.now(), clientTime: data.clientTime }));
+                    ws.send(JSON.stringify({ type: 'registered', sessionToken }));
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
@@ -112,7 +112,6 @@ class PlaySocketServer {
                         if (formerRoom) {
                             roomData = {
                                 storage: formerRoom.storage,
-                                storageTimestamps: formerRoom.storageTimestamps,
                                 participantCount: formerRoom.participants.length,
                                 host: formerRoom.participants[0]
                             }
@@ -138,8 +137,7 @@ class PlaySocketServer {
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         maxSize: data.size || null,
-                        storage: data.storage || {},
-                        storageTimestamps: {},
+                        storage: data.storage || {}
                     };
 
                     this.#clientRooms.set(ws.clientId, newRoomId);
@@ -171,7 +169,6 @@ class PlaySocketServer {
                     ws.send(JSON.stringify({
                         type: 'join_accepted',
                         storage: room.storage,
-                        storageTimestamps: room.storageTimestamps,
                         participantCount: room.participants.length,
                         host: room.participants[0]
                     }));
@@ -195,11 +192,9 @@ class PlaySocketServer {
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
                     if (updateRoom && data.key) {
-                        const existingTimestamp = updateRoom.storageTimestamps[data.key] || 0;
-                        if (data.timestamp > existingTimestamp && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
+                        if (JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
                             updateRoom.storage[data.key] = data.value;
-                            updateRoom.storageTimestamps[data.key] = data.timestamp;
-                            this.#syncRoomStorageKey(updateRoom, data.key, data.timestamp);
+                            this.#syncRoomStorageKey(updateRoom, data.key, ws.clientId);
                         }
                     }
                     break;
@@ -208,12 +203,10 @@ class PlaySocketServer {
                     const arrayRoomId = this.#clientRooms.get(ws.clientId);
                     const arrayRoom = arrayRoomId ? this.#rooms[arrayRoomId] : null;
                     if (arrayRoom && data.key) {
-                        // No timestamp check for array operations as they are designed to work unordered
                         const updatedArray = this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
                             arrayRoom.storage[data.key] = updatedArray;
-                            arrayRoom.storageTimestamps[data.key] = Date.now();
-                            this.#syncRoomStorageKey(arrayRoom, data.key, Date.now());
+                            this.#syncRoomStorageKey(arrayRoom, data.key);
                         }
                     }
                     break;
@@ -271,17 +264,17 @@ class PlaySocketServer {
      * @private
      * @param {Object} room
      * @param {string} key 
-     * @param {number} timestamp - In milliseconds
+     * @param {string} exclude
      */
-    #syncRoomStorageKey(room, key, timestamp) {
+    #syncRoomStorageKey(room, key, exclude) {
         room?.participants?.forEach(p => {
+            if (p === exclude) return;
             const client = this.#clients.get(p);
             if (client) {
                 client.send(JSON.stringify({
                     type: 'storage_sync',
                     key,
-                    value: room?.storage?.[key],
-                    timestamp
+                    value: room?.storage?.[key]
                 }));
             }
         });
