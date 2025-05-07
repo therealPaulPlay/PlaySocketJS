@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
+const { CRDTManager } = require('../universal/crdtManager');
 
 /**
  * PlaySocketServer - WebSocket server for PlaySocket multiplayer library
@@ -111,7 +112,7 @@ class PlaySocketServer {
                         const formerRoom = this.#rooms[this.#clientRooms.get(data.id)];
                         if (formerRoom) {
                             roomData = {
-                                storage: formerRoom.storage,
+                                state: formerRoom.crdtManager.getState,
                                 storageTimestamps: formerRoom.storageTimestamps,
                                 participantCount: formerRoom.participants.length,
                                 host: formerRoom.participants[0]
@@ -138,8 +139,7 @@ class PlaySocketServer {
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         maxSize: data.size || null,
-                        storage: data.storage || {},
-                        storageTimestamps: {},
+                        crdtManager: new CRDTManager
                     };
 
                     this.#clientRooms.set(ws.clientId, newRoomId);
@@ -170,8 +170,7 @@ class PlaySocketServer {
                     // Notify joiner with initial storage
                     ws.send(JSON.stringify({
                         type: 'join_accepted',
-                        storage: room.storage,
-                        storageTimestamps: room.storageTimestamps,
+                        state: room.crdtManager.getState,
                         participantCount: room.participants.length,
                         host: room.participants[0]
                     }));
@@ -191,30 +190,20 @@ class PlaySocketServer {
                     this.#triggerEvent("roomJoined", ws.clientId, roomId);
                     break;
 
-                case 'room_storage_update':
+                case 'property_update':
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
-                    if (updateRoom && data.key) {
-                        const existingTimestamp = updateRoom.storageTimestamps[data.key] || 0;
-                        if (data.timestamp > existingTimestamp && JSON.stringify(updateRoom.storage[data.key]) !== JSON.stringify(data.value)) {
-                            updateRoom.storage[data.key] = data.value;
-                            updateRoom.storageTimestamps[data.key] = data.timestamp;
-                            this.#syncRoomStorageKey(updateRoom, data.key, data.timestamp);
-                        }
-                    }
-                    break;
-
-                case 'room_storage_array_update':
-                    const arrayRoomId = this.#clientRooms.get(ws.clientId);
-                    const arrayRoom = arrayRoomId ? this.#rooms[arrayRoomId] : null;
-                    if (arrayRoom && data.key) {
-                        // No timestamp check for array operations as they are designed to work unordered
-                        const updatedArray = this.#arrayUpdate(arrayRoom.storage, data.key, data.operation, data.value, data.updateValue);
-                        if (JSON.stringify(arrayRoom.storage[data.key]) !== JSON.stringify(updatedArray)) {
-                            arrayRoom.storage[data.key] = updatedArray;
-                            arrayRoom.storageTimestamps[data.key] = Date.now(); // Assign new date to ensure that this update is always being applied
-                            this.#syncRoomStorageOperation(arrayRoom, ws.clientId, data.key, data.operation, data.value, data.updateValue, Date.now());
-                        }
+                    if (updateRoom && data.key && data.property) {
+                        updateRoom.crdtManager.importProperty(data.property);
+                        updateRoom.participants?.forEach(p => {
+                            const client = this.#clients.get(p);
+                            if (client) {
+                                client.send(JSON.stringify({
+                                    type: 'key_sync',
+                                    key: updateRoom.crdtManager.exportProperty(data.key)
+                                }));
+                            }
+                        });
                     }
                     break;
 
@@ -264,87 +253,6 @@ class PlaySocketServer {
 
         limit.points -= pointCost;
         return true;
-    }
-
-    /**
-     * Sync storage key with all clients in room
-     * @private
-     * @param {string} room
-     * @param {string} requesterId - Client id of whom initiated the operation
-     * @param {string} key 
-     * @param {number} timestamp - In milliseconds
-     */
-    #syncRoomStorageKey(room, key, timestamp) {
-        room?.participants?.forEach(p => {
-            const client = this.#clients.get(p);
-            if (client) {
-                client.send(JSON.stringify({
-                    type: 'storage_sync',
-                    key,
-                    value: room?.storage[key],
-                    timestamp
-                }));
-            }
-        });
-    }
-
-    /**
-     * Sync storage operations with all clients in room
-     * @private
-     * @param {string} room
-     * @param {string} requesterId - Client id of whom initiated the operation
-     * @param {string} key 
-     * @param {string} operation 
-     * @param {*} value 
-     * @param {*} updateValue 
-     * @param {number} timestamp - In milliseconds
-     */
-    #syncRoomStorageOperation(room, requesterId, key, operation, value, updateValue, timestamp) {
-        room?.participants?.forEach(p => {
-            if (p == requesterId) return; // Don't send the operation to the requester
-            const client = this.#clients.get(p);
-            if (client) {
-                client.send(JSON.stringify({
-                    type: 'storage_operation',
-                    key,
-                    operation,
-                    value,
-                    updateValue,
-                    timestamp
-                }));
-            }
-        });
-    }
-
-    /**
-     * Handle array operations
-     * @private
-     */
-    #arrayUpdate(storage, key, operation, value, updateValue) {
-        let array = (!storage[key] || !Array.isArray(storage[key])) ? [] : [...storage[key]];
-        const isObject = typeof value === 'object' && value !== null;
-        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
-
-        switch (operation) {
-            case 'add':
-                array.push(value);
-                break;
-
-            case 'add-unique':
-                if (!array.some(compare)) array.push(value);
-                break;
-
-            case 'remove-matching':
-                array = array.filter(item => !compare(item));
-                break;
-
-            case 'update-matching':
-                const index = array.findIndex(compare);
-                if (index !== -1) array[index] = updateValue;
-                break;
-        }
-
-        return array;
     }
 
     /**

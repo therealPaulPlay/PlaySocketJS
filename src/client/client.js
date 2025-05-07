@@ -2,6 +2,8 @@
  * PlaySocket - WebSocket-based multiplayer for games
  */
 
+import { CRDTManager } from "../universal/crdtManager";
+
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
 const TIMEOUT_MS = 5000; // 5 second timeout for operations
@@ -16,12 +18,11 @@ export default class PlaySocket {
     #customData;
 
     // Room properties
-    #storage = {}; // Shared storage object
-    #storageTimestamps = {}; // Tracks update timestamps per key to ensure that not-yet synced updates don't get overwritten
     #roomHost;
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
     #serverTimeOffset = 0; // Offset between server time and local time
+    #crdtManager;
 
     // Event handling
     #callbacks = new Map(); // Event callbacks
@@ -49,6 +50,9 @@ export default class PlaySocket {
         this.#id = id;
         if (options.endpoint) this.#endpoint = options.endpoint;
         if (options.customData) this.#customData = { ...options.customData };
+
+        // Initialize the crdt manager
+        this.#crdtManager = new CRDTManager;
     }
 
     /**
@@ -162,12 +166,11 @@ export default class PlaySocket {
                     case 'join_accepted':
                         // Connected to room
                         if (this.#pendingJoin) {
-                            this.#storage = message.storage;
-                            this.#storageTimestamps = message.storageTimestamps;
+                            this.#crdtManager.importState(message.state);
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
+                            triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
                             this.#triggerEvent("status", `Connected to room.`);
-                            this.#triggerEvent("storageUpdated", { ...this.#storage });
                             this.#pendingJoin.resolve();
                         }
                         break;
@@ -186,11 +189,10 @@ export default class PlaySocket {
                             this.#isReconnecting = false;
                             this.#reconnectCount = 0;
                             if (message.roomData) {
-                                this.#storage = message.roomData.storage;
-                                this.#storageTimestamps = message.roomData.storageTimestamps;
+                                this.#crdtManager.importState(message.roomData.state);
+                                triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host);
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
                             } else {
                                 if (this.#roomId) {
                                     this.#triggerEvent("error", "Reconnected, but room no longer exists.");
@@ -213,7 +215,6 @@ export default class PlaySocket {
                         if (this.#pendingHost) {
                             this.#pendingHost.resolve(this.#roomId);
                             this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}.` : '.'}`);
-                            this.#triggerEvent("storageUpdated", { ...this.#storage });
                         }
                         break;
 
@@ -243,32 +244,14 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'storage_sync':
-                        if (message.key) {
-                            const localTimestamp = this.#storageTimestamps[message.key] || 0;
-                            if (message.timestamp > localTimestamp && JSON.stringify(this.#storage[message.key]) !== JSON.stringify(message.value)) {
-                                this.#storage[message.key] = message.value;
-                                this.#storageTimestamps[message.key] = message.timestamp;
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
-                            }
-                        }
-                        break;
-
-                    case 'storage_operation':
-                        if (message.key) {
-                            const updatedArray = this.#handleArrayUpdate(message.key, message.operation, message.value, message.updateValue);
-                            if (JSON.stringify(this.#storage[message.key]) !== JSON.stringify(updatedArray)) {
-                                this.#storage[message.key] = updatedArray;
-                                this.#storageTimestamps[message.key] = message.timestamp;
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
-                            }
-                        }
+                    case 'key_sync':
+                        if (message.property) this.#crdtManager.importProperty(message.property);
+                        if (this.#crdtManager.didPropertiesChange) triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
                         break;
 
                     case 'client_disconnected':
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                         this.#setHost(message.host);
-
                         this.#triggerEvent("clientDisconnected", message.client);
                         this.#triggerEvent("status", `Client ${message.client} disconnected.`);
                         break;
@@ -374,17 +357,19 @@ export default class PlaySocket {
 
         return Promise.race([
             new Promise((resolve, reject) => {
-                this.#storage = initialStorage;
+                Object.entries(initialStorage)?.forEach((key, value) => {
+                    this.#crdtManager.updateProperty(key, 0, "set", value);
+                });
                 this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
                 this.#roomHost = this.#id;
                 this.#pendingHost = { maxSize, resolve, reject };
-
                 this.#sendToServer({
                     type: 'create_room',
-                    storage: { ...initialStorage },
+                    state: this.#crdtManager.getState,
                     size: maxSize,
                     from: this.#id,
                 });
+                triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
             }),
             this.#createTimeout("Room creation")
         ]).finally(() => {
@@ -427,75 +412,34 @@ export default class PlaySocket {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // Prevent updates without changes
         const timestamp = this.#getTimestamp();
+        this.#crdtManager.updateProperty(key, timestamp, "set", value);
         this.#sendToServer({
-            type: 'room_storage_update',
+            type: 'property_update',
             key,
-            value,
-            timestamp
+            property: this.#crdtManager.exportProperty(key)
         });
-        // Optimistic update
-        this.#storage[key] = value;
-        this.#storageTimestamps[key] = timestamp;
-        this.#triggerEvent("storageUpdated", { ...this.#storage });
+        if (this.#crdtManager.didPropertiesChange) triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
     }
 
     /**
-     * Update an array in storage with special operations
+     * Update an array with special operations in the shared storage
      * @param {string} key - Storage key
      * @param {string} operation - Operation type: add, add-unique, remove-matching, update-matching
      * @param {*} value - Value to operate on
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
-        this.#sendToServer({
-            type: 'room_storage_array_update',
-            key,
-            operation,
-            value,
-            updateValue
-        });
-        // Optimistic update
-        this.#storage[key] = updatedArray;
-        this.#storageTimestamps[key] = this.#getTimestamp();
-        this.#triggerEvent("storageUpdated", { ...this.#storage });
-    }
-
-    /**
-     * Handle array operations client-side
-     * @private
-     */
-    #handleArrayUpdate(key, operation, value, updateValue) {
-        let array = (!this.#storage[key] || !Array.isArray(this.#storage[key])) ? [] : [...this.#storage[key]];
-        const isObject = typeof value === 'object' && value !== null;
-        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
-
-        switch (operation) {
-            case 'add':
-                array.push(value);
-                break;
-
-            case 'add-unique':
-                if (!array.some(compare)) array.push(value);
-                break;
-
-            case 'remove-matching':
-                array = array.filter(item => !compare(item));
-                break;
-
-            case 'update-matching':
-                const index = array.findIndex(compare);
-                if (index !== -1) array[index] = updateValue;
-                break;
-
-            default:
-                console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
+        if (!this.#crdtManager.getPropertyStore[key] || !Array.isArray(this.#crdtManager.getPropertyStore[key])) {
+            this.updateStorage(key, []); // If the key does not exist or is not an array, set array first
         }
-
-        return array;
+        this.#crdtManager.updateProperty(key, timestamp, "array-" + operation, value, updateValue);
+        this.#sendToServer({
+            type: 'property_update',
+            key,
+            property: this.#crdtManager.exportProperty(key)
+        });
+        if (this.#crdtManager.didPropertiesChange) triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
     }
 
     /**
@@ -518,8 +462,6 @@ export default class PlaySocket {
         // Reset state
         clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
-        this.#storage = {};
-        this.#storageTimestamps = {};
         this.#serverTimeOffset = 0;
         this.#roomId = null;
         this.#connectionCount = 0;
@@ -529,7 +471,7 @@ export default class PlaySocket {
 
     // Public getters
     get connectionCount() { return this.#connectionCount; }
-    get getStorage() { return JSON.parse(JSON.stringify(this.#storage)); }
+    get getStorage() { return this.#crdtManager.getPropertyStore; }
     get isHost() { return this.#id == this.#roomHost; }
     get id() { return this.#id; }
 }
