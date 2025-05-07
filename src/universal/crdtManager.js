@@ -18,7 +18,7 @@ class CRDTManager {
     #availableOperations = ["set", "array-add", "array-add-unique", "array-update-matching", "array-remove-matching"];
 
     /**
-     * Import the entrie state of the CRDT manager
+     * Import the entire state of the CRDT manager
      * Disclaimer: This overwrites the old state & doesn't merge it
      * @param {Object} state
      */
@@ -27,7 +27,7 @@ class CRDTManager {
             const { keyOperations } = state;
             this.#keyOperations = new Map(keyOperations); // Rebuild the keyOperations Map
 
-            // Process each key in the keystore to update local values
+            // Process each key in the property store to update local values
             for (const key of this.#keyOperations.keys()) this.#processLocalProperty(key);
 
         } catch (error) {
