@@ -17,9 +17,11 @@ export default class PlaySocket {
 
     // Room properties
     #storage = {}; // Shared storage object
+    #storageTimestamps = {}; // Tracks update timestamps per key to ensure that not-yet synced updates don't get overwritten
     #roomHost;
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
+    #serverTimeOffset = 0; // Offset between server time and local time
 
     // Event handling
     #callbacks = new Map(); // Event callbacks
@@ -57,6 +59,14 @@ export default class PlaySocket {
         return new Promise((_, reject) =>
             setTimeout(() => reject(new Error(`${operation} timed out`)), TIMEOUT_MS)
         );
+    }
+
+    /**
+     * Get synchronized timestamp
+     * @private
+     */
+    #getTimestamp() {
+        return Date.now() + this.#serverTimeOffset;
     }
 
     /**
@@ -109,7 +119,8 @@ export default class PlaySocket {
                 this.#sendToServer({
                     type: 'register',
                     id: this.#id,
-                    customData: this.#customData || undefined
+                    customData: this.#customData || undefined,
+                    clientTime: Date.now()
                 });
             }),
             this.#createTimeout("Registration")
@@ -152,6 +163,7 @@ export default class PlaySocket {
                         // Connected to room
                         if (this.#pendingJoin) {
                             this.#storage = message.storage;
+                            this.#storageTimestamps = message.storageTimestamps;
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
                             this.#triggerEvent("status", `Connected to room.`);
@@ -175,6 +187,7 @@ export default class PlaySocket {
                             this.#reconnectCount = 0;
                             if (message.roomData) {
                                 this.#storage = message.roomData.storage;
+                                this.#storageTimestamps = message.roomData.storageTimestamps;
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host);
                                 this.#triggerEvent("storageUpdated", { ...this.#storage });
@@ -220,6 +233,9 @@ export default class PlaySocket {
 
                     case 'registered':
                         if (this.#pendingRegistration) {
+                            const roundTripTime = Date.now() - message.clientTime;
+                            const serverTimeAtClientNow = message.serverTime + (roundTripTime / 2);
+                            this.#serverTimeOffset = serverTimeAtClientNow - Date.now();
                             this.#sessionToken = message.sessionToken;
                             this.#initialized = true;
                             this.#pendingRegistration.resolve();
@@ -229,8 +245,21 @@ export default class PlaySocket {
 
                     case 'storage_sync':
                         if (message.key) {
-                            if (JSON.stringify(this.#storage[message.key]) !== JSON.stringify(message.value)) {
+                            const localTimestamp = this.#storageTimestamps[message.key] || 0;
+                            if (message.timestamp > localTimestamp && JSON.stringify(this.#storage[message.key]) !== JSON.stringify(message.value)) {
                                 this.#storage[message.key] = message.value;
+                                this.#storageTimestamps[message.key] = message.timestamp;
+                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            }
+                        }
+                        break;
+
+                    case 'storage_operation':
+                        if (message.key) {
+                            const updatedArray = this.#handleArrayUpdate(message.key, message.operation, message.value, message.updateValue);
+                            if (JSON.stringify(this.#storage[message.key]) !== JSON.stringify(updatedArray)) {
+                                this.#storage[message.key] = updatedArray;
+                                this.#storageTimestamps[message.key] = message.timestamp;
                                 this.#triggerEvent("storageUpdated", { ...this.#storage });
                             }
                         }
@@ -399,13 +428,16 @@ export default class PlaySocket {
      */
     updateStorage(key, value) {
         if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // Prevent updates without changes
+        const timestamp = this.#getTimestamp();
         this.#sendToServer({
             type: 'room_storage_update',
             key,
-            value
+            value,
+            timestamp
         });
         // Optimistic update
         this.#storage[key] = value;
+        this.#storageTimestamps[key] = timestamp;
         this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
 
@@ -428,6 +460,7 @@ export default class PlaySocket {
         });
         // Optimistic update
         this.#storage[key] = updatedArray;
+        this.#storageTimestamps[key] = this.#getTimestamp();
         this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
 
@@ -486,6 +519,8 @@ export default class PlaySocket {
         clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
         this.#storage = {};
+        this.#storageTimestamps = {};
+        this.#serverTimeOffset = 0;
         this.#roomId = null;
         this.#connectionCount = 0;
         this.#isReconnecting = false;
