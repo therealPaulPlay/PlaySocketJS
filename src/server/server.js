@@ -88,7 +88,7 @@ class PlaySocketServer {
                     this.#clients.set(data.id, ws);
                     const sessionToken = this.#generateSessionToken();
                     this.#clientTokens.set(data.id, sessionToken); // Token is used when reconnecting to prevent impersonation attacks
-                    ws.send(JSON.stringify({ type: 'registered', sessionToken, serverTime: Date.now(), clientTime: data.clientTime }));
+                    ws.send(JSON.stringify({ type: 'registered', sessionToken }));
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
@@ -113,7 +113,6 @@ class PlaySocketServer {
                         if (formerRoom) {
                             roomData = {
                                 state: formerRoom.crdtManager.getState,
-                                storageTimestamps: formerRoom.storageTimestamps,
                                 participantCount: formerRoom.participants.length,
                                 host: formerRoom.participants[0]
                             }
@@ -136,13 +135,17 @@ class PlaySocketServer {
                         return;
                     }
 
+                    // Create room object
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         maxSize: data.size || null,
-                        crdtManager: new CRDTManager
+                        crdtManager: new CRDTManager()
                     };
 
-                    this.#clientRooms.set(ws.clientId, newRoomId);
+                    // Load state if provided
+                    if (data.state) this.#rooms[newRoomId].crdtManager.importState(data.state);
+
+                    this.#clientRooms.set(ws.clientId, newRoomId); // Add client to their room
                     ws.send(JSON.stringify({ type: 'room_created' }));
                     this.#triggerEvent("roomCreated", ws.clientId); // Client id = room id
                     break;
@@ -199,8 +202,8 @@ class PlaySocketServer {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(JSON.stringify({
-                                    type: 'key_sync',
-                                    key: updateRoom.crdtManager.exportProperty(data.key)
+                                    type: 'property_sync',
+                                    property: updateRoom.crdtManager.exportProperty(data.key)
                                 }));
                             }
                         });

@@ -21,7 +21,6 @@ export default class PlaySocket {
     #roomHost;
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
-    #serverTimeOffset = 0; // Offset between server time and local time
     #crdtManager;
 
     // Event handling
@@ -50,9 +49,7 @@ export default class PlaySocket {
         this.#id = id;
         if (options.endpoint) this.#endpoint = options.endpoint;
         if (options.customData) this.#customData = { ...options.customData };
-
-        // Initialize the crdt manager
-        this.#crdtManager = new CRDTManager;
+        this.#crdtManager = new CRDTManager(this.#id);
     }
 
     /**
@@ -63,14 +60,6 @@ export default class PlaySocket {
         return new Promise((_, reject) =>
             setTimeout(() => reject(new Error(`${operation} timed out`)), TIMEOUT_MS)
         );
-    }
-
-    /**
-     * Get synchronized timestamp
-     * @private
-     */
-    #getTimestamp() {
-        return Date.now() + this.#serverTimeOffset;
     }
 
     /**
@@ -123,8 +112,7 @@ export default class PlaySocket {
                 this.#sendToServer({
                     type: 'register',
                     id: this.#id,
-                    customData: this.#customData || undefined,
-                    clientTime: Date.now()
+                    customData: this.#customData || undefined
                 });
             }),
             this.#createTimeout("Registration")
@@ -169,7 +157,7 @@ export default class PlaySocket {
                             this.#crdtManager.importState(message.state);
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
-                            triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                            this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#pendingJoin.resolve();
                         }
@@ -190,14 +178,13 @@ export default class PlaySocket {
                             this.#reconnectCount = 0;
                             if (message.roomData) {
                                 this.#crdtManager.importState(message.roomData.state);
-                                triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                                this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host);
-                            } else {
-                                if (this.#roomId) {
-                                    this.#triggerEvent("error", "Reconnected, but room no longer exists.");
-                                    return this.destroy();
-                                }
+                            } else if (this.#roomId) {
+                                // If no room data received, but client thinks they were in a room...
+                                this.#triggerEvent("error", "Reconnected, but room no longer exists.");
+                                return this.destroy();
                             }
                             this.#triggerEvent("status", "Reconnected.");
                             this.#pendingReconnect.resolve();
@@ -234,9 +221,6 @@ export default class PlaySocket {
 
                     case 'registered':
                         if (this.#pendingRegistration) {
-                            const roundTripTime = Date.now() - message.clientTime;
-                            const serverTimeAtClientNow = message.serverTime + (roundTripTime / 2);
-                            this.#serverTimeOffset = serverTimeAtClientNow - Date.now();
                             this.#sessionToken = message.sessionToken;
                             this.#initialized = true;
                             this.#pendingRegistration.resolve();
@@ -244,9 +228,9 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'key_sync':
+                    case 'property_sync':
                         if (message.property) this.#crdtManager.importProperty(message.property);
-                        if (this.#crdtManager.didPropertiesChange) triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
                         break;
 
                     case 'client_disconnected':
@@ -357,8 +341,8 @@ export default class PlaySocket {
 
         return Promise.race([
             new Promise((resolve, reject) => {
-                Object.entries(initialStorage)?.forEach((key, value) => {
-                    this.#crdtManager.updateProperty(key, 0, "set", value);
+                Object.entries(initialStorage)?.forEach(([key, value]) => {
+                    this.#crdtManager.updateProperty(key, "set", value);
                 });
                 this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
                 this.#roomHost = this.#id;
@@ -366,10 +350,9 @@ export default class PlaySocket {
                 this.#sendToServer({
                     type: 'create_room',
                     state: this.#crdtManager.getState,
-                    size: maxSize,
-                    from: this.#id,
+                    size: maxSize
                 });
-                triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
             }),
             this.#createTimeout("Room creation")
         ]).finally(() => {
@@ -412,14 +395,13 @@ export default class PlaySocket {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        const timestamp = this.#getTimestamp();
-        this.#crdtManager.updateProperty(key, timestamp, "set", value);
+        this.#crdtManager.updateProperty(key, "set", value);
         this.#sendToServer({
             type: 'property_update',
             key,
             property: this.#crdtManager.exportProperty(key)
         });
-        if (this.#crdtManager.didPropertiesChange) triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
     }
 
     /**
@@ -430,16 +412,13 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        if (!this.#crdtManager.getPropertyStore[key] || !Array.isArray(this.#crdtManager.getPropertyStore[key])) {
-            this.updateStorage(key, []); // If the key does not exist or is not an array, set array first
-        }
-        this.#crdtManager.updateProperty(key, timestamp, "array-" + operation, value, updateValue);
+        this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
         this.#sendToServer({
             type: 'property_update',
             key,
             property: this.#crdtManager.exportProperty(key)
         });
-        if (this.#crdtManager.didPropertiesChange) triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
     }
 
     /**
@@ -462,7 +441,6 @@ export default class PlaySocket {
         // Reset state
         clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
-        this.#serverTimeOffset = 0;
         this.#roomId = null;
         this.#connectionCount = 0;
         this.#isReconnecting = false;

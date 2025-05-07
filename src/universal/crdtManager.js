@@ -1,35 +1,39 @@
-
-
-/**
- * Custom conflict-free replicated data type system
- */
+// Custom conflict-free replicated data type system with vector clocks
 
 const CONSOLE_PREFIX = "CRDT Manager: ";
 
 class CRDTManager {
-    // Key operations history
-    #keyOperations = new Map(); // Key -> [Operation history]
-
-    // Current value replica
+    // Storage
+    #keyOperations = new Map();
     #propertyStore = {}; // Current local values per key, as object
     #lastPropertyStore = {}; // Last property store to compare against
 
-    // More
+    // Vector clock
+    #replicaId;
+    #vectorClock = new Map();
+
+    // Available operations
     #availableOperations = ["set", "array-add", "array-add-unique", "array-update-matching", "array-remove-matching"];
 
+    // Initialize vector clock
+    constructor(replicaId) {
+        this.#replicaId = replicaId || crypto.randomUUID();
+        this.#vectorClock.set(this.#replicaId, 0);
+    }
+
     /**
-     * Import the entire state of the CRDT manager
-     * Disclaimer: This overwrites the old state & doesn't merge it
+     * Import the entire state of the CRDT manager (this overwrites the old state)
      * @param {Object} state
      */
     importState(state) {
         try {
-            const { keyOperations } = state;
-            this.#keyOperations = new Map(keyOperations); // Rebuild the keyOperations Map
+            const { keyOperations, vectorClock } = state;
+            this.#keyOperations = new Map(keyOperations); // Rebuild the map
+            this.#vectorClock = new Map(vectorClock); // Also rebuild the map here
+            if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0);
 
             // Process each key in the property store to update local values
             for (const key of this.#keyOperations.keys()) this.#processLocalProperty(key);
-
         } catch (error) {
             console.error(CONSOLE_PREFIX + "Failed to import state:", error);
         }
@@ -41,7 +45,11 @@ class CRDTManager {
      * @returns {Object} - Data export
      */
     exportProperty(key) {
-        return { key, operations: this.#keyOperations.get(key) };
+        return {
+            key,
+            operations: this.#keyOperations.get(key) || [],
+            vectorClock: Array.from(this.#vectorClock.entries())
+        };
     }
 
     /**
@@ -50,29 +58,32 @@ class CRDTManager {
      */
     importProperty(data) {
         try {
-            const { key, operations } = data;
+            const { key, operations, vectorClock } = data;
 
-            // Initialize the key if it doesn't exist yet
+            // Init key if needed
             if (!this.#keyOperations.has(key)) this.#keyOperations.set(key, []);
+            const currentOps = this.#keyOperations.get(key); // Get current ops for this key
 
-            const currentOperations = this.#keyOperations.get(key); // Get the current operations for this key
-            const existingUUIDs = new Set(currentOperations.map(entry => entry.uuid)); // Create a set of existing UUIDs
-
-            // Merge new operations that don't already exist (using UUID for uniqueness)
-            if (operations && Array.isArray(operations)) {
-                for (const entry of operations) {
-                    if (entry && entry.uuid && !existingUUIDs.has(entry.uuid)) {
-                        currentOperations.push({ ...entry });
+            // Merge vector clocks
+            if (vectorClock) {
+                for (const [id, counter] of vectorClock) {
+                    if (!this.#vectorClock.has(id) || this.#vectorClock.get(id) < counter) {
+                        this.#vectorClock.set(id, counter);
                     }
                 }
             }
 
-            const sortedOperations = this.#orderOperationsByTimestamp(currentOperations); // Sort combined operations
-            this.#keyOperations.set(key, sortedOperations); // Update the key operations with the sorted merged operations
+            // Add new operations in correct order
+            const existingUuids = new Set(currentOps.map(op => op.uuid));
+            if (operations?.length) {
+                for (const op of operations) {
+                    if (op?.uuid && !existingUuids.has(op.uuid)) currentOps.push({ ...op });
+                }
+            }
 
-            // Process the local property store key to update its value based on the merged operations
+            // Sort and update
+            this.#keyOperations.set(key, this.#sortByVectorClock(currentOps));
             this.#processLocalProperty(key);
-
         } catch (error) {
             console.error(CONSOLE_PREFIX + "Failed to import property:", error);
         }
@@ -86,162 +97,174 @@ class CRDTManager {
      * @param {*} value 
      * @param {*} updateValue 
      */
-    updateProperty(key, timestamp, operation, value, updateValue) {
-        this.#addOperationToKey(key, { operation, value, updateValue }, timestamp); // Add operation
-        this.#processLocalProperty(key); // Re-process locally-stored value
-    }
-
-    /**
-     * Add an operation to a key's operation history
-     * @param {string} key 
-     * @param {Object} data - Operation data (operation, value...)
-     * @param {number} timestamp 
-     */
-    #addOperationToKey(key, data, timestamp) {
+    updateProperty(key, operation, value, updateValue) {
         try {
-            let operations = this.#keyOperations.get(key) || [];
+            // Increment vector clock
+            const counter = this.#vectorClock.get(this.#replicaId) || 0;
+            this.#vectorClock.set(this.#replicaId, counter + 1);
 
-            // Push as an object containing both operation and timestamp
-            operations.push({ data, timestamp, uuid: crypto.randomUUID() });
-            operations = this.#orderOperationsByTimestamp(operations); // Sort
+            // Init key if needed
+            if (!this.#keyOperations.has(key)) this.#keyOperations.set(key, []);
+            const ops = this.#keyOperations.get(key);
 
-            // Store back the sorted history (in case it was previously undefined)
-            this.#keyOperations.set(key, operations);
+            // Add operation
+            ops.push({
+                data: { operation, value, updateValue },
+                vectorClock: Array.from(this.#vectorClock.entries()),
+                uuid: crypto.randomUUID()
+            });
 
+            // Sort and process
+            this.#keyOperations.set(key, this.#sortByVectorClock(ops));
+            this.#processLocalProperty(key);
         } catch (error) {
             console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
         }
     }
 
     /**
-     * Process a properties's value by applying all operations and set it in the property store
+     * Process a property's value by applying all operations and set it in the property store
      * @param {string} key 
      */
     #processLocalProperty(key) {
         try {
-            const keyOperations = this.#keyOperations.get(key); // Get history
-            let keyValue;
+            const ops = this.#keyOperations.get(key);
+            if (!ops?.length) return;
 
-            // Run every operation in order (oldest to newest)
-            keyOperations?.forEach(element => {
-                keyValue = this.#handleOperation(keyValue, element?.data?.operation, element?.data?.value, element?.data?.updateValue);
-            });
+            let value = null;
 
-            this.#propertyStore[key] = keyValue; // Assign the processed value to the local property store
-
-        } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to process keystore key "${key}":`, error);
-        }
-    }
-
-    /**
-     * Sort by timestamp (ascending = oldest first)
-     * @param {Array} operations 
-     * @returns {Array}
-     */
-    #orderOperationsByTimestamp(operations) {
-        operations = [...operations];
-        const orderedOperations = operations.sort((a, b) => a.timestamp - b.timestamp);
-        return orderedOperations;
-    }
-
-
-    /**
-     * Handle a single operation
-     * @private 
-     * @param {*} curValue 
-     * @param {string} operation 
-     * @param {*} value 
-     * @param {*} [updateValue]
-     * @returns {*}
-     */
-    #handleOperation(curValue, operation, value, updateValue) {
-        if (!this.#availableOperations.includes(operation)) {
-            console.error(CONSOLE_PREFIX + `Unsupported operation "${operation}"`);
-            return curValue;
-        }
-        try {
-            // Destroy references
-            curValue = JSON.parse(JSON.stringify(curValue || null));
-
-            // Handle regular operations
-            switch (operation) {
-                case "set":
-                    curValue = value;
-                    return curValue;
+            // Apply all operations in order
+            for (const op of ops) {
+                if (!op.data) continue;
+                if (op.data.operation.startsWith('array') && !Array.isArray(value)) value = []; // Initialize array if required
+                value = this.#handleOperation(
+                    value,
+                    op.data.operation,
+                    op.data.value,
+                    op.data.updateValue
+                );
             }
 
-            // Handle array operations
-            if (operation.includes("array")) {
-                if (!curValue || !Array.isArray(curValue)) {
-                    console.error(CONSOLE_PREFIX + "Can't perform array operation on non-array");
-                    return;
-                }
+            this.#propertyStore[key] = value; // Save locally
+        } catch (error) {
+            console.error(CONSOLE_PREFIX + `Failed to process property for "${key}":`, error);
+        }
+    }
+
+    // Sort by vector clock (causal order)
+    #sortByVectorClock(operations) {
+        return [...operations].sort((a, b) => {
+            const clockA = new Map(a.vectorClock || []);
+            const clockB = new Map(b.vectorClock || []);
+
+            // First sort by causal relationship
+            let aGreater = false, bGreater = false;
+
+            const allIds = new Set([...clockA.keys(), ...clockB.keys()]);
+            for (const id of allIds) {
+                const countA = clockA.get(id) || 0;
+                const countB = clockB.get(id) || 0;
+
+                if (countA > countB) aGreater = true;
+                if (countA < countB) bGreater = true;
+            }
+
+            // Determine causal relationship if one is greater than another
+            if (aGreater && !bGreater) return 1;     // a happens after b
+            if (!aGreater && bGreater) return -1;    // a happens before b
+
+            // For concurrent operations (neither happens before the other), prioritize Set
+            if (a.data?.operation === 'set' && b.data?.operation !== 'set') return -1;
+            if (a.data?.operation !== 'set' && b.data?.operation === 'set') return 1;
+
+            // Fallback: UUID as tiebreaker, sort by alphabetical order
+            return a.uuid.localeCompare(b.uuid);
+        });
+    }
+
+    // Handle an operation
+    #handleOperation(curValue, operation, value, updateValue) {
+        if (!this.#availableOperations.includes(operation)) {
+            return curValue;
+        }
+
+        try {
+            // Clone to avoid reference issues
+            curValue = JSON.parse(JSON.stringify(curValue || null));
+
+            // Set operation
+            if (operation === "set") {
+                return value;
+            }
+
+            // Array operations
+            if (operation.startsWith('array')) {
+                // Auto-convert to array if current value isn't one
+                if (!Array.isArray(curValue)) curValue = [];
+
+                // Comparison function
                 const isObject = typeof value === 'object' && value !== null;
-                const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
+                const compare = (item) => {
+                    if (isObject && typeof item === 'object' && item !== null) {
+                        return JSON.stringify(item) === JSON.stringify(value);
+                    }
+                    return item === value; // Value comparison
+                };
 
                 switch (operation) {
                     case 'array-add':
                         curValue.push(value);
-                        return curValue;
-
+                        break;
                     case 'array-add-unique':
                         if (!curValue.some(compare)) curValue.push(value);
-                        return curValue;
-
+                        break;
                     case 'array-remove-matching':
                         curValue = curValue.filter(item => !compare(item));
-                        return curValue;
-
+                        break;
                     case 'array-update-matching':
                         const index = curValue.findIndex(compare);
                         if (index !== -1) curValue[index] = updateValue;
-                        return curValue;
+                        break;
                 }
             }
 
+            return curValue;
+
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to process operation with curValue ${curValue}, operation "${operation}", value ${value} and updateValue ${updateValue}`, error);
+            console.error(CONSOLE_PREFIX + `Failed to process operation with curValue ${curValue}:`, error);
             return curValue;
         }
     }
 
-    /**
-     * Get object representation of current local key values
-     */
+    // Get property store
     get getPropertyStore() {
         try {
             return JSON.parse(JSON.stringify(this.#propertyStore));
-        } catch (error) {
-            console.error(CONSOLE_PREFIX + "Failed to stringify and parse property store")
+        } catch {
+            console.error(CONSOLE_PREFIX + "Failed to parse property store")
             return {};
         }
     }
 
-    /**
-     * Check if a change in the local property store occured since the last check
-     */
+    // Check for changes in the local property store
     get didPropertiesChange() {
         try {
             if (JSON.stringify(this.#propertyStore) !== JSON.stringify(this.#lastPropertyStore)) {
                 this.#lastPropertyStore = JSON.parse(JSON.stringify(this.#propertyStore));
                 return true;
             }
-        } catch (error) {
-            console.error(CONSOLE_PREFIX + "Error checking for property change:", error);
-        }
+        } catch { }
         return false;
     }
 
-    /**
-     * Get the current full state
-     * This can be imported using importState
-     */
+    // Get full state (can be imported using importState)
     get getState() {
-        // Convert operation  Map to a serializable array of entries
-        const keyOperationsArray = [...this.#keyOperations.entries()];
-        return { keyOperations: keyOperationsArray };
+        // Convert Maps to arrays for serialization
+        return {
+            keyOperations: [...this.#keyOperations.entries()],
+            vectorClock: [...this.#vectorClock.entries()]
+        };
     }
 }
 
-module.exports = { CRDTManager }
+module.exports = { CRDTManager };
