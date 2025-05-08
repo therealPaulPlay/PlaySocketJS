@@ -61,11 +61,10 @@ class CRDTManager {
         try {
             const { key, operations, vectorClock } = data;
 
-            // Init key if needed
-            if (!this.#keyOperations.has(key)) this.#keyOperations.set(key, []);
-            const currentOps = this.#keyOperations.get(key); // Get current ops for this key
+            // Get current ops (or init empty array if key does not exist yet)
+            const currentOps = this.#keyOperations.get(key) || [];
 
-            // Merge vector clocks
+            // Merge vector clocks (always take max value)
             if (vectorClock) {
                 for (const [id, counter] of vectorClock) {
                     if (!this.#vectorClock.has(id) || this.#vectorClock.get(id) < counter) {
@@ -132,13 +131,13 @@ class CRDTManager {
     }
 
     #checkGarbageCollection() {
-        const operationThreshold = 20;
+        const operationThreshold = 20; // Perform garbage collection if this threshold is reached
+        const retainCount = 10; // How many ops to keep
 
         for (const [key, operations] of this.#keyOperations.entries()) {
             if (operations.length > operationThreshold) {
-                const retainCount = Math.round(operationThreshold * 0.5); // Keep the newest 50% of operations
                 const retainedOps = operations.slice(-retainCount); // newest ops
-                const baselineOps = operations.slice(0, -retainCount); // oldest ops (from index 0 to retainCount from the right end)
+                const baselineOps = operations.slice(0, -retainCount); // oldest ops (start =  idx 0, end = retainCount counted from right side)
 
                 // Use the vector clock from the last operation that we remove/overwrite with set (to ensure casual history)
                 const baselineVectorClock = baselineOps[baselineOps.length - 1]?.vectorClock || [];

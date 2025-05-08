@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
+const { encode, decode } = require('@msgpack/msgpack');
 const { CRDTManager } = require('../universal/crdtManager');
 
 /**
@@ -69,7 +70,7 @@ class PlaySocketServer {
      */
     #handleMessage(ws, message) {
         try {
-            const data = JSON.parse(message);
+            const data = decode(message);
 
             // Apply rate limiting after client is registered
             if (ws.clientId && !this.#checkRateLimit(ws.clientId, data.type)) {
@@ -81,14 +82,14 @@ class PlaySocketServer {
                     // Register client ID
                     if (!data.id) return;
                     if (this.#clients.get(data.id)) {
-                        ws.send(JSON.stringify({ type: 'id_taken' }));
+                        ws.send(encode({ type: 'id_taken' }), { binary: true });
                         return;
                     }
                     ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
                     const sessionToken = this.#generateSessionToken();
                     this.#clientTokens.set(data.id, sessionToken); // Token is used when reconnecting to prevent impersonation attacks
-                    ws.send(JSON.stringify({ type: 'registered', sessionToken }));
+                    ws.send(encode({ type: 'registered', sessionToken }), { binary: true });
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
@@ -97,7 +98,10 @@ class PlaySocketServer {
                     const pd = this.#pendingDisconnects.get(data.id);
                     if (pd && data.sessionToken) {
                         if (data.sessionToken !== this.#clientTokens.get(data.id)) {
-                            ws.send(JSON.stringify({ type: 'reconnection_failed', reason: "Session token does not match" }));
+                            ws.send(encode({
+                                type: 'reconnection_failed',
+                                reason: "Session token does not match"
+                            }), { binary: true });
                             return;
                         }
                         clearTimeout(pd.timeout);
@@ -118,9 +122,9 @@ class PlaySocketServer {
                             }
                         }
 
-                        ws.send(JSON.stringify({ type: 'reconnected', roomData }));
+                        ws.send(encode({ type: 'reconnected', roomData }), { binary: true });
                     } else {
-                        ws.send(JSON.stringify({ type: 'reconnection_failed', reason: "Client unknown to server" }));
+                        ws.send(encode({ type: 'reconnection_failed', reason: "Client unknown to server" }), { binary: true });
                     }
                     break;
 
@@ -128,10 +132,10 @@ class PlaySocketServer {
                     if (!ws.clientId) return;
                     const newRoomId = ws.clientId;
                     if (this.#clientRooms.get(ws.clientId) || this.#rooms[newRoomId]) {
-                        ws.send(JSON.stringify({
+                        ws.send(encode({
                             type: 'room_creation_failed',
                             reason: this.#clientRooms.get(ws.clientId) ? 'Already in a room' : 'Room id is taken'
-                        }));
+                        }), { binary: true });
                         return;
                     }
 
@@ -146,7 +150,7 @@ class PlaySocketServer {
                     if (data.state) this.#rooms[newRoomId].crdtManager.importState(data.state);
 
                     this.#clientRooms.set(ws.clientId, newRoomId); // Add client to their room
-                    ws.send(JSON.stringify({ type: 'room_created' }));
+                    ws.send(encode({ type: 'room_created' }), { binary: true });
                     this.#triggerEvent("roomCreated", ws.clientId); // Client id = room id
                     break;
 
@@ -158,12 +162,12 @@ class PlaySocketServer {
                     if (!room ||
                         (room.maxSize && room.participants.length >= room.maxSize) ||
                         this.#clientRooms.get(ws.clientId)) {
-                        ws.send(JSON.stringify({
+                        ws.send(encode({
                             type: 'join_rejected',
                             reason: !room ? 'Room not found' :
                                 room.maxSize && room.participants.length >= room.maxSize ? 'Room full' :
                                     'Already in a room'
-                        }));
+                        }), { binary: true });
                         return;
                     }
 
@@ -171,23 +175,23 @@ class PlaySocketServer {
                     this.#clientRooms.set(ws.clientId, roomId);
 
                     // Notify joiner with initial storage
-                    ws.send(JSON.stringify({
+                    ws.send(encode({
                         type: 'join_accepted',
                         state: room.crdtManager.getState,
                         participantCount: room.participants.length,
                         host: room.participants[0]
-                    }));
+                    }), { binary: true });
 
                     // Notify existing participants
                     room.participants.forEach(p => {
                         if (p === ws.clientId) return;
                         const client = this.#clients.get(p);
                         if (client) {
-                            client.send(JSON.stringify({
+                            client.send(encode({
                                 type: 'client_connected',
                                 client: ws.clientId,
                                 participantCount: room.participants.length
-                            }));
+                            }), { binary: true });
                         }
                     });
                     this.#triggerEvent("roomJoined", ws.clientId, roomId);
@@ -199,17 +203,17 @@ class PlaySocketServer {
                     if (updateRoom && data.key && data.property) {
                         updateRoom.crdtManager.importProperty(data.property);
 
-                        const jsonStringBytes = JSON.stringify(updateRoom.crdtManager.exportProperty(data.key)).length * 2;
-                        console.log("BYTES:", jsonStringBytes);
-                        console.log("KILO BYTES:", jsonStringBytes / 1000);
+                        // Log size comparison (JSON vs MessagePack)
+                        const msgpackSize = encode(updateRoom.crdtManager.exportProperty(data.key)).length;
+                        console.log("MSGPACK SIZE:", msgpackSize, "bytes");
 
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
-                                client.send(JSON.stringify({
+                                client.send(encode({
                                     type: 'property_sync',
                                     property: updateRoom.crdtManager.exportProperty(data.key)
-                                }));
+                                }), { binary: true });
                             }
                         });
                     }
@@ -305,12 +309,12 @@ class PlaySocketServer {
                 // Notify remaining participants
                 room.participants.forEach(p => {
                     const client = this.#clients.get(p);
-                    if (client) client.send(JSON.stringify({
+                    if (client) client.send(encode({
                         type: 'client_disconnected',
                         client: ws.clientId,
                         host: room.participants[0],
                         participantCount: room.participants.length
-                    }));
+                    }), { binary: true });
                 });
             }
         }

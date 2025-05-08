@@ -2,6 +2,7 @@
  * PlaySocket - WebSocket-based multiplayer for games
  */
 
+import { encode, decode } from "@msgpack/msgpack";
 import { CRDTManager } from "../universal/crdtManager";
 
 const ERROR_PREFIX = "PlaySocket error: ";
@@ -131,6 +132,7 @@ export default class PlaySocket {
             new Promise((resolve, reject) => {
                 this.#pendingConnect = { reject };
                 this.#socket = new WebSocket(this.#endpoint);
+                this.#socket.binaryType = 'arraybuffer'; // Important for MessagePack binary data
                 this.#setupSocketHandlers(); // Message & close events
                 this.#socket.onopen = resolve;
             }),
@@ -147,7 +149,7 @@ export default class PlaySocket {
     #setupSocketHandlers() {
         this.#socket.onmessage = (event) => {
             try {
-                const message = JSON.parse(event.data);
+                const message = decode(new Uint8Array(event.data));
                 if (!message.type) return;
 
                 switch (message.type) {
@@ -320,7 +322,7 @@ export default class PlaySocket {
             return console.error(ERROR_PREFIX + "Cannot send message - not connected.");
         }
         try {
-            this.#socket.send(JSON.stringify(data));
+            this.#socket.send(encode(data));
         } catch (error) {
             console.error(ERROR_PREFIX + "Error sending message:", error);
             this.#triggerEvent("error", "Error sending message: " + error.message);
