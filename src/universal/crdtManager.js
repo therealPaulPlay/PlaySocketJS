@@ -34,6 +34,7 @@ class CRDTManager {
 
             // Process each key in the property store to update local values
             for (const key of this.#keyOperations.keys()) this.#processLocalProperty(key);
+
         } catch (error) {
             console.error(CONSOLE_PREFIX + "Failed to import state:", error);
         }
@@ -84,6 +85,10 @@ class CRDTManager {
             // Sort and update
             this.#keyOperations.set(key, this.#sortByVectorClock(currentOps));
             this.#processLocalProperty(key);
+
+            // Check if garbage collection should run
+            this.#checkGarbageCollection();
+
         } catch (error) {
             console.error(CONSOLE_PREFIX + "Failed to import property:", error);
         }
@@ -92,7 +97,6 @@ class CRDTManager {
     /**
      * Update a property
      * @param {string} key 
-     * @param {number} timestamp 
      * @param {string} operation 
      * @param {*} value 
      * @param {*} updateValue 
@@ -111,14 +115,58 @@ class CRDTManager {
             ops.push({
                 data: { operation, value, updateValue },
                 vectorClock: Array.from(this.#vectorClock.entries()),
+                source: this.#replicaId,
                 uuid: crypto.randomUUID()
             });
 
             // Sort and process
             this.#keyOperations.set(key, this.#sortByVectorClock(ops));
             this.#processLocalProperty(key);
+
+            // Check if garbage collection should run
+            this.#checkGarbageCollection();
+
         } catch (error) {
             console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
+        }
+    }
+
+    #checkGarbageCollection() {
+        const operationThreshold = 20;
+
+        for (const [key, operations] of this.#keyOperations.entries()) {
+            if (operations.length > operationThreshold) {
+                const retainCount = Math.round(operationThreshold * 0.5); // Keep the newest 50% of operations
+                const retainedOps = operations.slice(-retainCount); // newest ops
+                const baselineOps = operations.slice(0, -retainCount); // oldest ops (from index 0 to retainCount from the right end)
+
+                // Use the vector clock from the last operation that we remove/overwrite with set (to ensure casual history)
+                const baselineVectorClock = baselineOps[baselineOps.length - 1]?.vectorClock || [];
+
+                // Calculate the value at the point where retained operations start
+                let baselineValue = null;
+                for (const op of baselineOps) {
+                    if (!op.data) continue;
+                    if (op.data.operation.startsWith('array') && !Array.isArray(baselineValue)) baselineValue = []; // Initialize array if required
+                    baselineValue = this.#handleOperation(
+                        baselineValue,
+                        op.data.operation,
+                        op.data.value,
+                        op.data.updateValue
+                    );
+                }
+
+                // Create a compact operation with baseline value and appropriate vector clock
+                const compactOp = {
+                    data: { operation: "set", value: baselineValue },
+                    vectorClock: baselineVectorClock,
+                    source: this.#replicaId,
+                    uuid: crypto.randomUUID()
+                };
+
+                // Combine compact op with retained operations
+                this.#keyOperations.set(key, [compactOp, ...retainedOps]);
+            }
         }
     }
 
@@ -169,16 +217,17 @@ class CRDTManager {
                 if (countA < countB) bGreater = true;
             }
 
-            // Determine causal relationship if one is greater than another
+            // Determine causal relationship (if one is greater, and the other is smaller, it's clear)
             if (aGreater && !bGreater) return 1;     // a happens after b
             if (!aGreater && bGreater) return -1;    // a happens before b
 
-            // For concurrent operations (neither happens before the other), prioritize Set
-            if (a.data?.operation === 'set' && b.data?.operation !== 'set') return -1;
-            if (a.data?.operation !== 'set' && b.data?.operation === 'set') return 1;
+            // Concurrent (unclear): Compare highest counter in each (sort by which one is ahead)
+            const maxA = Math.max(...Array.from(clockA.values()), 0);
+            const maxB = Math.max(...Array.from(clockB.values()), 0);
+            if (maxA !== maxB) return maxA - maxB;
 
-            // Fallback: UUID as tiebreaker, sort by alphabetical order
-            return a.uuid.localeCompare(b.uuid);
+            // Final tiebreak: Sort by ID of Replica that actually generated the operation
+            return a.source.localeCompare(b.source);
         });
     }
 

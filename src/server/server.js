@@ -198,6 +198,11 @@ class PlaySocketServer {
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
                     if (updateRoom && data.key && data.property) {
                         updateRoom.crdtManager.importProperty(data.property);
+
+                        const jsonStringBytes = JSON.stringify(updateRoom.crdtManager.exportProperty(data.key)).length * 2;
+                        console.log("BYTES:", jsonStringBytes);
+                        console.log("KILO BYTES:", jsonStringBytes / 1000);
+
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
