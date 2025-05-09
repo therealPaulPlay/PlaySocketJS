@@ -18,6 +18,7 @@ class PlaySocketServer {
     #heartbeatInterval;
     #pendingDisconnects = new Map(); // ClientId -> {timeout, roomId}
     #clientTokens = new Map(); // ClientId -> Token
+    #roomVersions = new Map(); // RoomId -> Version
 
     // Debug
     #debug = false;
@@ -118,19 +119,33 @@ class PlaySocketServer {
 
                         // If they were in a room, provide updated room data
                         let roomData;
-                        const formerRoom = this.#rooms[this.#clientRooms.get(data.id)];
+                        const formerRoomId = this.#clientRooms.get(data.id);
+                        const formerRoom = this.#rooms[formerRoomId];
                         if (formerRoom) {
-                            if (this.#debug) console.log(`State sent for reconnection for room ${this.#clientRooms.get(data.id)}:`, formerRoom.crdtManager.getState);
+                            if (this.#debug) console.log(`State sent for reconnection for room ${formerRoomId}:`, formerRoom.crdtManager.getState);
                             roomData = {
                                 state: formerRoom.crdtManager.getState,
                                 participantCount: formerRoom.participants.length,
-                                host: formerRoom.participants[0]
+                                host: formerRoom.participants[0],
+                                version: this.#roomVersions.get(formerRoomId)
                             }
                         }
 
                         ws.send(encode({ type: 'reconnected', roomData }), { binary: true });
                     } else {
                         ws.send(encode({ type: 'reconnection_failed', reason: "Client unknown to server" }), { binary: true });
+                    }
+                    break;
+
+                case 'request_state':
+                    const stateRoomId = this.#clientRooms.get(ws.clientId);
+                    const stateRoom = stateRoomId ? this.#rooms[stateRoomId] : null;
+                    if (stateRoom) {
+                        ws.send(encode({
+                            type: 'state_sync',
+                            state: stateRoom.crdtManager.getState,
+                            version: this.#roomVersions.get(stateRoomId)
+                        }), { binary: true });
                     }
                     break;
 
@@ -145,7 +160,8 @@ class PlaySocketServer {
                         return;
                     }
 
-                    // Create room object
+                    // Create room
+                    this.#roomVersions.set(newRoomId, 0); // Start with version 0
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         maxSize: data.size || null,
@@ -189,7 +205,8 @@ class PlaySocketServer {
                         type: 'join_accepted',
                         state: room.crdtManager.getState,
                         participantCount: room.participants.length,
-                        host: room.participants[0]
+                        host: room.participants[0],
+                        version: this.#roomVersions.get(roomId)
                     }), { binary: true });
 
                     // Notify existing participants
@@ -211,15 +228,22 @@ class PlaySocketServer {
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
 
-                    if (updateRoom && data.key && data.update) {
+                    if (updateRoom && data.key && data.update && data.uuid) {
                         updateRoom.crdtManager.importPropertyUpdate(data.update);
-                        if (this.#debug) console.log("Property received and imported:", data.update);
+
+                        // Increment version for this room
+                        const currentVersion = this.#roomVersions.get(updateRoomId) + 1;
+                        this.#roomVersions.set(updateRoomId, currentVersion);
+
+                        if (this.#debug) console.log("Property update received and imported:", data.update);
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(encode({
-                                    type: 'property_sync',
-                                    property: data.update
+                                    type: 'property_update',
+                                    update: data.update,
+                                    version: currentVersion,
+                                    uuid: data.uuid
                                 }), { binary: true });
                             }
                         });
@@ -312,6 +336,7 @@ class PlaySocketServer {
 
             if (room.participants?.length === 0) {
                 delete this.#rooms[roomId]; // Delete room if now empty
+                this.#roomVersions.delete(roomId); // Delete room version
                 if (this.#debug) console.log("Deleted room with id " + roomId + ".");
             } else {
                 // Notify remaining participants

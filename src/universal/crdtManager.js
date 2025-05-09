@@ -37,9 +37,13 @@ class CRDTManager {
     importState(state) {
         try {
             const { keyOperations, vectorClock } = state;
-
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing state:", state);
-            this.#opUuidTimestamp.clear(); // Reset the uuid timestamps since it might contain uuid's that no longer exist in the new state
+
+            // Resets
+            this.#opUuidTimestamp.clear();
+            this.#propertyStore = {};
+            this.#lastPropertyStore = {};
+
             this.#keyOperations = new Map(keyOperations); // Rebuild the map
             this.#vectorClock = new Map(vectorClock); // Also rebuild the map here
             if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Reset own vector clock if it wasn't present in the imported state

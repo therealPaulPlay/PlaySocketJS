@@ -53,8 +53,9 @@
         document.getElementById('clientIdDisplay').textContent = `Your client ID: ${clientId}`;
 
         async function initSocket(id) {
-            socket = new PlaySocket(id, { endpoint: "ws://localhost:3000" });
+            socket = new PlaySocket(id, { endpoint: "ws://localhost:3000", debug: true });
             socket.onEvent('status', status => console.log('Status:', status));
+            socket.onEvent('error', error => console.log('Error:', error));
             socket.onEvent('storageUpdated', (storage) => {
                 const messages = document.getElementById('messages');
                 messages.innerHTML = storage.messages?.map(msg =>

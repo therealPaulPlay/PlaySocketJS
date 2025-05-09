@@ -8,7 +8,7 @@ import { CRDTManager } from "../universal/crdtManager";
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
 const LOG_PREFIX = "PlaySocket log: ";
-const TIMEOUT_MS = 5000; // 5 second timeout for operations
+const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
 
 export default class PlaySocket {
     // Core properties
@@ -24,16 +24,19 @@ export default class PlaySocket {
     #roomId; // ID of the host (client only)
     #connectionCount = 0;
     #crdtManager;
+    #roomVersion = 0; // Update version (used to compare local vs. remote state to detect package loss)
+    #sentUpdates = new Set(); // Contains update uuids
 
     // Event handling
     #callbacks = new Map(); // Event callbacks
 
     // Async server operations
     #pendingJoin;
-    #pendingHost;
+    #pendingCreate;
     #pendingRegistration;
     #pendingConnect;
     #pendingReconnect;
+    #pendingStateRequest;
 
     // Timeouts or intervals
     #reconnectTimeout;
@@ -164,6 +167,7 @@ export default class PlaySocket {
                             this.#crdtManager.importState(message.state);
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
+                            this.#roomVersion = message.version;
                             this.#triggerEvent("storageUpdated", this.getStorage);
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#pendingJoin.resolve();
@@ -186,6 +190,7 @@ export default class PlaySocket {
                             if (message.roomData) {
                                 if (this.#debug) console.log(LOG_PREFIX + "State received for reconnect:", message.roomData.state);
                                 this.#crdtManager.importState(message.roomData.state);
+                                this.#roomVersion = message.roomData.version;
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
                                 this.#triggerEvent("storageUpdated", this.getStorage);
@@ -207,16 +212,16 @@ export default class PlaySocket {
                         break;
 
                     case 'room_created':
-                        if (this.#pendingHost) {
-                            this.#pendingHost.resolve(this.#roomId);
-                            this.#triggerEvent("status", `Room created${this.#pendingHost.maxSize ? ` with max size ${this.#pendingHost.maxSize}.` : '.'}`);
+                        if (this.#pendingCreate) {
+                            this.#triggerEvent("status", `Room created${this.#pendingCreate.maxSize ? ` with max size ${this.#pendingCreate.maxSize}.` : '.'}`);
+                            this.#pendingCreate.resolve(this.#roomId);
                         }
                         break;
 
                     case 'room_creation_failed':
-                        if (this.#pendingHost) {
-                            this.#pendingHost.reject(new Error("Failed to create room: " + message.reason));
+                        if (this.#pendingCreate) {
                             this.#triggerEvent("error", "Failed to create room: " + message.reason);
+                            this.#pendingCreate.reject(new Error("Failed to create room: " + message.reason));
                         }
                         break;
 
@@ -236,10 +241,27 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'property_sync':
-                        if (message.property) this.#crdtManager.importPropertyUpdate(message.property);
-                        if (this.#debug) console.log(LOG_PREFIX + "Property received:", message.property);
+                    case 'state_sync':
+                        if (this.#pendingStateRequest) {
+                            if (this.#debug) console.log(LOG_PREFIX + "State received following state request:", message.state);
+                            this.#roomVersion = message.version;
+                            this.#crdtManager.importState(message.state);
+                            this.#triggerEvent("storageUpdated", this.getStorage)
+                            this.#triggerEvent("status", "State synchronized.");
+                            this.#pendingStateRequest.resolve();
+                        }
+                        break;
+
+                    case 'property_update':
+                        this.#roomVersion++; // Increment room version
+                        if (this.#debug) console.log(LOG_PREFIX + "Property update received:", message.update);
+                        this.#sentUpdates.delete(message.uuid); // If this is our sent update, delete it so that timeout check knows it was received
+                        this.#crdtManager.importPropertyUpdate(message.update);
                         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+                        if (this.#roomVersion != message.version) {
+                            this.#triggerEvent("error", "Detected missing update – requesting full state.");
+                            this.#requestStateSync();
+                        }
                         break;
 
                     case 'client_disconnected':
@@ -303,8 +325,31 @@ export default class PlaySocket {
                 this.#pendingReconnect = null;
             });
         } catch (error) {
+            if (!this.#initialized) return;
             this.#triggerEvent("status", "Reconnection failed: " + error.message);
             this.#reconnectTimeout = setTimeout(() => this.#attemptReconnect(), 500);
+        }
+    }
+
+    /**
+     * If the local state is out of sync, request the room state
+     */
+    async #requestStateSync() {
+        if (this.#pendingStateRequest) return; // Return if already requested
+        try {
+            Promise.race([
+                new Promise(async (resolve) => {
+                    this.#pendingStateRequest = { resolve };
+                    this.#sendToServer({ type: 'request_state' });
+                }),
+                this.#createTimeout("State request")
+            ]).finally(() => {
+                this.#pendingStateRequest = null;
+            });
+        } catch (error) {
+            if (!this.#initialized) return;
+            this.#triggerEvent("error", "Failed to re-sync state: " + error.message);
+            this.destroy();
         }
     }
 
@@ -355,7 +400,7 @@ export default class PlaySocket {
                 });
                 this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
                 this.#roomHost = this.#id;
-                this.#pendingHost = { maxSize, resolve, reject };
+                this.#pendingCreate = { maxSize, resolve, reject };
                 this.#sendToServer({
                     type: 'create_room',
                     state: this.#crdtManager.getState,
@@ -365,7 +410,7 @@ export default class PlaySocket {
             }),
             this.#createTimeout("Room creation")
         ]).finally(() => {
-            this.#pendingHost = null;
+            this.#pendingCreate = null;
         });
     }
 
@@ -404,13 +449,22 @@ export default class PlaySocket {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        const propUpdate = this.#crdtManager.updateProperty(key, "set", value);
         if (this.#debug) console.log(LOG_PREFIX + "Property set update for key '" + key + "':", value);
+        const propUpdate = this.#crdtManager.updateProperty(key, "set", value);
+        const updateUuid = crypto.randomUUID();
+        this.#sentUpdates.add(updateUuid);
         this.#sendToServer({
             type: 'property_update',
             key,
-            update: propUpdate
+            update: propUpdate,
+            uuid: updateUuid
         });
+        setTimeout(() => {
+            if (this.#initialized && this.#sentUpdates.has(updateUuid)) {
+                this.#triggerEvent("error", "Sent update did not go through – requesting state.");
+                this.#requestStateSync();
+            }
+        }, TIMEOUT_MS);
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
     }
 
@@ -422,13 +476,22 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
         if (this.#debug) console.log(LOG_PREFIX + `Property array update for key '${key}', operation '${operation}', value '${value}' and updateValue '${updateValue}'.`);
+        const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
+        const updateUuid = crypto.randomUUID();
+        this.#sentUpdates.add(updateUuid);
         this.#sendToServer({
             type: 'property_update',
             key,
-            update: propUpdate
+            update: propUpdate,
+            uuid: updateUuid
         });
+        setTimeout(() => {
+            if (this.#initialized && this.#sentUpdates.has(updateUuid)) {
+                this.#triggerEvent("error", "Sent update did not go through – requesting state.");
+                this.#requestStateSync();
+            }
+        }, TIMEOUT_MS);
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
@@ -456,13 +519,16 @@ export default class PlaySocket {
         this.#connectionCount = 0;
         this.#isReconnecting = false;
         this.#reconnectCount = 0;
+        this.#roomVersion = 0;
+        this.#sentUpdates.clear();
 
         // Reject timeouts if currently active
         if (this.#pendingJoin) this.#pendingJoin.reject();
-        if (this.#pendingHost) this.#pendingHost.reject();
+        if (this.#pendingCreate) this.#pendingCreate.reject();
         if (this.#pendingRegistration) this.#pendingRegistration.reject();
         if (this.#pendingConnect) this.#pendingConnect.reject();
         if (this.#pendingReconnect) this.#pendingReconnect.reject();
+        if (this.#pendingStateRequest) this.#pendingStateRequest.reject();
     }
 
     // Public getters
