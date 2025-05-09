@@ -204,7 +204,7 @@ class PlaySocketServer {
                         updateRoom.crdtManager.importProperty(data.property);
 
                         // Log size comparison (JSON vs MessagePack)
-                        const msgpackSize = encode(updateRoom.crdtManager.exportProperty(data.key)).length;
+                        const msgpackSize = encode(updateRoom.crdtManager.exportPropertyLastOpOnly(data.key)).length;
                         console.log("MSGPACK SIZE:", msgpackSize, "bytes");
 
                         updateRoom.participants?.forEach(p => {
@@ -212,7 +212,7 @@ class PlaySocketServer {
                             if (client) {
                                 client.send(encode({
                                     type: 'property_sync',
-                                    property: updateRoom.crdtManager.exportProperty(data.key)
+                                    property: updateRoom.crdtManager.exportPropertyLastOpOnly(data.key)
                                 }), { binary: true });
                             }
                         });

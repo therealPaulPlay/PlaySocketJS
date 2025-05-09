@@ -4,18 +4,23 @@ const CONSOLE_PREFIX = "CRDT Manager: ";
 
 class CRDTManager {
     // Storage
+    #replicaId;
     #keyOperations = new Map();
+
+    // Local only
     #propertyStore = {}; // Current local values per key, as object
     #lastPropertyStore = {}; // Last property store to compare against
 
     // Vector clock
-    #replicaId;
     #vectorClock = new Map();
 
     // Available operations
     #availableOperations = ["set", "array-add", "array-add-unique", "array-update-matching", "array-remove-matching"];
 
-    // Initialize vector clock
+    /**
+     * Create a new instance
+     * @param {string} [replicaId] - Choose a uuid (falls back to random uuid)
+     */
     constructor(replicaId) {
         this.#replicaId = replicaId || crypto.randomUUID();
         this.#vectorClock.set(this.#replicaId, 0);
@@ -30,14 +35,29 @@ class CRDTManager {
             const { keyOperations, vectorClock } = state;
             this.#keyOperations = new Map(keyOperations); // Rebuild the map
             this.#vectorClock = new Map(vectorClock); // Also rebuild the map here
-            if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0);
+            if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Reset own vector clock if it wasn't present in the imported state
 
-            // Process each key in the property store to update local values
+            // Process each key to update local values
             for (const key of this.#keyOperations.keys()) this.#processLocalProperty(key);
 
         } catch (error) {
             console.error(CONSOLE_PREFIX + "Failed to import state:", error);
         }
+    }
+
+    /**
+     * Export only the last operation of a property for a single key
+     * This can still be imported using importProperty
+     * @param {string} key 
+     * @returns {Object} - Data export
+     */
+    exportPropertyLastOpOnly(key) {
+        const lastOp = this.#keyOperations.get(key)?.[this.#keyOperations.get(key)?.length - 1];
+        return {
+            key,
+            operations: lastOp ? [lastOp] : [],
+            vectorClock: Array.from(this.#vectorClock.entries())
+        };
     }
 
     /**
@@ -54,7 +74,7 @@ class CRDTManager {
     }
 
     /**
-     * Import property for a single key and reconcile
+     * Import property for a single key and merge changes
      * @param {Object} data - Data to import
      */
     importProperty(data) {
@@ -81,7 +101,7 @@ class CRDTManager {
                 }
             }
 
-            // Sort and update
+            // Sort and update local value
             this.#keyOperations.set(key, this.#sortByVectorClock(currentOps));
             this.#processLocalProperty(key);
 
@@ -130,6 +150,9 @@ class CRDTManager {
         }
     }
 
+    // TODO: If many operations are sent across, clients might prematurely garbage collect leading to operations arriving late that occured
+    // before the garbage collection and should have been evaluated earlier
+    // if we only sync the last operation, this can then lead to desync – otherwise it can lead to "ignored" operations (still bad)
     #checkGarbageCollection() {
         const operationThreshold = 20; // Perform garbage collection if this threshold is reached
         const retainCount = 10; // How many ops to keep
@@ -247,14 +270,13 @@ class CRDTManager {
 
             // Array operations
             if (operation.startsWith('array')) {
-                // Auto-convert to array if current value isn't one
-                if (!Array.isArray(curValue)) curValue = [];
+                if (!Array.isArray(curValue)) curValue = []; // Auto-convert to array if current value isn't one
 
                 // Comparison function
                 const isObject = typeof value === 'object' && value !== null;
                 const compare = (item) => {
                     if (isObject && typeof item === 'object' && item !== null) {
-                        return JSON.stringify(item) === JSON.stringify(value);
+                        return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     }
                     return item === value; // Value comparison
                 };

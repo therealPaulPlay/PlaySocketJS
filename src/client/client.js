@@ -401,7 +401,7 @@ export default class PlaySocket {
         this.#sendToServer({
             type: 'property_update',
             key,
-            property: this.#crdtManager.exportProperty(key)
+            property: this.#crdtManager.exportPropertyLastOpOnly(key)
         });
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
     }
@@ -418,7 +418,7 @@ export default class PlaySocket {
         this.#sendToServer({
             type: 'property_update',
             key,
-            property: this.#crdtManager.exportProperty(key)
+            property: this.#crdtManager.exportPropertyLastOpOnly(key)
         });
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
     }
