@@ -159,7 +159,7 @@ export default class PlaySocket {
                             this.#crdtManager.importState(message.state);
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
-                            this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                            this.#triggerEvent("storageUpdated", this.getStorage);
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#pendingJoin.resolve();
                         }
@@ -180,7 +180,7 @@ export default class PlaySocket {
                             this.#reconnectCount = 0;
                             if (message.roomData) {
                                 this.#crdtManager.importState(message.roomData.state);
-                                this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                                this.#triggerEvent("storageUpdated", this.getStorage);
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host);
                             } else if (this.#roomId) {
@@ -232,7 +232,7 @@ export default class PlaySocket {
 
                     case 'property_sync':
                         if (message.property) this.#crdtManager.importProperty(message.property);
-                        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
                         break;
 
                     case 'client_disconnected':
@@ -354,7 +354,7 @@ export default class PlaySocket {
                     state: this.#crdtManager.getState,
                     size: maxSize
                 });
-                this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+                this.#triggerEvent("storageUpdated", this.getStorage);
             }),
             this.#createTimeout("Room creation")
         ]).finally(() => {
@@ -403,7 +403,7 @@ export default class PlaySocket {
             key,
             property: this.#crdtManager.exportPropertyLastOpOnly(key)
         });
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
     /**
@@ -420,7 +420,7 @@ export default class PlaySocket {
             key,
             property: this.#crdtManager.exportPropertyLastOpOnly(key)
         });
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", { ...this.#crdtManager.getPropertyStore });
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
     /**

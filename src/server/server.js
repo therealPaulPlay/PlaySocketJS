@@ -200,13 +200,9 @@ class PlaySocketServer {
                 case 'property_update':
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
+                    
                     if (updateRoom && data.key && data.property) {
                         updateRoom.crdtManager.importProperty(data.property);
-
-                        // Log size comparison (JSON vs MessagePack)
-                        const msgpackSize = encode(updateRoom.crdtManager.exportPropertyLastOpOnly(data.key)).length;
-                        console.log("MSGPACK SIZE:", msgpackSize, "bytes");
-
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
