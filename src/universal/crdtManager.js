@@ -6,8 +6,6 @@ class CRDTManager {
     // Storage
     #replicaId;
     #keyOperations = new Map();
-
-    // Vector clock
     #vectorClock = new Map();
 
     // Local only
@@ -16,14 +14,19 @@ class CRDTManager {
 
     // Local Garbage Collection
     #lastGCCheck = 0;
-    #opUuuidTimestamp = new Map(); // Map every operation to a timestamp for garbage collection
+    #opUuidTimestamp = new Map(); // Map every operation to a timestamp for garbage collection
+
+    // Debug
+    #debug = false;
 
     /**
      * Create a new instance
-     * @param {string} [replicaId] - Choose a uuid (falls back to random uuid)
+     * @param {string} replicaId - Choose a uuid (falls back to random uuid)
      */
-    constructor(replicaId) {
-        this.#replicaId = replicaId || crypto.randomUUID();
+    constructor(replicaId, debug) {
+        if (!replicaId) return console.error("No replicaId provided!");
+        if (debug) this.#debug = true;
+        this.#replicaId = replicaId;
         this.#vectorClock.set(this.#replicaId, 0);
     }
 
@@ -35,7 +38,8 @@ class CRDTManager {
         try {
             const { keyOperations, vectorClock } = state;
 
-            this.#opUuuidTimestamp.clear(); // Reset the uuid timestamps since it might contain uuid's that no longer exist in the new state
+            if (this.#debug) console.log(CONSOLE_PREFIX + "Importing state:", state);
+            this.#opUuidTimestamp.clear(); // Reset the uuid timestamps since it might contain uuid's that no longer exist in the new state
             this.#keyOperations = new Map(keyOperations); // Rebuild the map
             this.#vectorClock = new Map(vectorClock); // Also rebuild the map here
             if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Reset own vector clock if it wasn't present in the imported state
@@ -43,7 +47,7 @@ class CRDTManager {
             // Map operation uuids to timestamp
             this.#keyOperations.forEach((value, key) => {
                 value?.forEach((operation) => {
-                    this.#opUuuidTimestamp.set(operation?.uuid, Date.now());
+                    this.#opUuidTimestamp.set(operation?.uuid, Date.now());
                 })
             });
 
@@ -56,72 +60,38 @@ class CRDTManager {
     }
 
     /**
-     * Export only the last operation of a property for a single key
-     * This can still be imported using importProperty
-     * @param {string} key 
-     * @returns {Object} - Data export
-     */
-    exportPropertyLastOpOnly(key) {
-        const lastOp = this.#keyOperations.get(key)?.[this.#keyOperations.get(key)?.length - 1];
-        return {
-            key,
-            operations: lastOp ? [lastOp] : [],
-            vectorClock: Array.from(this.#vectorClock.entries())
-        };
-    }
-
-    /**
-     * Export property for a single key
-     * @param {string} key 
-     * @returns {Object} - Data export
-     */
-    exportProperty(key) {
-        return {
-            key,
-            operations: [...(this.#keyOperations.get(key) || [])],
-            vectorClock: Array.from(this.#vectorClock.entries())
-        };
-    }
-
-    /**
-     * Import property for a single key and merge changes
+     * Import property update
      * @param {Object} data - Data to import
      */
-    importProperty(data) {
+    importPropertyUpdate(data) {
         try {
-            const { key, operations, vectorClock } = data;
+            const { key, operation, vectorClock } = data;
+            if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
 
             // Get COPY of current ops (or empty array if none yet)
             const currentOps = [...(this.#keyOperations.get(key) || [])];
 
             // Merge vector clocks (always take max value)
-            if (vectorClock) {
-                for (const [id, counter] of vectorClock) {
-                    if (!this.#vectorClock.has(id) || this.#vectorClock.get(id) < counter) {
-                        this.#vectorClock.set(id, counter);
-                    }
+            for (const [id, counter] of vectorClock) {
+                if (!this.#vectorClock.has(id) || this.#vectorClock.get(id) < counter) {
+                    this.#vectorClock.set(id, counter);
                 }
             }
 
-            // Safeguard against attack where new clients would rapidly connect and disconnect to fill up the vectorClock
+            // Saveguard
             if (this.#vectorClock.size > 1000) this.#vectorClock = new Map([...this.#vectorClock].slice(-100));
 
-            // Add new operations (diff) in correct order
+            // Add new operation if it's not already added
             const existingUuids = new Set(currentOps.map(op => op.uuid));
-            if (operations?.length) {
-                for (const op of operations) {
-                    if (op?.uuid && !existingUuids.has(op.uuid)) {
-                        currentOps.push({ ...op }); // Add operation
-                        this.#opUuuidTimestamp.set(op?.uuid, Date.now()); // Add timestamp for gc
-                    }
-                }
+            if (operation?.uuid && !existingUuids.has(operation.uuid)) {
+                currentOps.push({ ...operation }); // Add operation
+                this.#opUuidTimestamp.set(operation?.uuid, Date.now()); // Add timestamp for gc
             }
 
             // Sort, update operations & local value
             this.#keyOperations.set(key, this.#sortByVectorClock(currentOps));
             this.#processLocalProperty(key);
-
-            this.#checkGarbageCollection(); // Check if GC should run
+            this.#checkGarbageCollection();
 
         } catch (error) {
             console.error(CONSOLE_PREFIX + "Failed to import property:", error);
@@ -134,9 +104,13 @@ class CRDTManager {
      * @param {string} operation 
      * @param {*} value 
      * @param {*} updateValue 
+     * @returns {Object} - Returns the property update
      */
     updateProperty(key, operation, value, updateValue) {
         try {
+            // Debug log
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, operation ${operation}, value ${value} and updateValue ${updateValue}.`);
+
             // Increment vector clock
             const counter = this.#vectorClock.get(this.#replicaId) || 0;
             this.#vectorClock.set(this.#replicaId, counter + 1);
@@ -147,13 +121,16 @@ class CRDTManager {
             // Add operation
             const newOp = this.#createOperation({ operation, value, updateValue }, Array.from(this.#vectorClock.entries()));
             currentOps.push(newOp);
+            this.#keyOperations.set(key, currentOps); // Update the operations (no need to sort via vector clock since local updates are always the latest)
+            this.#processLocalProperty(key); // Process local value
+            this.#checkGarbageCollection();
 
-            // Sort and process
-            this.#keyOperations.set(key, this.#sortByVectorClock(currentOps));
-            this.#opUuuidTimestamp.set(newOp.uuid, Date.now());
-            this.#processLocalProperty(key);
-
-            this.#checkGarbageCollection(); // Check if GC should run
+            // Return the property update with the new operation (this can be imported using importPropertyUpdate)
+            return {
+                key,
+                operation: { ...newOp },
+                vectorClock: Array.from(this.#vectorClock.entries())
+            };
 
         } catch (error) {
             console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
@@ -172,15 +149,16 @@ class CRDTManager {
 
             let retainCount = operations.length;
             operations.forEach((op, index) => {
-                // Count how many ops, from last to latest, are >10s old in a row
-                if (op.uuid && this.#opUuuidTimestamp.has(op.uuid) && (Date.now() - this.#opUuuidTimestamp.get(op.uuid)) > MIN_AGE_FOR_GC) {
+                // Count how many ops, from last to latest, are older than the min-age in a row
+                if (op.uuid && this.#opUuidTimestamp.has(op.uuid) && (Date.now() - this.#opUuidTimestamp.get(op.uuid)) > MIN_AGE_FOR_GC) {
                     const removeCount = index + 1;
                     retainCount = operations.length - removeCount;
-                    this.#opUuuidTimestamp.delete(op.uuid); // Remove from timestamps if set to be deleted
+                    this.#opUuidTimestamp.delete(op.uuid); // Remove from timestamps if set to be deleted
                 }
             });
 
             if (retainCount < operations.length) {
+                if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
                 const retainOps = operations.slice(-retainCount); // newest ops
                 const removeOps = operations.slice(0, -retainCount); // oldest ops (start =  idx 0, end = retainCount counted from right side)
                 const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
@@ -201,6 +179,9 @@ class CRDTManager {
                 // Create a compact operation with baseline value and appropriate vector clock
                 const compactOp = this.#createOperation({ operation: "set", value: baselineValue }, baselineVectorClock);
 
+                // Debug log
+                if (this.#debug) console.log(CONSOLE_PREFIX + "Operations after garbage collection for this key:", [compactOp, ...retainOps]);
+
                 // Combine compact op with retained operations
                 this.#keyOperations.set(key, [compactOp, ...retainOps]);
             }
@@ -220,7 +201,7 @@ class CRDTManager {
             source: this.#replicaId,
             uuid: crypto.randomUUID()
         }
-        this.#opUuuidTimestamp.set(newOperation.uuid, Date.now());
+        this.#opUuidTimestamp.set(newOperation.uuid, Date.now());
         return newOperation;
     }
 

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PlaySocket Score Sync Test</title>
+</head>
+
+<body>
+    <div>
+        <p id="clientIdDisplay"></p>
+        <div id="host-container">
+            <button onclick="host()">Host Room</button>
+            <span id="roomCode"></span>
+        </div>
+        <div id="join-container">
+            <input type="text" id="hostId" placeholder="Host ID">
+            <button onclick="join()">Join Room</button>
+        </div>
+    </div>
+
+    <div id="gamePanel" style="display: none;">
+        <button onclick="showResults()">Show Results</button>
+        <button onclick="resetScores()">Reset Scores</button>
+        <div id="players"></div>
+    </div>
+
+    <script type="module">
+        import PlaySocket from '../dist/playsocket-client.js';
+
+        let socket;
+        let hasUpdatedScore = false;
+        const clientId = Math.random().toString(36).substring(2, 10);
+        document.getElementById('clientIdDisplay').textContent = `Your ID: ${clientId}`;
+
+        async function initSocket(id) {
+            socket = new PlaySocket(id, {
+                endpoint: "ws://localhost:3000",
+                debug: true
+            });
+
+            socket.onEvent('storageUpdated', (storage) => {
+                updatePlayerDisplay(storage);
+
+                // Only update score once when showResult becomes true
+                if (storage.showResult === true && !hasUpdatedScore) {
+                    hasUpdatedScore = true;
+                    const score = Math.floor(Math.random() * 500) + 100;
+                    console.log(`Calculating one-time score: +${score}`);
+                    updatePeerScore(score);
+                }
+
+                // Reset our flag when showResult becomes false
+                if (storage.showResult === false) {
+                    hasUpdatedScore = false;
+                }
+            });
+
+            await socket.init();
+        }
+
+        function updatePlayerDisplay(storage) {
+            const playersElement = document.getElementById('players');
+            if (!storage.players) return;
+
+            playersElement.innerHTML = '<h3>Players:</h3>' +
+                storage.players.map(player => {
+                    const [id, name, color, score] = player;
+                    return `<div>${name} (${id}): Score = ${score}</div>`;
+                }).join('');
+        }
+
+        async function host() {
+            if (!socket) await initSocket(clientId);
+
+            const initialState = {
+                players: [[socket.id, `Player ${clientId}`, '#ff0000', 0]],
+                showResult: false
+            };
+
+            await socket.createRoom(initialState);
+            document.getElementById('roomCode').textContent = `Room Code: ${clientId}`;
+            document.getElementById('gamePanel').style.display = 'block';
+        }
+
+        async function join() {
+            const hostId = document.getElementById('hostId').value;
+            if (!hostId) return alert('Please enter the Room code');
+
+            if (!socket) await initSocket(clientId);
+            await socket.joinRoom(hostId);
+
+            socket.updateStorageArray('players', 'add', [
+                socket.id,
+                `Player ${clientId}`,
+                '#0000ff',
+                0
+            ]);
+
+            document.getElementById('gamePanel').style.display = 'block';
+        }
+
+        function showResults() {
+            socket.updateStorage('showResult', true);
+        }
+
+        function resetScores() {
+            socket.updateStorage('showResult', false);
+
+            // Reset all player scores to zero
+            if (socket?.getStorage?.players) {
+                socket.getStorage.players.forEach(player => {
+                    if (player[0] === socket.id) {
+                        const updatedPlayer = [...player];
+                        updatedPlayer[3] = 0;
+                        socket.updateStorageArray("players", "update-matching", player, updatedPlayer);
+                    }
+                });
+            }
+        }
+
+        function updatePeerScore(addScore) {
+            const peerIndex = socket.getStorage.players.findIndex(peer => peer[0] === socket.id);
+            if (peerIndex !== -1) {
+                const thisPlayer = socket.getStorage.players[peerIndex];
+                let newPlayer = [...thisPlayer];
+                newPlayer[3] = newPlayer[3] + addScore;
+
+                console.log(`Updating score: ${thisPlayer[3]} → ${newPlayer[3]}`);
+                socket.updateStorageArray("players", "update-matching", thisPlayer, newPlayer);
+            }
+        }
+
+        // Make functions globally available
+        window.host = host;
+        window.join = join;
+        window.showResults = showResults;
+        window.resetScores = resetScores;
+    </script>
+</body>
+
+</html>

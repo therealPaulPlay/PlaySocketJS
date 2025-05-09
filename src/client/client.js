@@ -7,6 +7,7 @@ import { CRDTManager } from "../universal/crdtManager";
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
+const LOG_PREFIX = "PlaySocket log: ";
 const TIMEOUT_MS = 5000; // 5 second timeout for operations
 
 export default class PlaySocket {
@@ -39,6 +40,9 @@ export default class PlaySocket {
     #reconnectCount = 0;
     #isReconnecting = false;
 
+    // Debug
+    #debug = false;
+
     /**
      * Create a new PlaySocket instance
      * @param {string} id - Unique identifier for this client
@@ -50,7 +54,8 @@ export default class PlaySocket {
         this.#id = id;
         if (options.endpoint) this.#endpoint = options.endpoint;
         if (options.customData) this.#customData = { ...options.customData };
-        this.#crdtManager = new CRDTManager(this.#id);
+        if (options.debug) this.#debug = true; // Enabling extra logging
+        this.#crdtManager = new CRDTManager(this.#id, this.#debug);
     }
 
     /**
@@ -155,6 +160,7 @@ export default class PlaySocket {
                     case 'join_accepted':
                         // Connected to room
                         if (this.#pendingJoin) {
+                            if (this.#debug) console.log(LOG_PREFIX + "State received for join:", message.state);
                             this.#crdtManager.importState(message.state);
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
@@ -178,6 +184,7 @@ export default class PlaySocket {
                             this.#isReconnecting = false;
                             this.#reconnectCount = 0;
                             if (message.roomData) {
+                                if (this.#debug) console.log(LOG_PREFIX + "State received for reconnect:", message.roomData.state);
                                 this.#crdtManager.importState(message.roomData.state);
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
@@ -230,7 +237,8 @@ export default class PlaySocket {
                         break;
 
                     case 'property_sync':
-                        if (message.property) this.#crdtManager.importProperty(message.property);
+                        if (message.property) this.#crdtManager.importPropertyUpdate(message.property);
+                        if (this.#debug) console.log(LOG_PREFIX + "Property received:", message.property);
                         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
                         break;
 
@@ -396,11 +404,12 @@ export default class PlaySocket {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        this.#crdtManager.updateProperty(key, "set", value);
+        const propUpdate = this.#crdtManager.updateProperty(key, "set", value);
+        if (this.#debug) console.log(LOG_PREFIX + "Property set update for key '" + key + "':", value);
         this.#sendToServer({
             type: 'property_update',
             key,
-            property: this.#crdtManager.exportPropertyLastOpOnly(key)
+            update: propUpdate
         });
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
     }
@@ -413,11 +422,12 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorageArray(key, operation, value, updateValue) {
-        this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
+        const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
+        if (this.#debug) console.log(LOG_PREFIX + `Property array update for key '${key}', operation '${operation}', value '${value}' and updateValue '${updateValue}'.`);
         this.#sendToServer({
             type: 'property_update',
             key,
-            property: this.#crdtManager.exportPropertyLastOpOnly(key)
+            update: propUpdate
         });
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }

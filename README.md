@@ -71,6 +71,7 @@ Creates a new PlaySocket instance with a specified ID and configuration options.
 #### Configuration options
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
 - `customData`: You can pass arbitrary data to the "clientRegistered" server event (optional)
+- `debug`: Set this property to true to enable extra logging
 
 ### Methods
 
@@ -192,6 +193,7 @@ Creates a new PlaySocket Server instance with configuration options.
 - `port`: Port to listen on (default: 3000, used only if no server provided)
 - `path`: WebSocket endpoint path (default: '/')
 - `server`: Existing http server (optional)
+- `debug`: Set this property to true to enable extra logging
 
 ### Methods
 

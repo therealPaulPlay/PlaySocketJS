@@ -19,6 +19,9 @@ class PlaySocketServer {
     #pendingDisconnects = new Map(); // ClientId -> {timeout, roomId}
     #clientTokens = new Map(); // ClientId -> Token
 
+    // Debug
+    #debug = false;
+
     /**
      * Create a new PlaySocketServer instance
      * @param {Object} options - Server configuration options
@@ -27,7 +30,9 @@ class PlaySocketServer {
      * @param {string} [options.path='/socket'] - WebSocket endpoint path
      */
     constructor(options = {}) {
-        const { server, port = 3000, path = '/' } = options;
+        const { server, port = 3000, path = '/', debug = false } = options;
+
+        if (debug) this.#debug = true; // Enable extra logging
 
         // Handle server creation / usage
         if (server) {
@@ -36,7 +41,7 @@ class PlaySocketServer {
             this.#ownsServer = true;
             this.#server = http.createServer(); // Create HTTP server and start it
             this.#server.listen(port, () => {
-                console.log(`PlaySocket server running on port ${port}`);
+                console.log(`PlaySocket server running on port ${port}.`);
             });
         }
 
@@ -115,6 +120,7 @@ class PlaySocketServer {
                         let roomData;
                         const formerRoom = this.#rooms[this.#clientRooms.get(data.id)];
                         if (formerRoom) {
+                            if (this.#debug) console.log(`State sent for reconnection for room ${this.#clientRooms.get(data.id)}:`, formerRoom.crdtManager.getState);
                             roomData = {
                                 state: formerRoom.crdtManager.getState,
                                 participantCount: formerRoom.participants.length,
@@ -143,11 +149,14 @@ class PlaySocketServer {
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         maxSize: data.size || null,
-                        crdtManager: new CRDTManager()
+                        crdtManager: new CRDTManager(crypto.randomUUID(), this.#debug)
                     };
 
                     // Load state if provided
-                    if (data.state) this.#rooms[newRoomId].crdtManager.importState(data.state);
+                    if (data.state) {
+                        this.#rooms[newRoomId].crdtManager.importState(data.state);
+                        if (this.#debug) console.log("Room created with initial state:", data.state);
+                    }
 
                     this.#clientRooms.set(ws.clientId, newRoomId); // Add client to their room
                     ws.send(encode({ type: 'room_created' }), { binary: true });
@@ -175,6 +184,7 @@ class PlaySocketServer {
                     this.#clientRooms.set(ws.clientId, roomId);
 
                     // Notify joiner with initial storage
+                    if (this.#debug) console.log("Room state sent for join:", room.crdtManager.getState);
                     ws.send(encode({
                         type: 'join_accepted',
                         state: room.crdtManager.getState,
@@ -200,15 +210,16 @@ class PlaySocketServer {
                 case 'property_update':
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
-                    
-                    if (updateRoom && data.key && data.property) {
-                        updateRoom.crdtManager.importProperty(data.property);
+
+                    if (updateRoom && data.key && data.update) {
+                        updateRoom.crdtManager.importPropertyUpdate(data.update);
+                        if (this.#debug) console.log("Property received and imported:", data.update);
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(encode({
                                     type: 'property_sync',
-                                    property: updateRoom.crdtManager.exportPropertyLastOpOnly(data.key)
+                                    property: data.update
                                 }), { binary: true });
                             }
                         });
@@ -301,6 +312,7 @@ class PlaySocketServer {
 
             if (room.participants?.length === 0) {
                 delete this.#rooms[roomId]; // Delete room if now empty
+                if (this.#debug) console.log("Deleted room with id " + roomId + ".");
             } else {
                 // Notify remaining participants
                 room.participants.forEach(p => {
@@ -352,7 +364,7 @@ class PlaySocketServer {
         }
         if (this.#server && this.#ownsServer) {
             this.#server.close(() => {
-                console.log('PlaySocket server stopped');
+                console.log('PlaySocket server stopped.');
             });
         }
         this.#pendingDisconnects.forEach((data) => {

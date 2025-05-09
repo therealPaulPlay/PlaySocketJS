@@ -6,7 +6,7 @@
 const PlaySocketServer = require('../dist/playsocket-server.js');
 
 // Create and start the server
-const server = new PlaySocketServer();
+const server = new PlaySocketServer({ debug: true });
 
 // Gracefully disconnect all clients and close the server
 function shutdown() {
