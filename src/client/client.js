@@ -69,9 +69,7 @@ export default class PlaySocket {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = [
-            "status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"
-        ];
+        const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"];
         if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
@@ -99,6 +97,7 @@ export default class PlaySocket {
     async init() {
         if (this.#initialized) return Promise.reject(new Error("Already initialized"));
         if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided"));
+        if (!this.#id) return Promise.reject(new Error("No id provided"));
         this.#triggerEvent("status", "Initializing...");
 
         // Connect to WS server
@@ -168,8 +167,8 @@ export default class PlaySocket {
                     case 'join_rejected':
                         // Connection to room failed
                         if (this.#pendingJoin) {
-                            this.#triggerEvent("status", "Connection rejected: " + message.reason);
-                            this.#pendingJoin.reject(new Error("Connection rejected: " + message.reason));
+                            this.#triggerEvent("status", "Failed to join room: " + message.reason);
+                            this.#pendingJoin.reject(new Error("Failed to join room: " + message.reason));
                         }
                         break;
 
@@ -180,9 +179,9 @@ export default class PlaySocket {
                             this.#reconnectCount = 0;
                             if (message.roomData) {
                                 this.#crdtManager.importState(message.roomData.state);
-                                this.#triggerEvent("storageUpdated", this.getStorage);
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
-                                this.#setHost(message.roomData.host);
+                                this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
+                                this.#triggerEvent("storageUpdated", this.getStorage);
                             } else if (this.#roomId) {
                                 // If no room data received, but client thinks they were in a room...
                                 this.#triggerEvent("error", "Reconnected, but room no longer exists.");
@@ -403,7 +402,7 @@ export default class PlaySocket {
             key,
             property: this.#crdtManager.exportPropertyLastOpOnly(key)
         });
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
     }
 
     /**
@@ -430,7 +429,7 @@ export default class PlaySocket {
         this.#initialized = false; // Set this immediately to prevent automatic reconnection
 
         if (this.#socket) {
-            // Signal to the server that it can immediately disconnect this user
+            // Signal to the server that it can immediately remove this user
             if (this.#socket.readyState === WebSocket.OPEN) this.#sendToServer({ type: 'disconnect' });
             this.#socket.close();
             this.#socket = null;
@@ -447,6 +446,13 @@ export default class PlaySocket {
         this.#connectionCount = 0;
         this.#isReconnecting = false;
         this.#reconnectCount = 0;
+
+        // Reject timeouts if currently active
+        if (this.#pendingJoin) this.#pendingJoin.reject();
+        if (this.#pendingHost) this.#pendingHost.reject();
+        if (this.#pendingRegistration) this.#pendingRegistration.reject();
+        if (this.#pendingConnect) this.#pendingConnect.reject();
+        if (this.#pendingReconnect) this.#pendingReconnect.reject();
     }
 
     // Public getters

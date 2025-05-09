@@ -18,9 +18,6 @@ class CRDTManager {
     #lastGCCheck = 0;
     #opUuuidTimestamp = new Map(); // Map every operation to a timestamp for garbage collection
 
-    // Available operations
-    #availableOperations = ["set", "array-add", "array-add-unique", "array-update-matching", "array-remove-matching"];
-
     /**
      * Create a new instance
      * @param {string} [replicaId] - Choose a uuid (falls back to random uuid)
@@ -105,6 +102,9 @@ class CRDTManager {
                     }
                 }
             }
+
+            // Safeguard against attack where new clients would rapidly connect and disconnect to fill up the vectorClock
+            if (this.#vectorClock.size > 1000) this.#vectorClock = new Map([...this.#vectorClock].slice(-100));
 
             // Add new operations (diff) in correct order
             const existingUuids = new Set(currentOps.map(op => op.uuid));
@@ -287,10 +287,6 @@ class CRDTManager {
 
     // Handle an operation
     #handleOperation(curValue, operation, value, updateValue) {
-        if (!this.#availableOperations.includes(operation)) {
-            return curValue;
-        }
-
         try {
             // Clone to avoid reference issues
             curValue = JSON.parse(JSON.stringify(curValue || null));
