@@ -150,9 +150,9 @@ class CRDTManager {
         }
     }
 
-    // TODO: If many operations are sent across, clients might prematurely garbage collect leading to operations arriving late that occured
-    // before the garbage collection and should have been evaluated earlier
-    // if we only sync the last operation, this can then lead to desync – otherwise it can lead to "ignored" operations (still bad)
+    // TODO: If many operations are sent across, clients might prematurely garbage collect leading to operations which arrive late (ones that should have occured
+    // before the garbage collection) to no longer be processed correctly
+    // If we only sync the last operation, this can then lead to desync (since garbage collection is independent) – otherwise it can lead to "ignored" operations (still bad)
     #checkGarbageCollection() {
         const operationThreshold = 20; // Perform garbage collection if this threshold is reached
         const retainCount = 10; // How many ops to keep
