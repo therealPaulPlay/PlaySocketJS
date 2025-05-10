@@ -87,9 +87,9 @@ class CRDTManager {
 
             // Add new operation if it's not already added
             const existingUuids = new Set(currentOps.map(op => op.uuid));
-            if (operation?.uuid && !existingUuids.has(operation.uuid)) {
+            if (operation.uuid && !existingUuids.has(operation.uuid)) {
                 currentOps.push({ ...operation }); // Add operation
-                this.#opUuidTimestamp.set(operation?.uuid, Date.now()); // Add timestamp for gc
+                this.#opUuidTimestamp.set(operation.uuid, Date.now()); // Add timestamp for gc
             }
 
             // Sort, update operations & local value
@@ -98,7 +98,7 @@ class CRDTManager {
             this.#checkGarbageCollection();
 
         } catch (error) {
-            console.error(CONSOLE_PREFIX + "Failed to import property:", error);
+            console.error(CONSOLE_PREFIX + "Failed to import property update:", error);
         }
     }
 
