@@ -44,9 +44,9 @@ class CRDTManager {
             this.#propertyStore = {};
             this.#lastPropertyStore = {};
 
-            this.#keyOperations = new Map(keyOperations); // Rebuild the map
-            this.#vectorClock = new Map(vectorClock); // Also rebuild the map here
-            if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Reset own vector clock if it wasn't present in the imported state
+            this.#keyOperations = new Map(keyOperations); // Rebuild the operations map
+            this.#vectorClock = new Map(vectorClock); // Rebuild the vector clock map
+            if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Add own vector clock if it wasn't present in the imported state
 
             // Map operation uuids to timestamp
             this.#keyOperations.forEach((value, key) => {

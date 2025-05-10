@@ -67,7 +67,7 @@ class PlaySocketServer {
                 ws.isAlive = false;
                 ws.ping();
             });
-        }, 30000);
+        }, 15000);
     }
 
     /**
@@ -134,18 +134,6 @@ class PlaySocketServer {
                         ws.send(encode({ type: 'reconnected', roomData }), { binary: true });
                     } else {
                         ws.send(encode({ type: 'reconnection_failed', reason: "Client unknown to server" }), { binary: true });
-                    }
-                    break;
-
-                case 'request_state':
-                    const stateRoomId = this.#clientRooms.get(ws.clientId);
-                    const stateRoom = stateRoomId ? this.#rooms[stateRoomId] : null;
-                    if (stateRoom) {
-                        ws.send(encode({
-                            type: 'state_sync',
-                            state: stateRoom.crdtManager.getState,
-                            version: this.#roomVersions.get(stateRoomId)
-                        }), { binary: true });
                     }
                     break;
 
@@ -228,7 +216,7 @@ class PlaySocketServer {
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
 
-                    if (updateRoom && data.key && data.update && data.uuid) {
+                    if (updateRoom && data.key && data.update) {
                         updateRoom.crdtManager.importPropertyUpdate(data.update);
 
                         // Increment version for this room
@@ -242,8 +230,7 @@ class PlaySocketServer {
                                 client.send(encode({
                                     type: 'property_update',
                                     update: data.update,
-                                    version: currentVersion,
-                                    uuid: data.uuid
+                                    version: currentVersion
                                 }), { binary: true });
                             }
                         });

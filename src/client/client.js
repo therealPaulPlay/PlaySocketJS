@@ -25,7 +25,6 @@ export default class PlaySocket {
     #connectionCount = 0;
     #crdtManager;
     #roomVersion = 0; // Update version (used to compare local vs. remote state to detect package loss)
-    #sentUpdates = new Set(); // Contains update uuids
 
     // Event handling
     #callbacks = new Map(); // Event callbacks
@@ -36,7 +35,6 @@ export default class PlaySocket {
     #pendingRegistration;
     #pendingConnect;
     #pendingReconnect;
-    #pendingStateRequest;
 
     // Timeouts or intervals
     #reconnectTimeout;
@@ -241,24 +239,15 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'state_sync':
-                        if (this.#pendingStateRequest) {
-                            if (this.#debug) console.log(LOG_PREFIX + "State received following state request:", message.state);
-                            this.#roomVersion = message.version;
-                            this.#crdtManager.importState(message.state);
-                            this.#triggerEvent("storageUpdated", this.getStorage)
-                            this.#triggerEvent("status", "State synchronized.");
-                            this.#pendingStateRequest.resolve();
-                        }
-                        break;
-
                     case 'property_update':
                         this.#roomVersion++; // Increment room version
                         if (this.#debug) console.log(LOG_PREFIX + "Property update received:", message.update);
-                        this.#sentUpdates.delete(message.uuid); // If this is our sent update, delete it so that timeout check knows it was received
                         this.#crdtManager.importPropertyUpdate(message.update);
                         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
-                        if (this.#roomVersion != message.version) this.#requestStateSyncIfConnected();
+                        if (this.#roomVersion != message.version && this.#initialized && this.#socket?.readyState === WebSocket.OPEN) {
+                            this.#triggerEvent("error", "Detected skipped update – forcing reconnect.");
+                            this.#socket?.close();
+                        }
                         break;
 
                     case 'client_disconnected':
@@ -325,33 +314,6 @@ export default class PlaySocket {
             if (!this.#initialized) return;
             this.#triggerEvent("status", "Reconnection failed: " + error.message);
             this.#reconnectTimeout = setTimeout(() => this.#attemptReconnect(), 500);
-        }
-    }
-
-    /**
-     * If the local state is out of sync, request the room state
-     */
-    async #requestStateSyncIfConnected(notSent = false) {
-        if (this.#pendingStateRequest || !this.#initialized || this.#socket?.readyState !== WebSocket.OPEN) return; // Return if already requested, destroyed or connection not open
-
-        // Trigger corresponding events
-        if (!notSent) this.#triggerEvent("error", "Detected skipped update – requesting state.");
-        else this.#triggerEvent("error", "Sent update did not go through – requesting state.");
-
-        try {
-            await Promise.race([
-                new Promise(async (resolve, reject) => {
-                    this.#pendingStateRequest = { resolve, reject };
-                    this.#sendToServer({ type: 'request_state' });
-                }),
-                this.#createTimeout("State request")
-            ]).finally(() => {
-                this.#pendingStateRequest = null;
-            });
-        } catch (error) {
-            if (!this.#initialized) return;
-            this.#triggerEvent("error", "Failed to re-sync state: " + error.message);
-            this.destroy();
         }
     }
 
@@ -453,17 +415,11 @@ export default class PlaySocket {
     updateStorage(key, value) {
         if (this.#debug) console.log(LOG_PREFIX + "Property set update for key '" + key + "':", value);
         const propUpdate = this.#crdtManager.updateProperty(key, "set", value);
-        const updateUuid = crypto.randomUUID();
-        this.#sentUpdates.add(updateUuid);
         this.#sendToServer({
             type: 'property_update',
             key,
-            update: propUpdate,
-            uuid: updateUuid
+            update: propUpdate
         });
-        setTimeout(() => {
-            if (this.#sentUpdates.has(updateUuid)) this.#requestStateSyncIfConnected(true);
-        }, TIMEOUT_MS);
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
     }
 
@@ -477,17 +433,11 @@ export default class PlaySocket {
     updateStorageArray(key, operation, value, updateValue) {
         if (this.#debug) console.log(LOG_PREFIX + `Property array update for key '${key}', operation '${operation}', value '${value}' and updateValue '${updateValue}'.`);
         const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
-        const updateUuid = crypto.randomUUID();
-        this.#sentUpdates.add(updateUuid);
         this.#sendToServer({
             type: 'property_update',
             key,
-            update: propUpdate,
-            uuid: updateUuid
+            update: propUpdate
         });
-        setTimeout(() => {
-            if (this.#sentUpdates.has(updateUuid)) this.#requestStateSyncIfConnected(true);
-        }, TIMEOUT_MS);
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
@@ -516,7 +466,6 @@ export default class PlaySocket {
         this.#isReconnecting = false;
         this.#reconnectCount = 0;
         this.#roomVersion = 0;
-        this.#sentUpdates.clear();
 
         // Reject timeouts if currently active
         if (this.#pendingJoin) this.#pendingJoin.reject();
@@ -524,7 +473,6 @@ export default class PlaySocket {
         if (this.#pendingRegistration) this.#pendingRegistration.reject();
         if (this.#pendingConnect) this.#pendingConnect.reject();
         if (this.#pendingReconnect) this.#pendingReconnect.reject();
-        if (this.#pendingStateRequest) this.#pendingStateRequest.reject();
     }
 
     // Public getters
