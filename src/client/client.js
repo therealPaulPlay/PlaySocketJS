@@ -337,9 +337,9 @@ export default class PlaySocket {
     async #requestStateSync() {
         if (this.#pendingStateRequest) return; // Return if already requested
         try {
-            Promise.race([
-                new Promise(async (resolve) => {
-                    this.#pendingStateRequest = { resolve };
+            await Promise.race([
+                new Promise(async (resolve, reject) => {
+                    this.#pendingStateRequest = { resolve, reject };
                     this.#sendToServer({ type: 'request_state' });
                 }),
                 this.#createTimeout("State request")
@@ -371,7 +371,7 @@ export default class PlaySocket {
      */
     #sendToServer(data) {
         if (!this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
-            return console.error(ERROR_PREFIX + "Cannot send message - not connected.");
+            return console.warn(WARNING_PREFIX + "Cannot send message - not connected.");
         }
         try {
             this.#socket.send(encode(data));
