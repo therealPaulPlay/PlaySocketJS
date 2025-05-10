@@ -258,10 +258,7 @@ export default class PlaySocket {
                         this.#sentUpdates.delete(message.uuid); // If this is our sent update, delete it so that timeout check knows it was received
                         this.#crdtManager.importPropertyUpdate(message.update);
                         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
-                        if (this.#roomVersion != message.version) {
-                            this.#triggerEvent("error", "Detected missing update – requesting full state.");
-                            this.#requestStateSync();
-                        }
+                        if (this.#roomVersion != message.version) this.#requestStateSyncIfConnected();
                         break;
 
                     case 'client_disconnected':
@@ -334,8 +331,13 @@ export default class PlaySocket {
     /**
      * If the local state is out of sync, request the room state
      */
-    async #requestStateSync() {
-        if (this.#pendingStateRequest) return; // Return if already requested
+    async #requestStateSyncIfConnected(notSent = false) {
+        if (this.#pendingStateRequest || !this.#initialized || this.#socket?.readyState !== WebSocket.OPEN) return; // Return if already requested, destroyed or connection not open
+
+        // Trigger corresponding events
+        if (!notSent) this.#triggerEvent("error", "Detected skipped update – requesting state.");
+        else this.#triggerEvent("error", "Sent update did not go through – requesting state.");
+
         try {
             await Promise.race([
                 new Promise(async (resolve, reject) => {
@@ -370,7 +372,7 @@ export default class PlaySocket {
      * @private
      */
     #sendToServer(data) {
-        if (!this.#socket || this.#socket.readyState !== WebSocket.OPEN) {
+        if (!this.#socket || this.#socket?.readyState !== WebSocket.OPEN) {
             return console.warn(WARNING_PREFIX + "Cannot send message - not connected.");
         }
         try {
@@ -460,10 +462,7 @@ export default class PlaySocket {
             uuid: updateUuid
         });
         setTimeout(() => {
-            if (this.#initialized && this.#sentUpdates.has(updateUuid)) {
-                this.#triggerEvent("error", "Sent update did not go through – requesting state.");
-                this.#requestStateSync();
-            }
+            if (this.#sentUpdates.has(updateUuid)) this.#requestStateSyncIfConnected(true);
         }, TIMEOUT_MS);
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
     }
@@ -487,10 +486,7 @@ export default class PlaySocket {
             uuid: updateUuid
         });
         setTimeout(() => {
-            if (this.#initialized && this.#sentUpdates.has(updateUuid)) {
-                this.#triggerEvent("error", "Sent update did not go through – requesting state.");
-                this.#requestStateSync();
-            }
+            if (this.#sentUpdates.has(updateUuid)) this.#requestStateSyncIfConnected(true);
         }, TIMEOUT_MS);
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
