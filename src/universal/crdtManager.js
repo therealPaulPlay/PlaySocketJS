@@ -48,7 +48,7 @@ class CRDTManager {
             this.#vectorClock = new Map(vectorClock); // Rebuild the vector clock map
             if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Add own vector clock if it wasn't present in the imported state
 
-            // Map operation uuids to timestamp
+            // Map all operation uuids to current timestamp
             this.#keyOperations.forEach((value, key) => {
                 value?.forEach((operation) => {
                     this.#opUuidTimestamp.set(operation?.uuid, Date.now());

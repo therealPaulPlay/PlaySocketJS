@@ -212,11 +212,11 @@ class PlaySocketServer {
                     this.#triggerEvent("roomJoined", ws.clientId, roomId);
                     break;
 
-                case 'property_update':
+                case 'update_property':
                     const updateRoomId = this.#clientRooms.get(ws.clientId);
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
 
-                    if (updateRoom && data.key && data.update) {
+                    if (updateRoom && data.update) {
                         updateRoom.crdtManager.importPropertyUpdate(data.update);
 
                         // Increment version for this room
@@ -228,7 +228,7 @@ class PlaySocketServer {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(encode({
-                                    type: 'property_update',
+                                    type: 'property_updated',
                                     update: data.update,
                                     version: currentVersion
                                 }), { binary: true });

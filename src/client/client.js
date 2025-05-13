@@ -239,7 +239,7 @@ export default class PlaySocket {
                         }
                         break;
 
-                    case 'property_update':
+                    case 'property_updated':
                         this.#roomVersion++; // Increment room version
                         if (this.#debug) console.log(LOG_PREFIX + "Property update received:", message.update);
                         this.#crdtManager.importPropertyUpdate(message.update);
@@ -416,8 +416,7 @@ export default class PlaySocket {
         if (this.#debug) console.log(LOG_PREFIX + "Property set update for key '" + key + "':", value);
         const propUpdate = this.#crdtManager.updateProperty(key, "set", value);
         this.#sendToServer({
-            type: 'property_update',
-            key,
+            type: 'update_property',
             update: propUpdate
         });
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
@@ -434,8 +433,7 @@ export default class PlaySocket {
         if (this.#debug) console.log(LOG_PREFIX + `Property array update for key '${key}', operation '${operation}', value '${value}' and updateValue '${updateValue}'.`);
         const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
         this.#sendToServer({
-            type: 'property_update',
-            key,
+            type: 'update_property',
             update: propUpdate
         });
         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
