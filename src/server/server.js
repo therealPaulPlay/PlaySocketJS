@@ -58,6 +58,14 @@ class PlaySocketServer {
             ws.on('pong', () => { ws.isAlive = true; });
             ws.on('message', msg => this.#handleMessage(ws, msg));
             ws.on('close', () => this.#handleDisconnection(ws));
+            ws.on('error', (error) => {
+                console.error(`PlaySocket WebSocket connection error for client ${ws.clientId || 'unknown'}:`, error); // Catch conn errors
+            });
+        });
+
+        // Log & catch server-level errors
+        this.#wss.on('error', (error) => {
+            console.error('PlaySocket WebSocket server error:', error);
         });
 
         // Start heartbeat
