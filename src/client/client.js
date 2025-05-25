@@ -203,10 +203,7 @@ export default class PlaySocket {
                         break;
 
                     case 'reconnection_failed':
-                        if (this.#pendingReconnect) {
-                            this.#triggerEvent("status", `Reconnection failed: ${message.reason}`);
-                            this.#pendingReconnect.reject(new Error("Reconnection failed: " + message.reason));
-                        }
+                        if (this.#pendingReconnect) this.#pendingReconnect.reject(new Error("Server rejected reconnection: " + message.reason));
                         break;
 
                     case 'room_created':
