@@ -247,9 +247,17 @@ export default class PlaySocket {
                         }
                         break;
 
+                    case 'server_stopped':
+                        this.#triggerEvent("error", "Server restart.");
+                        this.destroy();
+                        break;
+
+                    case 'host_migrated':
+                        this.#setHost(message.newHost);
+                        break;
+
                     case 'client_disconnected':
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-                        this.#setHost(message.host);
                         this.#triggerEvent("clientDisconnected", message.client);
                         this.#triggerEvent("status", `Client ${message.client} disconnected.`);
                         break;

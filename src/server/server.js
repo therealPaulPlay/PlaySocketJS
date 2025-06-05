@@ -134,7 +134,7 @@ class PlaySocketServer {
                             roomData = {
                                 state: formerRoom.crdtManager.getState,
                                 participantCount: formerRoom.participants.length,
-                                host: formerRoom.participants[0],
+                                host: formerRoom.host,
                                 version: this.#roomVersions.get(formerRoomId)
                             }
                         }
@@ -160,6 +160,7 @@ class PlaySocketServer {
                     this.#roomVersions.set(newRoomId, 0); // Start with version 0
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
+                        host: ws.clientId,
                         maxSize: data.size || null,
                         crdtManager: new CRDTManager(crypto.randomUUID(), this.#debug)
                     };
@@ -201,7 +202,7 @@ class PlaySocketServer {
                         type: 'join_accepted',
                         state: room.crdtManager.getState,
                         participantCount: room.participants.length,
-                        host: room.participants[0],
+                        host: room.host,
                         version: this.#roomVersions.get(roomId)
                     }), { binary: true });
 
@@ -256,6 +257,29 @@ class PlaySocketServer {
     }
 
     /**
+     * If the client that disconnected (and is now in the reconnection-phase) was the room host,
+     * pick a new room host immediately to avoid host-less phase (in case important logic is attached to the host)
+     * @param {string} roomId
+     * @param {string} clientId
+     */
+    #changeHostIfDisconnected(roomId, clientId) {
+        const room = this.#rooms[roomId];
+        if (room && room.host === clientId && room.participants.length > 1) {
+            const participantsWithoutClient = room.participants.filter((e) => e !== clientId);
+            room.host = participantsWithoutClient[0]; // Set new host
+
+            // Inform all participants about the new host
+            participantsWithoutClient.forEach(p => {
+                const client = this.#clients.get(p);
+                if (client) client.send(encode({
+                    type: 'host_migrated',
+                    newHost: room.host,
+                }), { binary: true });
+            });
+        }
+    }
+
+    /**
      * Generate a random token to prevent malicious reconnect attempts
      * @returns {string} - Token
      */
@@ -301,6 +325,10 @@ class PlaySocketServer {
         if (!ws.clientId) return;
         this.#clients.delete(ws.clientId); // Immediately remove from active clients (otherwise, server would try to message this client)
 
+        // If client was in a room, check if they were the host & migrate
+        const roomId = this.#clientRooms.get(ws.clientId);
+        if (roomId != null) this.#changeHostIfDisconnected(roomId, ws.clientId);
+
         if (ws.willfulDisconnect) {
             this.#disconnectClient(ws); // Immediate disconnection
         } else {
@@ -340,7 +368,6 @@ class PlaySocketServer {
                     if (client) client.send(encode({
                         type: 'client_disconnected',
                         client: ws.clientId,
-                        host: room.participants[0],
                         participantCount: room.participants.length
                     }), { binary: true });
                 });
@@ -379,7 +406,10 @@ class PlaySocketServer {
     stop() {
         clearInterval(this.#heartbeatInterval);
         if (this.#wss) {
-            this.#wss.clients.forEach(client => client.close());
+            this.#wss.clients.forEach(client => {
+                client.send(encode({ type: 'server_stopped' }), { binary: true });
+                client.close();
+            });
             this.#wss.close();
         }
         if (this.#server && this.#ownsServer) {
