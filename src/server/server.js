@@ -54,6 +54,7 @@ class PlaySocketServer {
 
         // Set up ws event handlers
         this.#wss.on('connection', ws => {
+            ws.connectionId = crypto.randomUUID();
             ws.isAlive = true;
             ws.on('pong', () => { ws.isAlive = true; });
             ws.on('message', msg => this.#handleMessage(ws, msg));
@@ -86,9 +87,14 @@ class PlaySocketServer {
         try {
             const data = decode(message);
 
-            // Apply rate limiting after client is registered
-            if (ws.clientId && !this.#checkRateLimit(ws.clientId, data.type)) {
-                return console.error(`Client ${ws.clientId} rate limit exceeded.`);
+            // Apply rate limiting to all connections (including unregistered)
+            if (!this.#checkRateLimit(ws.connectionId, data.type)) {
+                ws.rateLimitViolations = (ws.rateLimitViolations || 0) + 1;
+                if (ws.rateLimitViolations > 5) {
+                    ws.terminate();
+                    return console.error(`Connection ${ws.connectionId} terminated due to repeated rate limit violations.`);
+                }
+                return console.error(`Connection ${ws.connectionId} rate limit exceeded.`);
             }
 
             switch (data.type) {
@@ -293,24 +299,24 @@ class PlaySocketServer {
      * Check rate limit using token bucket algorithm
      * @private
      */
-    #checkRateLimit(clientId, operationType) {
-        const MAX_POINTS = 100;
+    #checkRateLimit(connectionId, operationType) {
+        const MAX_POINTS = 20;
         const now = Date.now();
 
-        if (!this.#rateLimits.has(clientId)) {
-            this.#rateLimits.set(clientId, { points: MAX_POINTS, lastReset: now });
+        if (!this.#rateLimits.has(connectionId)) {
+            this.#rateLimits.set(connectionId, { points: MAX_POINTS, lastReset: now });
             return true;
         }
 
-        const limit = this.#rateLimits.get(clientId);
+        const limit = this.#rateLimits.get(connectionId);
 
-        // Reset points if interval has passed (5s)
-        if (now - limit.lastReset > 5000) {
+        // Reset points if interval has passed (1s)
+        if (now - limit.lastReset > 1000) {
             limit.points = MAX_POINTS;
             limit.lastReset = now;
         }
 
-        const pointCost = ['create_room', 'join_room'].includes(operationType) ? 20 : 1;
+        const pointCost = ['create_room', 'join_room'].includes(operationType) ? 5 : 1;
         if (limit.points < pointCost) return false;
 
         limit.points -= pointCost;
@@ -322,22 +328,25 @@ class PlaySocketServer {
      * @private
      */
     #handleDisconnection(ws) {
-        if (!ws.clientId) return;
-        this.#clients.delete(ws.clientId); // Immediately remove from active clients (otherwise, server would try to message this client)
+        this.#rateLimits.delete(ws.connectionId);
 
-        // If client was in a room, check if they were the host & migrate
-        const roomId = this.#clientRooms.get(ws.clientId);
-        if (roomId != null) this.#changeHostIfDisconnected(roomId, ws.clientId);
+        if (ws.clientId) {
+            this.#clients.delete(ws.clientId); // Immediately remove from active clients (otherwise, server would try to message this client)
 
-        if (ws.willfulDisconnect) {
-            this.#disconnectClient(ws); // Immediate disconnection
-        } else {
-            // Pending complete disconnection with 2s grace period to allow for reconnections
-            this.#pendingDisconnects.set(ws.clientId, {
-                timeout: setTimeout(() => {
-                    this.#disconnectClient(ws);
-                }, 2000)
-            });
+            // If client was in a room, check if they were the host & migrate
+            const roomId = this.#clientRooms.get(ws.clientId);
+            if (roomId != null) this.#changeHostIfDisconnected(roomId, ws.clientId);
+
+            if (ws.willfulDisconnect) {
+                this.#disconnectClient(ws); // Immediate disconnection
+            } else {
+                // Pending complete disconnection with 2s grace period to allow for reconnections
+                this.#pendingDisconnects.set(ws.clientId, {
+                    timeout: setTimeout(() => {
+                        this.#disconnectClient(ws);
+                    }, 2000)
+                });
+            }
         }
     }
 
@@ -348,7 +357,6 @@ class PlaySocketServer {
      */
     #disconnectClient(ws) {
         this.#pendingDisconnects.delete(ws.clientId);
-        this.#rateLimits.delete(ws.clientId);
         this.#clientTokens.delete(ws.clientId);
         const roomId = this.#clientRooms.get(ws.clientId);
         const room = this.#rooms[roomId];
