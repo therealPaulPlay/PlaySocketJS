@@ -293,7 +293,8 @@ export default class PlaySocket {
      * @private
      */
     async #attemptReconnect() {
-        if (this.#reconnectCount++ >= 3) {
+        this.#reconnectCount++;
+        if (this.#reconnectCount > 9) {
             this.#triggerEvent("error", "Disconnected from server.");
             return this.destroy();
         }

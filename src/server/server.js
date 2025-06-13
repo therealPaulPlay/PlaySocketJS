@@ -340,11 +340,11 @@ class PlaySocketServer {
             if (ws.willfulDisconnect) {
                 this.#disconnectClient(ws); // Immediate disconnection
             } else {
-                // Pending complete disconnection with 2s grace period to allow for reconnections
+                // Pending complete disconnection with 5s grace period to allow for reconnections
                 this.#pendingDisconnects.set(ws.clientId, {
                     timeout: setTimeout(() => {
                         this.#disconnectClient(ws);
-                    }, 2000)
+                    }, 5000)
                 });
             }
         }
