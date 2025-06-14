@@ -84,13 +84,15 @@ class PlaySocketServer {
      * @private
      */
     #handleMessage(ws, message) {
+        if (ws.isTerminating) return;
         try {
             const data = decode(message);
 
             // Apply rate limiting to all connections (including unregistered)
             if (!this.#checkRateLimit(ws.connectionId, data.type)) {
                 ws.rateLimitViolations = (ws.rateLimitViolations || 0) + 1;
-                if (ws.rateLimitViolations > 5) {
+                if (ws.rateLimitViolations > 5 && !ws.isTerminating) {
+                    ws.isTerminating = true; // Prevent multiple terminate calls (it is async)
                     ws.terminate();
                     return console.error(`Connection ${ws.connectionId} terminated due to repeated rate limit violations.`);
                 }
