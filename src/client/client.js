@@ -455,6 +455,9 @@ export default class PlaySocket {
             // Signal to the server that it can immediately remove this user
             if (this.#socket.readyState === WebSocket.OPEN) this.#sendToServer({ type: 'disconnect' });
             this.#socket.close();
+            this.#socket.onmessage = null;
+            this.#socket.onerror = null;
+            this.#socket.onclose = null;
             this.#socket = null;
 
             // Trigger events
