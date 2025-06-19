@@ -21,7 +21,7 @@ export default class PlaySocket {
 
     // Room properties
     #roomHost;
-    #roomId; // ID of the host (client only)
+    #inRoom; // If the client is currently in  a room or not
     #connectionCount = 0;
     #crdtManager;
     #roomVersion = 0; // Update version (used to compare local vs. remote state to detect package loss)
@@ -162,6 +162,7 @@ export default class PlaySocket {
                         // Connected to room
                         if (this.#pendingJoin) {
                             if (this.#debug) console.log(LOG_PREFIX + "State received for join:", message.state);
+                            this.#inRoom = true;
                             this.#crdtManager.importState(message.state);
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
@@ -192,7 +193,7 @@ export default class PlaySocket {
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
                                 this.#triggerEvent("storageUpdated", this.getStorage);
-                            } else if (this.#roomId) {
+                            } else if (this.#inRoom) {
                                 // If no room data received, but client thinks they were in a room...
                                 this.#triggerEvent("error", "Reconnected, but room no longer exists.");
                                 return this.destroy();
@@ -208,8 +209,9 @@ export default class PlaySocket {
 
                     case 'room_created':
                         if (this.#pendingCreate) {
+                            this.#inRoom = true;
                             this.#triggerEvent("status", `Room created${this.#pendingCreate.maxSize ? ` with max size ${this.#pendingCreate.maxSize}.` : '.'}`);
-                            this.#pendingCreate.resolve(this.#roomId);
+                            this.#pendingCreate.resolve(this.#pendingCreate.id);
                         }
                         break;
 
@@ -368,9 +370,8 @@ export default class PlaySocket {
                 Object.entries(initialStorage)?.forEach(([key, value]) => {
                     this.#crdtManager.updateProperty(key, "set", value);
                 });
-                this.#roomId = this.#id; // Create room with your own ID as the room ID to mimic p2p
                 this.#roomHost = this.#id;
-                this.#pendingCreate = { maxSize, resolve, reject };
+                this.#pendingCreate = { maxSize, id: this.#id, resolve, reject };
                 this.#sendToServer({
                     type: 'create_room',
                     state: this.#crdtManager.getState,
@@ -397,7 +398,6 @@ export default class PlaySocket {
 
         return Promise.race([
             new Promise((resolve, reject) => {
-                this.#roomId = roomId;
                 this.#pendingJoin = { resolve, reject };
 
                 // Send connection request
@@ -468,7 +468,7 @@ export default class PlaySocket {
         // Reset state
         clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
-        this.#roomId = null;
+        this.#inRoom = false;
         this.#connectionCount = 0;
         this.#isReconnecting = false;
         this.#reconnectCount = 0;
