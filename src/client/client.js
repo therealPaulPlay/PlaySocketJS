@@ -103,15 +103,14 @@ export default class PlaySocket {
     async init() {
         if (this.#initialized) return Promise.reject(new Error("Already initialized"));
         if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided"));
-        if (!this.#id) return Promise.reject(new Error("No id provided"));
         this.#triggerEvent("status", "Initializing...");
 
         // Connect to WS server
         await this.#connect();
 
         // Register with server
-        await Promise.race([
-            new Promise(async (resolve, reject) => {
+        const id = await Promise.race([
+            new Promise((resolve, reject) => {
                 this.#pendingRegistration = { resolve, reject }; // Resolve or reject depending on answer to registration msg
 
                 // Register with server
@@ -125,6 +124,10 @@ export default class PlaySocket {
         ]).finally(() => {
             this.#pendingRegistration = null;
         });
+
+        // If the server sent out an id, store and return that
+        if (id) this.#id = id;
+        return this.#id;
     }
 
     /**
@@ -233,7 +236,7 @@ export default class PlaySocket {
                         if (this.#pendingRegistration) {
                             this.#sessionToken = message.sessionToken;
                             this.#initialized = true;
-                            this.#pendingRegistration.resolve();
+                            this.#pendingRegistration.resolve(message.id);
                             this.#triggerEvent("status", "Connected to server.");
                         }
                         break;

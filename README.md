@@ -63,10 +63,11 @@ socket.destroy();
 ### Constructor
 
 ```javascript
-new PlaySocket(id: string, options: PlaySocketOptions)
+new PlaySocket(id?: string, options: PlaySocketOptions)
 ```
 
 Creates a new PlaySocket instance with a specified ID and configuration options.
+Note: With PlaySocket, the id can be set to `null` to let the server pick a unique one.
 
 #### Configuration options
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
@@ -77,7 +78,7 @@ Creates a new PlaySocket instance with a specified ID and configuration options.
 
 #### Core
 
-- `init()`: Initialize the WebSocket connection – Returns Promise (async)
+- `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's id
 - `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room id (matches the creator's id)
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection

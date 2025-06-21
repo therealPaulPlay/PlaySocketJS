@@ -101,17 +101,35 @@ class PlaySocketServer {
 
             switch (data.type) {
                 case 'register':
-                    // Register client ID
-                    if (!data.id) return;
-                    if (this.#clients.get(data.id)) {
+                    // Register client ID if provided & check for a duplicate
+                    if (data.id && this.#clients.get(data.id)) {
                         ws.send(encode({ type: 'id_taken' }), { binary: true });
                         return;
                     }
+
+                    // Generate client ID if none provided
+                    if (!data.id) {
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                        const maxAttempts = 50;
+                        for (let i = 0; i < maxAttempts; i++) {
+                            const id = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                            if (!this.#clients.get(id)) {
+                                data.id = id;
+                                break;
+                            }
+                        }
+                        if (!data.id) {
+                            ws.send(encode({ type: 'id_taken' }), { binary: true });
+                            throw new Error('Failed to generate unique ID!');
+                        }
+                    }
+
+
                     ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
                     const sessionToken = this.#generateSessionToken();
                     this.#clientTokens.set(data.id, sessionToken); // Token is used when reconnecting to prevent impersonation attacks
-                    ws.send(encode({ type: 'registered', sessionToken }), { binary: true });
+                    ws.send(encode({ type: 'registered', id: data.id, sessionToken }), { binary: true });
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
 
@@ -260,7 +278,7 @@ class PlaySocketServer {
                     break;
             }
         } catch (error) {
-            console.error('Error processing message:', error);
+            console.error('Error in message handler:', error);
         }
     }
 
