@@ -21,12 +21,10 @@ class CRDTManager {
 
     /**
      * Create a new instance
-     * @param {string} replicaId - Choose a uuid (falls back to random uuid)
      */
-    constructor(replicaId, debug) {
-        if (!replicaId) return console.error("No replicaId provided!");
+    constructor(debug) {
         if (debug) this.#debug = true;
-        this.#replicaId = replicaId;
+        this.#replicaId = crypto.randomUUID();
         this.#vectorClock.set(this.#replicaId, 0);
     }
 

@@ -188,7 +188,7 @@ class PlaySocketServer {
                         participants: [ws.clientId],
                         host: ws.clientId,
                         maxSize: data.size || null,
-                        crdtManager: new CRDTManager(crypto.randomUUID(), this.#debug)
+                        crdtManager: new CRDTManager(this.#debug)
                     };
 
                     // Load state if provided

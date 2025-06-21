@@ -56,7 +56,7 @@ export default class PlaySocket {
         if (options.endpoint) this.#endpoint = options.endpoint;
         if (options.customData) this.#customData = { ...options.customData };
         if (options.debug) this.#debug = true; // Enabling extra logging
-        this.#crdtManager = new CRDTManager(this.#id, this.#debug);
+        this.#crdtManager = new CRDTManager(this.#debug);
     }
 
     /**
