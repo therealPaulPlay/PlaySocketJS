@@ -336,7 +336,7 @@ class PlaySocketServer {
             limit.lastReset = now;
         }
 
-        const pointCost = ['create_room', 'join_room'].includes(operationType) ? 5 : 1;
+        const pointCost = operationType == "create_room" ? 5 : 1;
         if (limit.points < pointCost) return false;
 
         limit.points -= pointCost;
