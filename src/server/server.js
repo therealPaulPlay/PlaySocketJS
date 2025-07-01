@@ -423,8 +423,9 @@ class PlaySocketServer {
      * @param {string} [reason] - Optional reason
      */
     kick(clientId, reason) {
-        const client = this.#clients.get(clientId)
+        const client = this.#clients.get(clientId);
         if (client) {
+            client.willfulDisconnect = true;
             client.send(encode({ type: 'kicked', reason }), { binary: true });
             client.close();
         }
