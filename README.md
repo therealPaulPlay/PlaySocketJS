@@ -199,6 +199,7 @@ Creates a new PlaySocket Server instance with configuration options.
 ### Methods
 
 - `stop`: Closes all active client connections, the websocket server and the underlying http server if it's standalone
+- `kick(clientId: string, reason?: string)`: Kick a client by their clientID – this will close their connection and set an error message
 - `onEvent(event: string, callback: Function)`: Register a server-side event callback
 
 ##### Event types

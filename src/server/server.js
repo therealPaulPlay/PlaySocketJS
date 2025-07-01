@@ -109,7 +109,7 @@ class PlaySocketServer {
 
                     // Generate client ID if none provided
                     if (!data.id) {
-                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
                         const maxAttempts = 50;
                         for (let i = 0; i < maxAttempts; i++) {
                             const id = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -418,6 +418,19 @@ class PlaySocketServer {
     }
 
     /**
+     * Kick a player from the server
+     * @param {string} clientId - Client ID
+     * @param {string} [reason] - Optional reason
+     */
+    kick(clientId, reason) {
+        const client = this.#clients.get(clientId)
+        if (client) {
+            client.send(encode({ type: 'kicked', reason }), { binary: true });
+            client.close();
+        }
+    }
+
+    /**
      * Trigger an event to registered callbacks
      * @private
      */
@@ -434,7 +447,7 @@ class PlaySocketServer {
     stop() {
         clearInterval(this.#heartbeatInterval);
         if (this.#wss) {
-            this.#wss.clients.forEach(client => {
+            this.#clients.forEach(client => {
                 client.send(encode({ type: 'server_stopped' }), { binary: true });
                 client.close();
             });

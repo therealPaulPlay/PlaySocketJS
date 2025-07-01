@@ -257,6 +257,11 @@ export default class PlaySocket {
                         this.destroy();
                         break;
 
+                    case 'kicked':
+                        this.#triggerEvent("error", `Kicked out of room: ${message.reason || "No reason provided."}`);
+                        this.destroy();
+                        break;
+
                     case 'host_migrated':
                         this.#setHost(message.newHost);
                         break;
