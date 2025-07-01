@@ -67,7 +67,8 @@ class CRDTManager {
      */
     importPropertyUpdate(data) {
         try {
-            const { key, operation, vectorClock } = data;
+            const { key, operation: rawOperation, vectorClock } = data;
+            const operation = this.#sanitizeValue(rawOperation);
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
 
             // Get COPY of current ops (or empty array if none yet)
@@ -110,6 +111,10 @@ class CRDTManager {
      */
     updateProperty(key, operation, value, updateValue) {
         try {
+            // Sanitize inputs
+            value = this.#sanitizeValue(value);
+            updateValue = this.#sanitizeValue(updateValue);
+
             // Debug log
             if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, operation ${operation}, value ${value} and updateValue ${updateValue}.`);
 
@@ -236,7 +241,11 @@ class CRDTManager {
         }
     }
 
-    // Sort by vector clock (causal order)
+    /**
+     * Sort by vector clock (causal order)
+     * @param {Array} operations
+     * @returns {Array} - Sorted operations
+     */
     #sortByVectorClock(operations) {
         return [...operations].sort((a, b) => {
             const clockA = new Map(a.vectorClock || []);
@@ -268,7 +277,14 @@ class CRDTManager {
         });
     }
 
-    // Handle an operation
+    /**
+     * Handle an operation
+     * @param {*} curValue 
+     * @param {string} operation 
+     * @param {*} value 
+     * @param {*} [updateValue]
+     * @returns {*} - Value after the operation
+     */
     #handleOperation(curValue, operation, value, updateValue) {
         try {
             // Clone to avoid reference issues
@@ -313,6 +329,18 @@ class CRDTManager {
             console.error(CONSOLE_PREFIX + `Failed to process operation with curValue ${curValue}:`, error);
             return curValue;
         }
+    }
+
+    /**
+     * Remove HTML to prevent XSS
+     * @param {Object} obj 
+     * @returns {Object} - Sanitized object
+     */
+    #sanitizeValue(obj) {
+        if (typeof obj === 'string') return (obj.includes('<') || obj.includes('>')) ? obj.replace(/[<>]/g, '') : obj;
+        if (Array.isArray(obj)) return obj.map(item => this.#sanitizeValue(item));
+        if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+        return obj;
     }
 
     // Get property store
