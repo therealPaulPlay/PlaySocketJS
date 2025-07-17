@@ -206,8 +206,10 @@ Creates a new PlaySocket Server instance with configuration options.
 
 - `clientRegistered`: Client registered with the server (returns the client's id `string`, customData `object`)
 - `clientDisconnected`: Client disconnected from the server (returns the client's id `string`)
+- `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's id `string`, room id `string`)
 - `roomCreated`: Client created a room (returns room id `string`)
-- `roomJoined`: Client joined a room (returns the client's id `string`, room id `string`)
+- `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room id `string`)
+- `storageUpdateRequested`: Room storage property update requested by a client (returns `object` containing the client's id `string`, room id `string` and the update `object`) – if you return `false` in the callback, the update will be blocked
 
 ### Properties (Read-only)
 

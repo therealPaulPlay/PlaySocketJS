@@ -83,7 +83,7 @@ class PlaySocketServer {
      * Handle WebSocket message
      * @private
      */
-    #handleMessage(ws, message) {
+    async #handleMessage(ws, message) {
         if (ws.isTerminating) return;
         try {
             const data = decode(message);
@@ -242,7 +242,7 @@ class PlaySocketServer {
                             }), { binary: true });
                         }
                     });
-                    this.#triggerEvent("roomJoined", ws.clientId, roomId);
+                    this.#triggerEvent("clientJoinedRoom", ws.clientId, roomId);
                     break;
 
                 case 'update_property':
@@ -250,13 +250,23 @@ class PlaySocketServer {
                     const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
 
                     if (updateRoom && data.update) {
-                        updateRoom.crdtManager.importPropertyUpdate(data.update);
+                        // Check if update is allowed via event callback (provide clone to ensure update integrity)
+                        const allowed = await this.#triggerEvent("storageUpdateRequested", { roomId: updateRoomId, clientId: ws.clientId, update: structuredClone(data.update) });
+                        if (allowed === false) {
+                            ws.send(encode({
+                                type: 'property_update_rejected',
+                                state: updateRoom.crdtManager.getState
+                            }), { binary: true });
+                            return;
+                        }
+
+                        updateRoom.crdtManager.importPropertyUpdate(data.update); // Import update into server state
 
                         // Increment version for this room
                         const currentVersion = this.#roomVersions.get(updateRoomId) + 1;
                         this.#roomVersions.set(updateRoomId, currentVersion);
-
                         if (this.#debug) console.log("Property update received and imported:", data.update);
+
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
@@ -386,6 +396,7 @@ class PlaySocketServer {
             if (room.participants?.length === 0) {
                 delete this.#rooms[roomId]; // Delete room if now empty
                 this.#roomVersions.delete(roomId); // Delete room version
+                this.#triggerEvent("roomDestroyed", roomId);
                 if (this.#debug) console.log("Deleted room with id " + roomId + ".");
             } else {
                 // Notify remaining participants
@@ -409,7 +420,7 @@ class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientDisconnected", "roomCreated", "roomJoined"];
+        const validEvents = ["clientRegistered", "clientDisconnected", "clientJoinedRoom", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
@@ -433,11 +444,19 @@ class PlaySocketServer {
      * Trigger an event to registered callbacks
      * @private
      */
-    #triggerEvent(event, ...args) {
+    async #triggerEvent(event, ...args) {
         const callbacks = this.#callbacks.get(event);
-        callbacks?.forEach(callback => {
-            try { callback(...args) } catch (error) { console.error(`PlaySocket ${event} callback error:`, error) }
-        });
+        if (!callbacks) return;
+
+        for (const callback of callbacks) {
+            try {
+                const result = await callback(...args);
+                if (result === false) return false; // False = block (in supported events)
+            } catch (error) {
+                console.error(`PlaySocket ${event} callback error:`, error);
+            }
+        }
+        return true;
     }
 
     /**

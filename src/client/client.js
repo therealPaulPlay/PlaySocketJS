@@ -252,6 +252,12 @@ export default class PlaySocket {
                         }
                         break;
 
+                    case 'property_update_rejected':
+                        this.#triggerEvent("error", "Property update rejected. Re-syncing state.");
+                        this.#crdtManager.importState(message.state);
+                        this.#triggerEvent("storageUpdated", this.getStorage);
+                        break;
+
                     case 'server_stopped':
                         this.#triggerEvent("error", "Server restart.");
                         this.destroy();
