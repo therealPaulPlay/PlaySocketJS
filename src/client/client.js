@@ -214,6 +214,8 @@ export default class PlaySocket {
                         if (this.#pendingCreate) {
                             this.#inRoom = true;
                             this.#triggerEvent("status", `Room created${this.#pendingCreate.maxSize ? ` with max size ${this.#pendingCreate.maxSize}.` : '.'}`);
+                            this.#crdtManager.importState(message.state);
+                            this.#triggerEvent("storageUpdated", this.getStorage);
                             this.#pendingCreate.resolve(this.#pendingCreate.id);
                         }
                         break;
@@ -381,17 +383,13 @@ export default class PlaySocket {
 
         return Promise.race([
             new Promise((resolve, reject) => {
-                Object.entries(initialStorage)?.forEach(([key, value]) => {
-                    this.#crdtManager.updateProperty(key, "set", value);
-                });
                 this.#roomHost = this.#id;
                 this.#pendingCreate = { maxSize, id: this.#id, resolve, reject };
                 this.#sendToServer({
                     type: 'create_room',
-                    state: this.#crdtManager.getState,
+                    initialStorage,
                     size: maxSize
                 });
-                this.#triggerEvent("storageUpdated", this.getStorage);
             }),
             this.#createTimeout("Room creation")
         ]).finally(() => {

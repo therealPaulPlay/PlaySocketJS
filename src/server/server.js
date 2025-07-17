@@ -172,6 +172,7 @@ class PlaySocketServer {
                 case 'create_room':
                     if (!ws.clientId) return;
                     const newRoomId = ws.clientId;
+
                     if (this.#clientRooms.get(ws.clientId) || this.#rooms[newRoomId]) {
                         ws.send(encode({
                             type: 'room_creation_failed',
@@ -180,24 +181,32 @@ class PlaySocketServer {
                         return;
                     }
 
+                    const roomCrdtManager = new CRDTManager(this.#debug); // Create the room's crdt manager
+
+                    // Event callback with potential initial storage modifications
+                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { roomId: newRoomId, clientId: ws.clientId, initialStorage: structuredClone(data.initialStorage || {}) });
+                    if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
+
+                    // Load initial storage if provided
+                    if (data.initialStorage) {
+                        Object.entries(data.initialStorage)?.forEach(([key, value]) => {
+                            roomCrdtManager.updateProperty(key, "set", value);
+                        });
+                    }
+
                     // Create room
                     this.#roomVersions.set(newRoomId, 0); // Start with version 0
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         host: ws.clientId,
                         maxSize: data.size || null,
-                        crdtManager: new CRDTManager(this.#debug)
+                        crdtManager: roomCrdtManager
                     };
-
-                    // Load state if provided
-                    if (data.state) {
-                        this.#rooms[newRoomId].crdtManager.importState(data.state);
-                        if (this.#debug) console.log("Room created with initial state:", data.state);
-                    }
-
                     this.#clientRooms.set(ws.clientId, newRoomId); // Add client to their room
-                    ws.send(encode({ type: 'room_created' }), { binary: true });
-                    this.#triggerEvent("roomCreated", ws.clientId); // Client id = room id
+
+                    ws.send(encode({ type: 'room_created', state: roomCrdtManager.getState }), { binary: true });
+                    this.#triggerEvent("roomCreated", newRoomId);
+                    if (this.#debug) console.log("Room created with initial storage:", data.initialStorage);
                     break;
 
                 case 'join_room':
@@ -420,7 +429,7 @@ class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientDisconnected", "clientJoinedRoom", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
+        const validEvents = ["clientRegistered", "clientDisconnected", "clientJoinedRoom", "roomCreationRequested", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
@@ -452,6 +461,7 @@ class PlaySocketServer {
             try {
                 const result = await callback(...args);
                 if (result === false) return false; // False = block (in supported events)
+                if (typeof result === 'object') return result; // If response object is provided -> pass on
             } catch (error) {
                 console.error(`PlaySocket ${event} callback error:`, error);
             }
