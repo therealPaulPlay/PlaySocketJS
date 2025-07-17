@@ -187,6 +187,12 @@ class PlaySocketServer {
                     const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { roomId: newRoomId, clientId: ws.clientId, initialStorage: structuredClone(data.initialStorage || {}) });
                     if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
 
+                    // Check if client/creator is still connected
+                    if (!this.#clients.has(ws.clientId)) {
+                        if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);
+                        return; // Abort room creation if client is no longer connected
+                    }
+
                     // Load initial storage if provided
                     if (data.initialStorage) {
                         Object.entries(data.initialStorage)?.forEach(([key, value]) => {
