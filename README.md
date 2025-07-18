@@ -77,7 +77,7 @@ socket.updateStorage('latestPlayer', 'set', 'Player4'); // Regular synced storag
 ### Constructor
 
 Creates a new PlaySocket instance with a specified ID and configuration options.
-The id can be set to `null` to let the server pick a unique one.
+The ID can be set to `null` to let the server pick a unique one.
 
 ```javascript
 new PlaySocket(id?: string, options: PlaySocketOptions)
@@ -90,8 +90,8 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 
 ### Methods
 
-- `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's id
-- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room id (matches the creator's id)
+- `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's ID
+- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID (matches the creator's ID)
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
 - `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage. Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
@@ -103,9 +103,9 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 - `error`: Error events (returns error `string`)
 - `instanceDestroyed`: Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects
 - `storageUpdated`: Storage state changes (returns storage `object`)
-- `hostMigrated`: Host changes (returns the new host's id `string`)
-- `clientConnected`: New client connected to the room (returns client-id `string`)
-- `clientDisconnected`: Client disconnected from the room (returns client-id `string`, room id (if available) `string`)
+- `hostMigrated`: Host changes (returns the new host's ID `string`)
+- `clientConnected`: New client connected to the room (returns client's ID `string`)
+- `clientDisconnected`: Client disconnected from the room (returns client's ID `string`, room ID (if available) `string`)
 
 ### Properties (Read-only)
 
@@ -209,13 +209,13 @@ Creates a new PlaySocket Server instance with configuration options.
 
 #### Event types
 
-- `clientRegistered`: Client registered with the server (returns the client's id `string`, customData `object`)
-- `clientDisconnected`: Client disconnected from the server (returns the client's id `string`)
-- `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's id `string`, room id `string`)
-- `roomCreated`: Client created a room (returns room id `string`)
-- `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room id `string`)
-- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's id `string`, room id `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead
-- `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's id `string`, room id `string` and the update `object`) – if you return `false` in the callback, the update will be blocked
+- `clientRegistered`: Client registered with the server (returns the client's ID `string`, customData `object`)
+- `clientDisconnected`: Client disconnected from the server (returns the client's ID `string`)
+- `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's ID `string`, room ID `string`)
+- `roomCreated`: Client created a room (returns room ID `string`)
+- `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room ID `string`)
+- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string`, room ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead
+- `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's ID `string`, room ID `string` and the update `object`) – if you return `false` in the callback, the update will be blocked
 
 ### Properties (Read-only)
 
