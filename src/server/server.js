@@ -299,7 +299,7 @@ class PlaySocketServer {
                     const requestorRoomId = this.#clientRooms.get(ws.clientId) || null;
                     this.#triggerEvent("requestReceived", { roomId: requestorRoomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
                     break;
-                    
+
                 case 'disconnect':
                     // Client signals to server that it will will willfully disconnect soon
                     ws.willfulDisconnect = true;
@@ -431,7 +431,7 @@ class PlaySocketServer {
             }
         }
 
-        this.#triggerEvent("clientDisconnected", ws.clientId);
+        this.#triggerEvent("clientDisconnected", ws.clientId, roomId);
     }
 
     /**

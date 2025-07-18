@@ -105,7 +105,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 - `storageUpdated`: Storage state changes (returns storage `object`)
 - `hostMigrated`: Host changes (returns the new host's id `string`)
 - `clientConnected`: New client connected to the room (returns client-id `string`)
-- `clientDisconnected`: Client disconnected from the room (returns client-id `string`)
+- `clientDisconnected`: Client disconnected from the room (returns client-id `string`, room id (if available) `string`)
 
 ### Properties (Read-only)
 
