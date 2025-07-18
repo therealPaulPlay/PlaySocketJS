@@ -184,7 +184,7 @@ class PlaySocketServer {
                     const roomCrdtManager = new CRDTManager(this.#debug); // Create the room's crdt manager
 
                     // Event callback with potential initial storage modifications
-                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { roomId: newRoomId, clientId: ws.clientId, initialStorage: structuredClone(data.initialStorage || {}) });
+                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { roomId: newRoomId, clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
                     if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
 
                     // Check if client/creator is still connected
@@ -208,7 +208,7 @@ class PlaySocketServer {
                         maxSize: data.size || null,
                         crdtManager: roomCrdtManager
                     };
-                    this.#clientRooms.set(ws.clientId, newRoomId); // Add client to their room
+                    this.#clientRooms.set(ws.clientId, newRoomId); // Add client to the room
 
                     ws.send(encode({ type: 'room_created', state: roomCrdtManager.getState }), { binary: true });
                     this.#triggerEvent("roomCreated", newRoomId);
