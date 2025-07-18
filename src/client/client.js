@@ -343,7 +343,7 @@ export default class PlaySocket {
 
     /**
      * Update the host in case a new one was chosen
-     * @param {string} hostId - Client id of new host
+     * @param {string} hostId - Client ID of new host
      * @private
      */
     #setHost(hostId) {
@@ -428,33 +428,31 @@ export default class PlaySocket {
     /**
      * Update a value in the shared storage
      * @param {string} key - Storage key
-     * @param {*} value - New value
+     * @param {string} type - Operation type: add, add-unique, remove-matching, update-matching
+     * @param {*} value - New value or value to operate on
+     * @param {*} updateValue - New value for update-matching
      */
-    updateStorage(key, value) {
-        if (this.#debug) console.log(LOG_PREFIX + "Property set update for key '" + key + "':", value);
-        const propUpdate = this.#crdtManager.updateProperty(key, "set", value);
+    updateStorage(key, type, value, updateValue) {
+        if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
+        const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
         this.#sendToServer({
             type: 'update_property',
             update: propUpdate
         });
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback after send in case msgs are sent in the callback (which would break the order)
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback AFTER send in case msgs are sent in the callback (which would break the order)
     }
 
     /**
-     * Update an array with special operations in the shared storage
-     * @param {string} key - Storage key
-     * @param {string} operation - Operation type: add, add-unique, remove-matching, update-matching
-     * @param {*} value - Value to operate on
-     * @param {*} updateValue - New value for update-matching
+     * Send a custom request to the server
+     * @param {string} name - Name of the request
+     * @param {*} [data] - Custom data
      */
-    updateStorageArray(key, operation, value, updateValue) {
-        if (this.#debug) console.log(LOG_PREFIX + `Property array update for key '${key}', operation '${operation}', value '${value}' and updateValue '${updateValue}'.`);
-        const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue);
+    sendRequest(name, data) {
+        if (this.#debug) console.log(LOG_PREFIX + `Server request with name ${name} and data:`, data);
         this.#sendToServer({
-            type: 'update_property',
-            update: propUpdate
+            type: 'request',
+            request: { name, data }
         });
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
     /**

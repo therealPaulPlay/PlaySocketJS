@@ -41,6 +41,7 @@
     <input type="text" id="chatInput" placeholder="Type message...">
     <button onclick="sendMessage()">Send</button>
     <button onclick="clearChat()">Clear chat</button>
+    <button onclick="sendRequest()">Test request</button>
 
     <script type="module">
         import PlaySocket from '../dist/playsocket-client.js';
@@ -98,11 +99,15 @@
                 text: text
             };
 
-            socket.updateStorageArray('messages', 'add', newMessage);
+            socket.updateStorage('messages', 'array-add', newMessage);
+        }
+
+        function sendRequest() {
+            socket.sendRequest('test', "This is the test data");
         }
 
         function clearChat() {
-            socket.updateStorage('messages', []);
+            socket.updateStorage('messages', 'set', []);
         }
 
         // Make functions globally available
@@ -110,6 +115,7 @@
         window.join = join;
         window.sendMessage = sendMessage;
         window.clearChat = clearChat;
+        window.sendRequest = sendRequest;
 
         // Enter key to send
         document.getElementById('chatInput').addEventListener('keypress', (e) => {

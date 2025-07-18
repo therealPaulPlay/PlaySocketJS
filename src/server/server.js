@@ -145,7 +145,7 @@ class PlaySocketServer {
                         clearTimeout(pd.timeout);
                         this.#pendingDisconnects.delete(data.id);
 
-                        // Re-assign old client id to the new ws connection
+                        // Re-assign old client ID to the new ws connection
                         ws.clientId = data.id;
                         this.#clients.set(data.id, ws);
 
@@ -176,7 +176,7 @@ class PlaySocketServer {
                     if (this.#clientRooms.get(ws.clientId) || this.#rooms[newRoomId]) {
                         ws.send(encode({
                             type: 'room_creation_failed',
-                            reason: this.#clientRooms.get(ws.clientId) ? 'Already in a room' : 'Room id is taken'
+                            reason: this.#clientRooms.get(ws.clientId) ? 'Already in a room' : 'Room ID is taken'
                         }), { binary: true });
                         return;
                     }
@@ -295,6 +295,11 @@ class PlaySocketServer {
                     }
                     break;
 
+                case 'request':
+                    const requestorRoomId = this.#clientRooms.get(ws.clientId) || null;
+                    this.#triggerEvent("requestReceived", { roomId: requestorRoomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
+                    break;
+                    
                 case 'disconnect':
                     // Client signals to server that it will will willfully disconnect soon
                     ws.willfulDisconnect = true;
@@ -435,7 +440,7 @@ class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientDisconnected", "clientJoinedRoom", "roomCreationRequested", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
+        const validEvents = ["clientRegistered", "clientDisconnected", "clientJoinedRoom", "roomCreationRequested", "requestReceived", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
@@ -476,6 +481,44 @@ class PlaySocketServer {
     }
 
     /**
+     * Get snapshot of a room's storage
+     * @returns {Object} - Storage object
+     */
+    getRoomStorage(roomId) {
+        const room = this.#rooms[roomId];
+        if (room) return room.crdtManager.getPropertyStore;
+    }
+
+    /**
+     * Update a value in a room's storage
+     * @param {string} roomId - Room ID
+     * @param {string} key - Storage key
+     * @param {string} type - Operation type
+     * @param {*} value - New value or value to operate on
+     * @param {*} updateValue - New value for update-matching
+     */
+    updateRoomStorage(roomId, key, type, value, updateValue) {
+        if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
+        const room = this.#rooms[roomId];
+        if (room) {
+            const propertyUpdate = room.crdtManager.updateProperty(key, type, value, updateValue);
+            const currentVersion = this.#roomVersions.get(roomId) + 1;
+            this.#roomVersions.set(roomId, currentVersion); // Increment version for this room
+
+            room.participants?.forEach(p => {
+                const client = this.#clients.get(p);
+                if (client) {
+                    client.send(encode({
+                        type: 'property_updated',
+                        update: propertyUpdate,
+                        version: currentVersion
+                    }), { binary: true });
+                }
+            });
+        }
+    }
+
+    /**
      * Close all client connections, then close the websocket and http server
      */
     stop() {
@@ -487,11 +530,7 @@ class PlaySocketServer {
             });
             this.#wss.close();
         }
-        if (this.#server && this.#ownsServer) {
-            this.#server.close(() => {
-                console.log('PlaySocket server stopped.');
-            });
-        }
+        if (this.#server && this.#ownsServer) this.#server.close(() => { console.log('PlaySocket server stopped.'); });
         this.#pendingDisconnects.forEach((data) => {
             clearTimeout(data.timeout);
         });

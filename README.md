@@ -1,15 +1,15 @@
-# PlaySocket
+# PlaySocket Client
 
-A WebSocket-based multiplayer library that simplifies game development by abstracting away the backend logic and moving it to the frontend.
+A reactive, optimistic WebSocket library that simplifies game & app development by abstracting away complex sync logic.
 
 ## Why use PlaySocket?
 
-PlaySocket eliminates the traditional complexity of multiplayer implementations:
+PlaySocket eliminates the traditional complexity of collaborative experiences:
 
-- **Streamlined Architecture**: No additional backend code is required
-- **State Synchronization**: Built-in storage system keeps game state synchronized across all users
-- **Resilient & Secure Connections**: Automatic reconnection handling and rate limiting
-- **Lightweight**: Uses WebSockets for efficient, predictable & reliable communication with little code required
+- **Streamlined architecture**: No additional backend code is required, but server-authoritative behavior supported
+- **State synchronization**: Built-in storage system keeps the full state synchronized across all clients, always conflict-free and in order
+- **Resilient & secure connections**: Automatic reconnection handling & strict rate-limiting
+- **Lightweight**: Uses WebSockets for efficient, predictable, reliable communication and has little dependencies
 
 ## Installation
 
@@ -17,57 +17,71 @@ PlaySocket eliminates the traditional complexity of multiplayer implementations:
 npm install playsocketjs
 ```
 
-## Usage
+## Usage examples
 
-Note that in production, you should **always try...catch** these promises, such as socket.init(), to ensure your application continues to run if errors occur.
+Note that in production, you should **always try...catch** promises, such as socket.init() – they can reject!
 
+Initializing the client:
 ```javascript
 import PlaySocket from 'playsocketjs';
 
 // Create a new instance
-const socket = new PlaySocket('unique-client-id', {
+const socket = new PlaySocket('unique-client-id', { // You can pass no ID to let the server pick one
     endpoint: 'wss://example.com/socket'
 });
 
-// Set up event handlers
+// Set up event handlers (optional)
 socket.onEvent('status', status => console.log('Status:', status));
-socket.onEvent('storageUpdated', storage => console.log('Storage update received:', storage));
+socket.onEvent('error', status => console.log('Error:', status));
 
-// Initialize the socket
-await socket.init();
+const clientId = await socket.init(); // Initialize the socket
+```
 
+Creating a room:
+```javascript
 // Create a new room
 const roomId = await socket.createRoom();
 
-// Optionally, you can create a room with an initial storage object
+// Optionally, with initial storage
 const roomId = await socket.createRoom({
-  players: [],
-  moreThings: {},
+  players: ["this-player"],
   latestPlayer: null,
 });
+```
 
-// Join an existing room
-await socket.joinRoom('room-id');
+Joining a room:
+```javascript
+await socket.joinRoom('room-id'); // Join an existing room
+```
 
-// Interact with the synced storage (available if in room)
-const currentState = socket.getStorage;
-socket.updateStorageArray('players', 'add-unique', { username: 'Player4', level: 2 }); // Special method to enable safe, simultaneous storage updates for arrays
-socket.updateStorage('latestPlayer', 'Player4'); // Regular synced storage update
+Leaving a room:
+```javascript
+socket.destroy(); // To leave the room, destroy the instance
+```
 
-// To leave the room, destroy the instance
-socket.destroy();
+Using the storage update event for reactivity:
+```javascript
+const reactiveVariable = useState(); // Or $state(), reactive(), depending on your framework
+socket.onEvent('storageUpdated', storage => (reactiveVariable = storage)); // Assign on update
+```
+
+Interfacing with the synchronized storage (examples):
+```javascript
+const currentState = socket.getStorage; // Synchronous, local access
+socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 }); // Special method to enable conflict-free additions for arrays
+socket.updateStorage('latestPlayer', 'set', 'Player4'); // Regular synced storage update
 ```
 
 ## API Reference
 
 ### Constructor
 
+Creates a new PlaySocket instance with a specified ID and configuration options.
+The id can be set to `null` to let the server pick a unique one.
+
 ```javascript
 new PlaySocket(id?: string, options: PlaySocketOptions)
 ```
-
-Creates a new PlaySocket instance with a specified ID and configuration options.
-Note: With PlaySocket, the id can be set to `null` to let the server pick a unique one.
 
 #### Configuration options
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
@@ -76,38 +90,31 @@ Note: With PlaySocket, the id can be set to `null` to let the server pick a uniq
 
 ### Methods
 
-#### Core
-
 - `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's id
 - `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room id (matches the creator's id)
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
-
-#### State management
-
-- `updateStorage(key: string, value: any)`: Update a value in the synchronized storage
-- `updateStorageArray(key: string, operation: 'add' | 'add-unique' | 'remove-matching' | 'update-matching', value: any, updateValue?: any)`: Safely update arrays in storage by adding, removing, or updating items. This is necessary for when array updates might be happening simultaneously to ensure changes are being applied and not overwritten. Using add-unique instead of add ensures that this value can only be in the array once.
+- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage. Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
 - `onEvent(event: string, callback: Function)`: Register an event callback
 
-##### Event types
+#### Event types
 
 - `status`: Connection status updates (returns status `string`)
 - `error`: Error events (returns error `string`)
 - `instanceDestroyed`: Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects
 - `storageUpdated`: Storage state changes (returns storage `object`)
-- `hostMigrated`: Host changes (returns the new host's id `string`) – As compared to PlayPeerJS, the room id does NOT change when the host changes
+- `hostMigrated`: Host changes (returns the new host's id `string`)
 - `clientConnected`: New client connected to the room (returns client-id `string`)
 - `clientDisconnected`: Client disconnected from the room (returns client-id `string`)
 
 ### Properties (Read-only)
 
-The `id` is used to distinguish the client from other clients on the WebSocket server. 
-Using a UUID is recommended, but it is also fine to use any other random string. If you're using a public WebSocket server, including your application's name in the `id` can help to prevent overlap (e.g. your-app-012345abcdef). 
-
-- `id`: Client's unique identifier
+- `id`: Client's unique identifier on the WebSocket server
 - `isHost`: If this user is currently assigned the host role
 - `connectionCount`: Number of active client connections in room (without you)
 - `getStorage`: Retrieve storage object
+
+&nbsp;
 
 # PlaySocket Server
 
@@ -121,18 +128,16 @@ To use the server component, you'll need to install playsocketjs and the ws pack
 npm install playsocketjs ws
 ```
 
-## Usage
+## Usage examples
 
-Here are usage examples for a standalone server and an express application. The implementation is 
-framework agnostic and the Express example can be adapted to any other backend solution.
+Here are usage examples for a standalone server and an Express.js application.
 
 ### Standalone server
 
 ```javascript
 const PlaySocketServer = require('playsocketjs/server');
 
-// Create and start the server
-const server = new PlaySocketServer();
+const server = new PlaySocketServer(); // Create and start the server (default path is /socket)
 
 // Gracefully disconnect all clients and close the server (optional)
 function shutdown() {
@@ -145,30 +150,28 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
 
-### With Express.js
+### Together with Express.js (or other Backend frameworks)
 
 ```javascript
 const express = require('express');
 const http = require('http');
 const PlaySocketServer = require('playsocketjs/server');
-const port = 3000;
 
 const app = express();
 const httpServer = http.createServer(app);
 
 // Create PlaySocket server with your HTTP server
-// You'll likely want to use a custom path in this scenario
 const playSocketServer = new PlaySocketServer({
   server: httpServer,
   path: '/socket'
 });
 
 // Start the server
-httpServer.listen(port, () => {
+httpServer.listen(3000, () => {
   console.log('Server running on port 3000');
 });
 
-// Gracefully disconnect all clients and close the server (optional)
+// Gracefully disconnect all clients and close the server (recommended)
 function shutdown() {
     server.stop();
     process.exit(0);
@@ -201,15 +204,17 @@ Creates a new PlaySocket Server instance with configuration options.
 - `stop`: Closes all active client connections, the websocket server and the underlying http server if it's standalone
 - `kick(clientId: string, reason?: string)`: Kick a client by their clientID – this will close their connection and set an error message
 - `onEvent(event: string, callback: Function)`: Register a server-side event callback
+- `getRoomStorage(roomId: string)`: Get a snapshot of the current room storage (returns storage `object`)
+- `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared room storage from the server.
 
-##### Event types
+#### Event types
 
 - `clientRegistered`: Client registered with the server (returns the client's id `string`, customData `object`)
 - `clientDisconnected`: Client disconnected from the server (returns the client's id `string`)
 - `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's id `string`, room id `string`)
 - `roomCreated`: Client created a room (returns room id `string`)
 - `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room id `string`)
-- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's id `string`, room id `string` and the initialStorage `object`) – if you return an object, it will take that as the initial storage instead
+- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's id `string`, room id `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead
 - `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's id `string`, room id `string` and the update `object`) – if you return `false` in the callback, the update will be blocked
 
 ### Properties (Read-only)
@@ -219,7 +224,3 @@ Creates a new PlaySocket Server instance with configuration options.
 # License
 
 MIT
-
-# Contributing
-
-Please feel free to fork the repository and submit a Pull Request.
