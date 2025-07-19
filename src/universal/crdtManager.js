@@ -1,6 +1,6 @@
 // Custom conflict-free replicated data type system with vector clocks
 
-const CONSOLE_PREFIX = "CRDT Manager: ";
+const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
 class CRDTManager {
     // Storage
@@ -148,50 +148,53 @@ class CRDTManager {
         const MIN_GC_DELAY = 1000; // Minimum 1s delay between garbage collection runs
         const MIN_AGE_FOR_GC = 5000; // Garbage collect ops that are older than 5s
 
-        if (Date.now() - this.#lastGCCheck < MIN_GC_DELAY) return;
-        this.#lastGCCheck = Date.now()
+        try {
+            if (Date.now() - this.#lastGCCheck < MIN_GC_DELAY) return;
+            this.#lastGCCheck = Date.now()
 
-        for (const [key, operations] of this.#keyOperations.entries()) {
-            if (operations?.length < 5) continue; // Min op amount per key for garbage collection to run (otherwise not worth it)
+            for (const [key, operations] of this.#keyOperations.entries()) {
+                if (operations?.length < 5) continue; // Min op amount per key for garbage collection to run (otherwise not worth it)
 
-            let retainCount = operations.length;
-            operations.forEach((op, index) => {
-                // Count how many ops, from last to latest, are older than the min-age in a row
-                if (op.uuid && this.#opUuidTimestamp.has(op.uuid) && (Date.now() - this.#opUuidTimestamp.get(op.uuid)) > MIN_AGE_FOR_GC) {
-                    const removeCount = index + 1;
-                    retainCount = operations.length - removeCount;
-                    this.#opUuidTimestamp.delete(op.uuid); // Remove from timestamps if set to be deleted
+                let retainCount = operations.length;
+                operations.forEach((op, index) => {
+                    // Count how many ops, from last to latest, are older than the min-age in a row
+                    if (op.uuid && this.#opUuidTimestamp.has(op.uuid) && (Date.now() - this.#opUuidTimestamp.get(op.uuid)) > MIN_AGE_FOR_GC) {
+                        const removeCount = index + 1;
+                        retainCount = operations.length - removeCount;
+                        this.#opUuidTimestamp.delete(op.uuid); // Remove from timestamps if set to be deleted
+                    }
+                });
+
+                if (retainCount < operations.length) {
+                    if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
+                    const retainOps = operations.slice(-retainCount); // Newest ops
+                    const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
+                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
+
+                    // Calculate the value at the point where retained operations start
+                    let baselineValue = null;
+                    for (const op of removeOps) {
+                        if (!op.data) continue;
+                        baselineValue = this.#handleOperation(
+                            baselineValue,
+                            op.data.type,
+                            op.data.value,
+                            op.data.updateValue
+                        );
+                    }
+
+                    // Create a compact operation with baseline value and appropriate vector clock
+                    const compactOp = this.#createOperation({ type: "set", value: baselineValue }, baselineVectorClock);
+
+                    // Debug log
+                    if (this.#debug) console.log(CONSOLE_PREFIX + "Operations after garbage collection for this key:", [compactOp, ...retainOps]);
+
+                    // Combine compact op with retained operations
+                    this.#keyOperations.set(key, [compactOp, ...retainOps]);
                 }
-            });
-
-            if (retainCount < operations.length) {
-                if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
-                const retainOps = operations.slice(-retainCount); // Newest ops
-                const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
-                const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
-
-                // Calculate the value at the point where retained operations start
-                let baselineValue = null;
-                for (const op of removeOps) {
-                    if (!op.data) continue;
-                    if (op.data.type.startsWith('array') && !Array.isArray(baselineValue)) baselineValue = []; // Initialize array if required
-                    baselineValue = this.#handleOperation(
-                        baselineValue,
-                        op.data.type,
-                        op.data.value,
-                        op.data.updateValue
-                    );
-                }
-
-                // Create a compact operation with baseline value and appropriate vector clock
-                const compactOp = this.#createOperation({ type: "set", value: baselineValue }, baselineVectorClock);
-
-                // Debug log
-                if (this.#debug) console.log(CONSOLE_PREFIX + "Operations after garbage collection for this key:", [compactOp, ...retainOps]);
-
-                // Combine compact op with retained operations
-                this.#keyOperations.set(key, [compactOp, ...retainOps]);
             }
+        } catch (error) {
+            console.error(CONSOLE_PREFIX + "Error running garbage collection:", error);
         }
     }
 
@@ -226,7 +229,6 @@ class CRDTManager {
 
             for (const op of ops) {
                 if (!op.data) continue;
-                if (op.data.type.startsWith('array') && !Array.isArray(value)) value = []; // Initialize array if required
                 value = this.#handleOperation(
                     value,
                     op.data.type,
