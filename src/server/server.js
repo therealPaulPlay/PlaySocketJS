@@ -122,6 +122,15 @@ class PlaySocketServer {
                         }
                     }
 
+                    // Event callback
+                    const registrationAllowed = await this.#triggerEvent("clientRegistrationRequested", data.id, data.customData);
+                    if (registrationAllowed === false || typeof registrationAllowed === 'string') {
+                        ws.send(encode({
+                            type: 'registration_failed',
+                            reason: typeof registrationAllowed === 'string' ? registrationAllowed : 'Denied.'
+                        }), { binary: true });
+                        return;
+                    }
 
                     ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
@@ -266,8 +275,8 @@ class PlaySocketServer {
 
                     if (updateRoom && data.update) {
                         // Check if update is allowed via event callback (provide clone to ensure update integrity)
-                        const allowed = await this.#triggerEvent("storageUpdateRequested", { roomId: updateRoomId, clientId: ws.clientId, update: structuredClone(data.update) });
-                        if (allowed === false) {
+                        const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId: updateRoomId, clientId: ws.clientId, update: structuredClone(data.update) });
+                        if (updateAllowed === false) {
                             ws.send(encode({
                                 type: 'property_update_rejected',
                                 state: updateRoom.crdtManager.getState
@@ -440,7 +449,7 @@ class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientDisconnected", "clientJoinedRoom", "roomCreationRequested", "requestReceived", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
+        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "roomCreationRequested", "requestReceived", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
@@ -471,8 +480,7 @@ class PlaySocketServer {
         for (const callback of callbacks) {
             try {
                 const result = await callback(...args);
-                if (result === false) return false; // False = block (in supported events)
-                if (typeof result === 'object') return result; // If response object is provided -> pass on
+                if (result != null) return result; // Return any non-null/undefined result
             } catch (error) {
                 console.error(`PlaySocket ${event} callback error:`, error);
             }

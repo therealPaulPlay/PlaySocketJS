@@ -216,6 +216,7 @@ Creates a new PlaySocket Server instance with configuration options.
 #### Event types
 
 - `clientRegistered`: Client registered with the server (returns the client's ID `string`, customData `object`)
+- `clientRegistrationRequested`: Client requests to register (returns the client's ID `string`, customData `object`) – return `false` or a rejection reason `string` to block the registration
 - `clientDisconnected`: Client disconnected from the server (returns the client's ID `string`)
 - `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's ID `string`, room ID `string`)
 - `roomCreated`: Client created a room (returns room ID `string`)
