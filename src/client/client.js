@@ -161,6 +161,22 @@ export default class PlaySocket {
                 if (!message.type) return;
 
                 switch (message.type) {
+                    case 'registration_failed':
+                        if (this.#pendingRegistration) {
+                            this.#pendingRegistration.reject(new Error("Failed to register: " + message.reason));
+                            this.#triggerEvent("error", "Failed to register: " + message.reason);
+                        }
+                        break;
+
+                    case 'registered':
+                        if (this.#pendingRegistration) {
+                            this.#sessionToken = message.sessionToken;
+                            this.#initialized = true;
+                            this.#pendingRegistration.resolve(message.id);
+                            this.#triggerEvent("status", "Connected to server.");
+                        }
+                        break;
+
                     case 'join_accepted':
                         // Connected to room
                         if (this.#pendingJoin) {
@@ -224,22 +240,6 @@ export default class PlaySocket {
                         if (this.#pendingCreate) {
                             this.#triggerEvent("error", "Failed to create room: " + message.reason);
                             this.#pendingCreate.reject(new Error("Failed to create room: " + message.reason));
-                        }
-                        break;
-
-                    case 'id_taken':
-                        if (this.#pendingRegistration) {
-                            this.#pendingRegistration.reject(new Error("This id is already in use"));
-                            this.#triggerEvent("error", "This id is taken.");
-                        }
-                        break;
-
-                    case 'registered':
-                        if (this.#pendingRegistration) {
-                            this.#sessionToken = message.sessionToken;
-                            this.#initialized = true;
-                            this.#pendingRegistration.resolve(message.id);
-                            this.#triggerEvent("status", "Connected to server.");
                         }
                         break;
 

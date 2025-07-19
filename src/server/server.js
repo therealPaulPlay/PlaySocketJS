@@ -101,7 +101,7 @@ class PlaySocketServer {
                 case 'register':
                     // Register client ID if provided & check for a duplicate
                     if (data.id && this.#clients.get(data.id)) {
-                        ws.send(encode({ type: 'id_taken' }), { binary: true });
+                        ws.send(encode({ type: 'registration_failed', reason: 'ID is taken.' }), { binary: true });
                         return;
                     }
 
@@ -117,7 +117,7 @@ class PlaySocketServer {
                             }
                         }
                         if (!data.id) {
-                            ws.send(encode({ type: 'id_taken' }), { binary: true });
+                            ws.send(encode({ type: 'registration_failed', reason: 'No available ID found.' }), { binary: true });
                             throw new Error('Failed to generate unique ID!');
                         }
                     }
