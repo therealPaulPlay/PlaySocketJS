@@ -117,7 +117,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 
 - `id`: Client's unique identifier on the WebSocket server
 - `isHost`: If this user is currently assigned the host role
-- `connectionCount`: Number of active client connections in room (without you)
+- `connectionCount`: Number of active client connections in room (without yourself)
 - `getStorage`: Retrieve storage object
 
 &nbsp;
