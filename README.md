@@ -72,6 +72,11 @@ socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level
 socket.updateStorage('latestPlayer', 'set', 'Player4'); // Regular synced storage update
 ```
 
+Sending traditional requests to the server:
+```javascript
+socket.sendRequest('chosen-request-name', { fact: "You can build server-authoritative logic using this!" })
+```
+
 ## API Reference
 
 ### Constructor
@@ -95,6 +100,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
 - `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage. Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
+- `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the `requestReceived` server event)
 - `onEvent(event: string, callback: Function)`: Register an event callback
 
 #### Event types
@@ -216,7 +222,7 @@ Creates a new PlaySocket Server instance with configuration options.
 - `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room ID `string`)
 - `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string`, room ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead
 - `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's ID `string`, room ID `string` and the update `object`) – if you return `false` in the callback, the update will be blocked
-- `requestReceived`: Request from client was received by the server (returns `object` containing client's ID `string`, if in room – room ID `string`, request name `string` and optional passed data `*`)
+- `requestReceived`: Request from client was received by the server (returns `object` containing client's ID `string`, if in room – room ID `string`, request name `string` and optional passed data of type `any`)
 
 ### Properties (Read-only)
 
