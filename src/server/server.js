@@ -195,6 +195,13 @@ class PlaySocketServer {
                     // Event callback with potential initial storage modifications
                     const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { roomId: newRoomId, clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
                     if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
+                    if (reviewedStorage === false) {
+                        ws.send(encode({
+                            type: 'room_creation_failed',
+                            reason: 'Room creation denied.'
+                        }), { binary: true });
+                        return;
+                    }
 
                     // Check if client/creator is still connected
                     if (!this.#clients.has(ws.clientId)) {
