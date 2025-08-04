@@ -96,10 +96,10 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 ### Methods
 
 - `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's ID
-- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID (matches the creator's ID)
+- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID (matches the creator's ID). The absolute client maximum is 100
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
-- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage. Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
+- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage (max. 100 keys). Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
 - `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the `requestReceived` server event)
 - `onEvent(event: string, callback: Function)`: Register an event callback
 

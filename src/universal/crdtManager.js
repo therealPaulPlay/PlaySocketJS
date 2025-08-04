@@ -71,9 +71,11 @@ class CRDTManager {
             const operation = this.#sanitizeValue(rawOperation);
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
 
+            // Check key limit to afeguard against too many keys
+            if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error('Key limit exceeded!');
+
             // Get COPY of current ops (or empty array if none yet)
             const currentOps = [...(this.#keyOperations.get(key) || [])];
-
             // Merge vector clocks (always take max value)
             for (const [id, counter] of vectorClock) {
                 if (!this.#vectorClock.has(id) || this.#vectorClock.get(id) < counter) {
@@ -81,7 +83,7 @@ class CRDTManager {
                 }
             }
 
-            // Saveguard
+            // Safeguard against massive vector clocks
             if (this.#vectorClock.size > 1000) this.#vectorClock = new Map([...this.#vectorClock].slice(-100));
 
             // Add new operation if it's not already added
@@ -332,11 +334,15 @@ class CRDTManager {
     }
 
     /**
-     * Remove HTML to prevent XSS
-     * @param {Object} obj 
+     * Remove HTML to prevent XSS and enforce size limits
+     * @param {Object} obj
      * @returns {Object} - Sanitized object
      */
     #sanitizeValue(obj) {
+        // Check total serialized size
+        const jsonString = JSON.stringify(obj);
+        if (jsonString?.length > 50000) throw new Error('Value too large!'); // 50KB limit
+
         if (typeof obj === 'string') return (obj.includes('<') || obj.includes('>')) ? obj.replace(/[<>]/g, '') : obj;
         if (Array.isArray(obj)) return obj.map(item => this.#sanitizeValue(item));
         if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, this.#sanitizeValue(v)]));

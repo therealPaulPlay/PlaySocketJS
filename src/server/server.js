@@ -214,7 +214,7 @@ class PlaySocketServer {
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         host: ws.clientId,
-                        maxSize: data.size || null,
+                        maxSize: Math.min(Number(data.size), 100) || 100, // Max. limit is 100 clients / room
                         crdtManager: roomCrdtManager
                     };
                     this.#clientRooms.set(ws.clientId, newRoomId); // Add client to the room
@@ -230,12 +230,12 @@ class PlaySocketServer {
                     const room = this.#rooms[roomId];
 
                     if (!room ||
-                        (room.maxSize && room.participants.length >= room.maxSize) ||
+                        (room.participants.length >= room.maxSize) ||
                         this.#clientRooms.get(ws.clientId)) {
                         ws.send(encode({
                             type: 'join_rejected',
                             reason: !room ? 'Room not found' :
-                                room.maxSize && room.participants.length >= room.maxSize ? 'Room full' :
+                                room.participants.length >= room.maxSize ? 'Room full' :
                                     'Already in a room'
                         }), { binary: true });
                         return;
