@@ -296,7 +296,6 @@ class PlaySocketServer {
                         // Increment version for this room
                         const currentVersion = this.#roomVersions.get(updateRoomId) + 1;
                         this.#roomVersions.set(updateRoomId, currentVersion);
-                        if (this.#debug) console.log("Property update received and imported:", data.update);
 
                         updateRoom.participants?.forEach(p => {
                             const client = this.#clients.get(p);
@@ -308,6 +307,9 @@ class PlaySocketServer {
                                 }), { binary: true });
                             }
                         });
+
+                        this.#triggerEvent("storageUpdated", { roomId: updateRoomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(updateRoomId) });
+                        if (this.#debug) console.log("Property update received and imported:", data.update);
                     }
                     break;
 
@@ -456,7 +458,7 @@ class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "roomCreationRequested", "requestReceived", "roomCreated", "storageUpdateRequested", "roomDestroyed"];
+        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
