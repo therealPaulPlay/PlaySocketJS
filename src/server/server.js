@@ -424,7 +424,7 @@ class PlaySocketServer {
     #disconnectClient(ws) {
         this.#pendingDisconnects.delete(ws.clientId);
         this.#clientTokens.delete(ws.clientId);
-        const roomId = this.#clientRooms.get(ws.clientId);
+        let roomId = this.#clientRooms.get(ws.clientId);
         const room = this.#rooms[roomId];
 
         if (room) {
@@ -436,6 +436,7 @@ class PlaySocketServer {
                 this.#roomVersions.delete(roomId); // Delete room version
                 this.#triggerEvent("roomDestroyed", roomId);
                 if (this.#debug) console.log("Deleted room with id " + roomId + ".");
+                roomId = null; // If room was destroyed, set roomId to null
             } else {
                 // Notify remaining participants
                 room.participants.forEach(p => {
