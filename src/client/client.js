@@ -433,6 +433,7 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorage(key, type, value, updateValue) {
+        if (!this.#inRoom) return this.#triggerEvent("error", "Cannot update storage when not in a room.");
         if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
         const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
         this.#sendToServer({

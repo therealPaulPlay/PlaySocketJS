@@ -147,7 +147,7 @@ class PlaySocketServer {
                         if (data.sessionToken !== this.#clientTokens.get(data.id)) {
                             ws.send(encode({
                                 type: 'reconnection_failed',
-                                reason: "Session token does not match"
+                                reason: "Session token does not match."
                             }), { binary: true });
                             return;
                         }
@@ -174,7 +174,7 @@ class PlaySocketServer {
 
                         ws.send(encode({ type: 'reconnected', roomData }), { binary: true });
                     } else {
-                        ws.send(encode({ type: 'reconnection_failed', reason: "Client unknown to server" }), { binary: true });
+                        ws.send(encode({ type: 'reconnection_failed', reason: "Client unknown to server." }), { binary: true });
                     }
                     break;
 
@@ -185,7 +185,7 @@ class PlaySocketServer {
                     if (this.#clientRooms.get(ws.clientId) || this.#rooms[newRoomId]) {
                         ws.send(encode({
                             type: 'room_creation_failed',
-                            reason: this.#clientRooms.get(ws.clientId) ? 'Already in a room' : 'Room ID is taken'
+                            reason: this.#clientRooms.get(ws.clientId) ? 'Already in a room.' : 'Room ID is taken.'
                         }), { binary: true });
                         return;
                     }
@@ -236,17 +236,17 @@ class PlaySocketServer {
                     const roomId = data.roomId;
                     const room = this.#rooms[roomId];
 
-                    if (!room ||
-                        (room.participants.length >= room.maxSize) ||
-                        this.#clientRooms.get(ws.clientId)) {
-                        ws.send(encode({
-                            type: 'join_rejected',
-                            reason: !room ? 'Room not found' :
-                                room.participants.length >= room.maxSize ? 'Room full' :
-                                    'Already in a room'
-                        }), { binary: true });
-                        return;
-                    }
+                    const rejectJoin = (reason) => {
+                        ws.send(encode({ type: 'join_rejected', reason }), { binary: true });
+                    };
+
+                    // Event callback
+                    const joinAllowed = await this.#triggerEvent("clientJoinRequested", ws.clientId, roomId);
+                    if (joinAllowed === false || typeof joinAllowed === 'string') return rejectJoin(typeof joinAllowed === 'string' ? joinAllowed : 'Denied.');
+
+                    if (!room) return rejectJoin("Room not found.");
+                    if (this.#clientRooms.get(ws.clientId)) return rejectJoin("Already in a room.");
+                    if (room.participants.length >= room.maxSize) return rejectJoin("Room full.");
 
                     room.participants.push(ws.clientId);
                     this.#clientRooms.set(ws.clientId, roomId);
@@ -458,7 +458,7 @@ class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
+        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "clientJoinRequested", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
