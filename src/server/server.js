@@ -533,6 +533,7 @@ class PlaySocketServer {
                     }), { binary: true });
                 }
             });
+            this.#triggerEvent("storageUpdated", { roomId, clientId: null, update: structuredClone(propertyUpdate), storage: this.getRoomStorage(roomId) });
         }
     }
 
