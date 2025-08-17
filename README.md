@@ -203,6 +203,7 @@ Creates a new PlaySocket Server instance with configuration options.
 - `port`: Port to listen on (default: 3000, used only if no server provided)
 - `path`: WebSocket endpoint path (default: '/')
 - `server`: Existing http server (optional)
+- `rateLimit`: Adjust the messages/second rate limit (defaults to 20)
 - `debug`: Set this property to true to enable extra logging
 
 ### Methods

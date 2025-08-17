@@ -9,6 +9,7 @@ const { CRDTManager } = require('../universal/crdtManager');
 class PlaySocketServer {
     #server;
     #ownsServer = false;
+    #rateLimitMaxPoints;
     #wss;
     #clients = new Map(); // ClientId -> WebSocket instance
     #rooms = {};
@@ -31,9 +32,11 @@ class PlaySocketServer {
      * @param {string} [options.path='/socket'] - WebSocket endpoint path
      */
     constructor(options = {}) {
-        const { server, port = 3000, path = '/', debug = false } = options;
+        const { server, port = 3000, path = '/', debug = false, rateLimit = 20 } = options;
 
         if (debug) this.#debug = true; // Enable extra logging
+
+        this.#rateLimitMaxPoints = rateLimit; // Set rate limit
 
         // Handle server creation / usage
         if (server) {
@@ -366,11 +369,10 @@ class PlaySocketServer {
      * @private
      */
     #checkRateLimit(connectionId, operationType) {
-        const MAX_POINTS = 20;
         const now = Date.now();
 
         if (!this.#rateLimits.has(connectionId)) {
-            this.#rateLimits.set(connectionId, { points: MAX_POINTS, lastReset: now });
+            this.#rateLimits.set(connectionId, { points: this.#rateLimitMaxPoints, lastReset: now });
             return true;
         }
 
@@ -378,7 +380,7 @@ class PlaySocketServer {
 
         // Reset points if interval has passed (1s)
         if (now - limit.lastReset > 1000) {
-            limit.points = MAX_POINTS;
+            limit.points = this.#rateLimitMaxPoints;
             limit.lastReset = now;
         }
 
