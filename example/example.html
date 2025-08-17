@@ -29,6 +29,7 @@
         <p id="clientIdDisplay"></p>
         <div id="host-container">
             <button onclick="host()">Host Room</button>
+            <p id="roomIdDisplay"></p>
         </div>
         <br>
         <div id="join-container">
@@ -74,7 +75,8 @@
             document.getElementById("host-container").style.opacity = "0.5";
 
             if (!socket) await initSocket(clientId);
-            await socket.createRoom({ messages: [] });
+            const roomId = await socket.createRoom({ messages: [] });
+            document.getElementById("roomIdDisplay").textContent = "Room ID: " + roomId;
         }
 
         async function join() {

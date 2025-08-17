@@ -110,10 +110,8 @@ class PlaySocketServer {
 
                     // Generate client ID if none provided
                     if (!data.id) {
-                        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
-                        const maxAttempts = 50;
-                        for (let i = 0; i < maxAttempts; i++) {
-                            const id = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                        for (let i = 0; i < 50; i++) {
+                            const id = this.#generateId();
                             if (!this.#clients.get(id)) {
                                 data.id = id;
                                 break;
@@ -183,14 +181,29 @@ class PlaySocketServer {
 
                 case 'create_room':
                     if (!ws.clientId) return;
-                    const newRoomId = ws.clientId;
 
-                    if (this.#clientRooms.get(ws.clientId) || this.#rooms[newRoomId]) {
+                    let newRoomId;
+
+                    if (this.#clientRooms.get(ws.clientId)) {
                         ws.send(encode({
                             type: 'room_creation_failed',
-                            reason: this.#clientRooms.get(ws.clientId) ? 'Already in a room.' : 'Room ID is taken.'
+                            reason: 'Already in a room.'
                         }), { binary: true });
                         return;
+                    }
+
+                    // Generate room ID
+                    for (let i = 0; i < 50; i++) {
+                        const id = this.#generateId();
+                        if (!this.#rooms[id]) {
+                            newRoomId = id;
+                            break;
+                        }
+                    }
+
+                    if (!newRoomId) {
+                        ws.send(encode({ type: 'room_creation_failed', reason: 'No available ID found.' }), { binary: true });
+                        throw new Error('Failed to generate unique room ID!');
                     }
 
                     const roomCrdtManager = new CRDTManager(this.#debug); // Create the room's crdt manager
@@ -220,18 +233,19 @@ class PlaySocketServer {
                     }
 
                     // Create room
+                    const maxSize = Math.min(Number(data.size), 100) || 100; // Max. limit is 100 clients / room
                     this.#roomVersions.set(newRoomId, 0); // Start with version 0
                     this.#rooms[newRoomId] = {
                         participants: [ws.clientId],
                         host: ws.clientId,
-                        maxSize: Math.min(Number(data.size), 100) || 100, // Max. limit is 100 clients / room
+                        maxSize,
                         crdtManager: roomCrdtManager
                     };
                     this.#clientRooms.set(ws.clientId, newRoomId); // Add client to the room
 
-                    ws.send(encode({ type: 'room_created', state: roomCrdtManager.getState }), { binary: true });
+                    ws.send(encode({ type: 'room_created', state: roomCrdtManager.getState, roomId: newRoomId, size: maxSize }), { binary: true });
                     this.#triggerEvent("roomCreated", newRoomId);
-                    if (this.#debug) console.log("Room created with initial storage:", data.initialStorage);
+                    if (this.#debug) console.log(`Room ${newRoomId} created with initial storage:`, data.initialStorage);
                     break;
 
                 case 'join_room':
@@ -317,6 +331,7 @@ class PlaySocketServer {
                     break;
 
                 case 'request':
+                    if (!ws.clientId) return;
                     const requestorRoomId = this.#clientRooms.get(ws.clientId) || null;
                     this.#triggerEvent("requestReceived", { roomId: requestorRoomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
                     break;
@@ -329,6 +344,14 @@ class PlaySocketServer {
         } catch (error) {
             console.error('Error in message handler:', error);
         }
+    }
+
+    /**
+     * Generate a readable, 6 digit ID
+     */
+    #generateId() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
+        return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
 
     /**
