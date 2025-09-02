@@ -3,7 +3,7 @@
  */
 
 import { encode, decode } from "@msgpack/msgpack";
-import { CRDTManager } from "../universal/crdtManager";
+import CRDTManager from "../universal/crdtManager";
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";

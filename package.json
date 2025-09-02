@@ -1,21 +1,24 @@
 {
   "name": "playsocketjs",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
+  "type": "module",
   "module": "dist/playsocket-client.js",
   "exports": {
     ".": {
       "import": "./dist/playsocket-client.js"
     },
     "./server": {
-      "require": "./dist/playsocket-server.js"
+      "import": "./dist/playsocket-server.mjs",
+      "require": "./dist/playsocket-server.cjs"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "start": "node example/example-server.js",
+    "start": "node example/example-server.cjs",
+    "start-module": "node example/example-server.mjs",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rollup -c rollup.config.mjs"
   },

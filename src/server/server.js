@@ -1,12 +1,12 @@
-const WebSocket = require('ws');
-const http = require('http');
-const { encode, decode } = require('@msgpack/msgpack');
-const { CRDTManager } = require('../universal/crdtManager');
+import { WebSocketServer } from 'ws';
+import * as http from 'node:http';
+import { encode, decode } from '@msgpack/msgpack';
+import CRDTManager from '../universal/crdtManager';
 
 /**
  * PlaySocketServer - WebSocket server for PlaySocket multiplayer library
  */
-class PlaySocketServer {
+export default class PlaySocketServer {
     #server;
     #ownsServer = false;
     #rateLimitMaxPoints;
@@ -50,7 +50,7 @@ class PlaySocketServer {
         }
 
         // Create WebSocket server
-        this.#wss = new WebSocket.Server({
+        this.#wss = new WebSocketServer({
             server: this.#server,
             path
         });
@@ -582,5 +582,3 @@ class PlaySocketServer {
 
     get getRooms() { return { ...this.#rooms } }
 }
-
-module.exports = PlaySocketServer;

@@ -2,7 +2,7 @@
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
-class CRDTManager {
+export default class CRDTManager {
     // Storage
     #replicaId;
     #keyOperations = new Map();
@@ -378,5 +378,3 @@ class CRDTManager {
         };
     }
 }
-
-module.exports = { CRDTManager };
