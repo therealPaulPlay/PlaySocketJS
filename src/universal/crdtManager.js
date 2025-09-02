@@ -1,3 +1,4 @@
+// @ts-check
 // Custom conflict-free replicated data type system with vector clocks
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
@@ -9,7 +10,7 @@ const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 export default class CRDTManager {
     // Storage
     #replicaId;
-	/** @type {Map<string, Array>} */
+	/** @type {Map<string, {vectorClock: unknown}[]>} */
     #keyOperations = new Map();
 	/** @type {Map<string, number>} */
     #vectorClock = new Map();
@@ -118,7 +119,7 @@ export default class CRDTManager {
      * @param {string} type
      * @param {*} value
      * @param {*} updateValue
-     * @returns {Object} - Returns the property update
+     * @returns {Object | undefined} - Returns the property update
      */
     updateProperty(key, type, value, updateValue) {
         try {
@@ -256,8 +257,8 @@ export default class CRDTManager {
 
     /**
      * Sort by vector clock (causal order)
-     * @param {Array} operations
-     * @returns {Array} - Sorted operations
+     * @param {{vectorClock?: unknown, source: string}[]} operations
+     * @returns Sorted operations
      */
     #sortByVectorClock(operations) {
         return [...operations].sort((a, b) => {
@@ -292,7 +293,7 @@ export default class CRDTManager {
 
     /**
      * Handle an operation
-     * @param {*} curValue
+     * @param {object[]} curValue
      * @param {"set" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching"} type
      * @param {*} value
      * @param {*} [updateValue]
@@ -312,6 +313,7 @@ export default class CRDTManager {
 
                 // Comparison function
                 const isObject = typeof value === 'object' && value !== null;
+                /** @param {object} item */
                 const compare = (item) => {
                     if (isObject && typeof item === 'object' && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     return item === value; // Value comparison
