@@ -29,7 +29,9 @@ export default class PlaySocketServer {
      * @param {Object} options - Server configuration options
      * @param {HttpServer} [options.server] - Existing http server
      * @param {number} [options.port=3000] - Port to listen on (if no server provided)
-     * @param {string} [options.path='/socket'] - WebSocket endpoint path
+     * @param {string} [options.path='/'] - WebSocket endpoint path
+     * @param {boolean} [options.debug=false] - Enable debug logging
+     * @param {number} [options.rateLimit=20] - Maximum number of operations per second per client
      */
     constructor(options = {}) {
         const { server, port = 3000, path = '/', debug = false, rateLimit = 20 } = options;
@@ -536,7 +538,7 @@ export default class PlaySocketServer {
      * Update a value in a room's storage
      * @param {string} roomId - Room ID
      * @param {string} key - Storage key
-     * @param {string} type - Operation type
+     * @param {'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching'} type - Operation type
      * @param {*} value - New value or value to operate on
      * @param {*} updateValue - New value for update-matching
      */

@@ -143,7 +143,7 @@ Here are usage examples for a standalone server and an Express.js application.
 ```javascript
 import PlaySocketServer from 'playsocketjs/server'; // Both ES Module & CommonJS Module syntax is supported
 
-const server = new PlaySocketServer(); // Create and start the server (default path is /socket)
+const server = new PlaySocketServer(); // Create and start the server (default path is /)
 
 // Gracefully disconnect all clients and close the server (optional)
 function shutdown() {

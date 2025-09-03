@@ -50,6 +50,7 @@ export default class PlaySocket {
      * @param {object} options - Connection options
      * @param {string} options.endpoint - WebSocket endpoint path
      * @param {object} [options.customData] - Custom registration data
+     * @param {boolean} [options.debug=false] - Enable debug logging
      */
     constructor(id, options = {}) {
         this.#id = id;
@@ -428,7 +429,7 @@ export default class PlaySocket {
     /**
      * Update a value in the shared storage
      * @param {string} key - Storage key
-     * @param {string} type - Operation type: add, add-unique, remove-matching, update-matching
+     * @param {'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching'} type - Operation type
      * @param {*} value - New value or value to operate on
      * @param {*} updateValue - New value for update-matching
      */
