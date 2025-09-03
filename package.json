@@ -3,14 +3,14 @@
     "version": "2.5.2",
     "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
     "type": "module",
-    "module": "dist/playsocket-client.js",
+    "module": "dist/client/client.js",
     "exports": {
         ".": {
-            "import": "./dist/client.js",
+            "import": "./dist/client/client.js",
             "types": "./dist/client/client.d.ts"
         },
         "./server": {
-            "import": "./dist/server.mjs",
+            "import": "./dist/server/server.js",
             "types": "./dist/server/server.d.ts"
         }
     },
@@ -19,7 +19,7 @@
     ],
     "scripts": {
         "start": "node example/example-server.js",
-        "build": "rollup -c"
+        "build": "tsdown"
     },
     "repository": {
         "type": "git",
@@ -40,18 +40,19 @@
     },
     "homepage": "https://github.com/therealPaulPlay/PlaySocketJS#readme",
     "devDependencies": {
-        "@rollup/plugin-node-resolve": "^16.0.1",
-        "@rollup/plugin-typescript": "^12.1.4",
         "@types/node": "^24.3.0",
         "@types/ws": "^8.18.1",
-        "rollup": "^4.50.0",
+        "tsdown": "^0.14.2",
         "typescript": "^5.9.2"
     },
     "peerDependencies": {
-        "ws": "^8.18.1",
-        "tslib": "^2.8.1"
+        "tslib": "^2.8.1",
+        "ws": "^8.18.1"
     },
     "dependencies": {
         "@msgpack/msgpack": "^3.1.2"
+    },
+    "engines": {
+        "node": ">=22"
     }
 }

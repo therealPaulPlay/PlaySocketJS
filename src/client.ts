@@ -3,7 +3,7 @@
  */
 
 import { decode, encode } from "@msgpack/msgpack";
-import CRDTManager, { type PropertyUpdateData, type State } from "../universal/crdtManager";
+import CRDTManager, { type PropertyUpdateData, type State } from "./crdtManager";
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
@@ -52,11 +52,11 @@ export default class PlaySocket {
     #callbacks = new Map<string, ((...args: unknown[]) => void)[]>(); // Event callbacks
 
     // Async server operations
-    #pendingJoin: { resolve: (value?: unknown) => void; reject: (error?: Error) => void; } | undefined;
-    #pendingCreate: { resolve: (roomId?: string) => void; reject: (error?: Error) => void; } | undefined;
-    #pendingRegistration: { resolve: (id?: string) => void; reject: (error?: Error) => void; } | undefined;
-    #pendingConnect: { reject: (error?: Error) => void; } | null = null;
-    #pendingReconnect: { resolve: (value?: unknown) => void; reject: (error?: Error) => void; } | undefined;
+    #pendingJoin: { resolve: (value?: unknown) => void; reject: (error?: Error) => void } | undefined;
+    #pendingCreate: { resolve: (roomId?: string) => void; reject: (error?: Error) => void } | undefined;
+    #pendingRegistration: { resolve: (id?: string) => void; reject: (error?: Error) => void } | undefined;
+    #pendingConnect: { reject: (error?: Error) => void } | null = null;
+    #pendingReconnect: { resolve: (value?: unknown) => void; reject: (error?: Error) => void } | undefined;
 
     // Timeouts or intervals
     #reconnectTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -91,7 +91,7 @@ export default class PlaySocket {
      * Register an event callback
      * @param {string} event - Event name
      */
-    onEvent(event: string, callback: () => void) {
+    onEvent(event: string, callback: () => void): void {
         const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"];
         if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
@@ -116,7 +116,7 @@ export default class PlaySocket {
      * Initialize the PlaySocket instance by connecting to the WS server
      * @returns Resolves when connection is established
      */
-    async init() {
+    async init(): Promise<string> {
         if (this.#initialized) return Promise.reject(new Error("Already initialized"));
         if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided"));
         this.#triggerEvent("status", "Initializing...");
@@ -389,7 +389,7 @@ export default class PlaySocket {
      * @param maxSize - Max number of participants
      * @returns Resolves with room ID
      */
-    async createRoom(initialStorage = {}, maxSize: number) {
+    async createRoom(initialStorage = {}, maxSize: number): Promise<string> {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Cannot create room - not initialized");
             return Promise.reject(new Error("Not initialized"));
@@ -408,7 +408,7 @@ export default class PlaySocket {
             this.#createTimeout("Room creation")
         ]).finally(() => {
             this.#pendingCreate = undefined;
-        });
+        }) as Promise<string>;
     }
 
     /**
@@ -416,7 +416,7 @@ export default class PlaySocket {
      * @param - ID of the room
      * @returns Resolves when connected
      */
-    async joinRoom(roomId: string) {
+    async joinRoom(roomId: string): Promise<unknown> {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Cannot join room - not initialized");
             return Promise.reject(new Error("Not initialized"));
@@ -446,9 +446,19 @@ export default class PlaySocket {
      * @param value - New value or value to operate on
      * @param updateValue - New value for update-matching
      */
-    updateStorage(key: string, type: "set" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching", value: unknown, updateValue?: unknown) {
+    updateStorage(
+        key: string,
+        type: "set" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching",
+        value: unknown,
+        updateValue?: unknown,
+    ): void {
         if (!this.#inRoom) return this.#triggerEvent("error", "Cannot update storage when not in a room.");
-        if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
+        if (this.#debug) {
+            console.log(
+                LOG_PREFIX +
+                    `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`,
+            );
+        }
         const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
         this.#sendToServer({
             type: "update_property",
@@ -462,7 +472,7 @@ export default class PlaySocket {
      * @param {string} name - Name of the request
      * @param {unknown} [data] - Custom data
      */
-    sendRequest(name: string, data?: unknown) {
+    sendRequest(name: string, data?: unknown): void {
         if (this.#debug) console.log(LOG_PREFIX + `Server request with name ${name} and data:`, data);
         this.#sendToServer({
             type: "request",
@@ -473,7 +483,7 @@ export default class PlaySocket {
     /**
      * Destroy the PlaySocket instance and disconnect
      */
-    destroy() {
+    destroy(): void {
         this.#initialized = false; // Set this immediately to prevent automatic reconnection
 
         if (this.#socket) {
@@ -508,8 +518,8 @@ export default class PlaySocket {
     }
 
     // Public getters
-    get connectionCount() { return this.#connectionCount; }
-    get getStorage() { return this.#crdtManager.getPropertyStore; }
-    get isHost() { return this.#id == this.#roomHost; }
-    get id() { return this.#id; }
+    get connectionCount(): number { return this.#connectionCount; }
+    get getStorage(): Record<string, unknown> { return this.#crdtManager.getPropertyStore; }
+    get isHost(): boolean { return this.#id == this.#roomHost; }
+    get id(): string { return this.#id; }
 }

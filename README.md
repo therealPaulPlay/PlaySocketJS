@@ -7,7 +7,8 @@ A reactive, optimistic WebSocket library that simplifies game & app development 
 PlaySocket eliminates the traditional complexity of collaborative experiences:
 
 - **Streamlined architecture**: No additional backend code is required, but server-authoritative behavior supported
-- **State synchronization**: Built-in storage system keeps the full state synchronized across all clients, always conflict-free and in order
+- **State synchronization**: Built-in storage system keeps the full state synchronized across all clients,
+  always conflict-free and in order
 - **Resilient & secure connections**: Automatic reconnection handling & strict rate-limiting
 - **Lightweight**: Uses WebSockets for efficient, predictable, reliable communication and has little dependencies
 
@@ -28,7 +29,7 @@ import PlaySocket from "playsocketjs";
 
 // Create a new instance
 const socket = new PlaySocket("unique-client-id", { // You can pass no ID to let the server pick one
-    endpoint: "wss://example.com/socket"
+    endpoint: "wss://example.com/socket",
 });
 
 // Set up event handlers (optional)
@@ -47,7 +48,7 @@ const roomId = await socket.createRoom();
 // Optionally, with initial storage
 const roomId = await socket.createRoom({
     players: ["this-player"],
-    latestPlayer: null
+    latestPlayer: null,
 });
 ```
 
@@ -76,7 +77,7 @@ Interfacing with the synchronized storage (examples):
 const currentState = socket.getStorage; // Synchronous, local access
 socket.updateStorage("players", "array-add-unique", {
     username: "Player4",
-    level: 2
+    level: 2,
 }); // Special method to enable conflict-free additions for arrays
 socket.updateStorage("latestPlayer", "set", "Player4"); // Regular synced storage update
 ```
@@ -85,7 +86,7 @@ Sending traditional requests to the server:
 
 ```javascript
 socket.sendRequest("chosen-request-name", {
-    fact: "You can build server-authoritative logic using this!"
+    fact: "You can build server-authoritative logic using this!",
 });
 ```
 
@@ -93,7 +94,8 @@ socket.sendRequest("chosen-request-name", {
 
 ### Constructor
 
-Creates a new PlaySocket instance with a specified ID and configuration options. The ID can be set to `null` to let the server pick a unique one.
+Creates a new PlaySocket instance with a specified ID and configuration options. The ID can be set to `null` to let the
+server pick a unique one.
 
 ```javascript
 new PlaySocket(id?: string, options: PlaySocketOptions)
@@ -108,23 +110,28 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 ### Methods
 
 - `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's ID
-- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID. The room participant maximum is 100
+- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async)
+  which resolves with the room ID. The room participant maximum is 100
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
-- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage (max. 100 keys). Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the
-  'array-update-matching' operation type
-- `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the `requestReceived` server event)
+- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`:
+  Update the shared storage (max. 100 keys). Safely update arrays in storage by adding, removing, or updating items.
+  UpdateValue is only required for the 'array-update-matching' operation type
+- `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the
+  `requestReceived` server event)
 - `onEvent(event: string, callback: Function)`: Register an event callback
 
 #### Event types
 
 - `status`: Connection status updates (returns status `string`)
 - `error`: Error events (returns error `string`)
-- `instanceDestroyed`: Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects
+- `instanceDestroyed`: Destruction event - triggered by manual .destroy() method invocation or by fatal errors and
+  disconnects
 - `storageUpdated`: Storage state changes (returns storage `object`)
 - `hostMigrated`: Host changes (returns the new host's ID `string`)
 - `clientConnected`: New client connected to the room (returns client's ID `string`)
-- `clientDisconnected`: Client disconnected from the room (returns client's ID `string`, room ID (if available) `string`)
+- `clientDisconnected`: Client disconnected from the room (returns client's ID `string`, room ID (if available)
+  `string`)
 
 ### Properties (Read-only)
 
@@ -182,7 +189,7 @@ const httpServer = http.createServer(app);
 // Create PlaySocket server with your HTTP server
 const playSocketServer = new PlaySocketServer({
     server: httpServer,
-    path: "/socket"
+    path: "/socket",
 });
 
 // Start the server
@@ -222,24 +229,35 @@ Creates a new PlaySocket Server instance with configuration options.
 ### Methods
 
 - `stop`: Closes all active client connections, the websocket server and the underlying http server if it's standalone
-- `kick(clientId: string, reason?: string)`: Kick a client by their clientID – this will close their connection and set an error message
+- `kick(clientId: string, reason?: string)`: Kick a client by their clientID – this will close their connection and set
+  an error message
 - `onEvent(event: string, callback: Function)`: Register a server-side event callback
 - `getRoomStorage(roomId: string)`: Get a snapshot of the current room storage (returns storage `object`)
-- `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared room storage from the server.
+- `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`:
+  Update the shared room storage from the server.
 
 #### Event types
 
 - `clientRegistered`: Client registered with the server (returns the client's ID `string`, customData `object`)
-- `clientRegistrationRequested`: Client requests to register (returns the client's ID `string`, customData `object`) – return `false` or a rejection reason `string` to block the registration
+- `clientRegistrationRequested`: Client requests to register (returns the client's ID `string`, customData `object`) –
+  return `false` or a rejection reason `string` to block the registration
 - `clientDisconnected`: Client disconnected from the server (returns the client's ID `string`)
-- `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's ID `string`, room ID `string`)
-- `clientJoinRequested`: Client requests to join a room (returns the client's ID `string`, room ID `string`) – return `false` or a rejection reason `string` to block them from joining
+- `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's ID
+  `string`, room ID `string`)
+- `clientJoinRequested`: Client requests to join a room (returns the client's ID `string`, room ID `string`) – return
+  `false` or a rejection reason `string` to block them from joining
 - `roomCreated`: Client created a room (returns room ID `string`)
 - `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room ID `string`)
-- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string`, room ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead. If you return `false`, the creation will be denied
-- `storageUpdated`: Room storage property updated (returns `object` containing the ID of the client who requested the update `string`, room ID `string`, the update `object`, and the storage `object`)
-- `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's ID `string`, room ID `string` and the update `object`) – if you return `false` in the callback, the update will be blocked
-- `requestReceived`: Request from client was received by the server (returns `object` containing client's ID `string`, if in room – room ID `string`, request name `string` and optional passed data of type `any`)
+- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string`, room
+  ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the
+  initial storage instead. If you return `false`, the creation will be denied
+- `storageUpdated`: Room storage property updated (returns `object` containing the ID of the client who requested the
+  update `string`, room ID `string`, the update `object`, and the storage `object`)
+- `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's
+  ID `string`, room ID `string` and the update `object`) – if you return `false` in the callback, the update will be
+  blocked
+- `requestReceived`: Request from client was received by the server (returns `object` containing client's ID `string`,
+  if in room – room ID `string`, request name `string` and optional passed data of type `any`)
 
 ### Properties (Read-only)
 

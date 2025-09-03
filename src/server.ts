@@ -1,8 +1,8 @@
 import type WebSocket from "ws";
 import { WebSocketServer } from "ws";
-import {type Server, createServer, } from "node:http";
+import { createServer, type Server } from "node:http";
 import { decode, encode } from "@msgpack/msgpack";
-import CRDTManager, { type Operation, type PropertyUpdateData } from "../universal/crdtManager";
+import CRDTManager, { type Operation, type PropertyUpdateData } from "./crdtManager";
 
 type HttpServer = Server;
 type Room = {
@@ -19,7 +19,7 @@ type Callbacks = Map<string, Function[]>;
 type ClientTokens = Map<string, string>;
 type ClientRooms = Map<string, string>;
 type RoomVersions = Map<string, number>;
-type Clients = Map<string, WebSocket>; // & WebSocketExtension>;
+type Clients = Map<string, WebSocket & WebSocketExtension>;
 type PendingDisconnects = Map<string, PendingDisconnect>;
 type ServerOptions = {
     server?: HttpServer;
@@ -28,13 +28,19 @@ type ServerOptions = {
     debug?: boolean;
     rateLimit?: number;
 };
-type WebSocketExtension = { clientId: string, connectionId: string, isAlive?: boolean, willfulDisconnect?: boolean, isTerminating?: boolean };
+type WebSocketExtension = {
+    clientId: string;
+    connectionId: string;
+    isAlive?: boolean;
+    willfulDisconnect?: boolean;
+    isTerminating?: boolean;
+};
 /** PlaySocketServer - WebSocket server for PlaySocket multiplayer library */
 export default class PlaySocketServer {
     #server: HttpServer;
     #ownsServer = false;
     #rateLimitMaxPoints: number;
-    #wss: WebSocketServer & {clients: Set<WebSocket & WebSocketExtension>};
+    #wss: WebSocketServer & { clients: Set<WebSocket & WebSocketExtension> };
 
     #clients: Clients = new Map(); // ClientId -> WebSocket instance
     #rooms: Rooms = {};
@@ -542,7 +548,7 @@ export default class PlaySocketServer {
      * @param {string} event - Event name
      * @param {Function} callback - Callback function
      */
-    onEvent(event: string, callback: Function) {
+    onEvent(event: string, callback: Function): void {
         const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "clientJoinRequested", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) return console.warn(`Invalid PlaySocket event type "${event}"`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
@@ -552,8 +558,8 @@ export default class PlaySocketServer {
     /**
      * Kick a player from the server
      */
-    kick(clientId: string, reason?: string) {
-        const client = this.#clients.get(clientId)! as WebSocket & { willfulDisconnect?: boolean };
+    kick(clientId: string, reason?: string): void {
+        const client = this.#clients.get(clientId)!;
         if (client) {
             client.willfulDisconnect = true;
             client.send(encode({ type: "kicked", reason }), { binary: true });
@@ -582,7 +588,7 @@ export default class PlaySocketServer {
     /**
      * Get snapshot of a room's storage
      */
-    getRoomStorage(roomId: string) {
+    getRoomStorage(roomId: string): Record<string, unknown> | undefined {
         const room = this.#rooms[roomId];
         if (room) return room.crdtManager.getPropertyStore;
         return undefined;
@@ -594,7 +600,7 @@ export default class PlaySocketServer {
      * @param value - New value or value to operate on
      * @param updateValue - New value for update-matching
      */
-    updateRoomStorage(roomId: string, key: string, type: Operation['data']['type'], value: unknown, updateValue?: unknown) {
+    updateRoomStorage(roomId: string, key: string, type: Operation['data']['type'], value: unknown, updateValue?: unknown): void {
         if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
         if (roomId in this.#rooms) {
             const room = this.#rooms[roomId]!;
@@ -619,7 +625,7 @@ export default class PlaySocketServer {
     /**
      * Close all client connections, then close the websocket and http server
      */
-    stop() {
+    stop(): void {
         clearInterval(this.#heartbeatInterval);
         if (this.#wss) {
             this.#clients.forEach((client) => {
@@ -638,7 +644,7 @@ export default class PlaySocketServer {
         });
     }
 
-    get getRooms() {
+    get getRooms(): Rooms {
         return { ...this.#rooms };
     }
 }

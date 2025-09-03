@@ -50,7 +50,7 @@ export default class CRDTManager {
     }
 
     /** Import the entire state of the CRDT manager (this overwrites the old state) */
-    importState(state: State) {
+    importState(state: State): void {
         try {
             const { keyOperations, vectorClock } = state;
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing state:", state);
@@ -82,7 +82,7 @@ export default class CRDTManager {
      * Import property update
      * @param data - Data to import
      */
-    importPropertyUpdate(data: PropertyUpdateData) {
+    importPropertyUpdate(data: PropertyUpdateData): void {
         try {
             const { key, operation: rawOperation, vectorClock } = data;
             const operation = this.#sanitizeValue(rawOperation) as Operation;
@@ -123,7 +123,7 @@ export default class CRDTManager {
      * Update a property
      * @returns Returns the property update
      */
-    updateProperty(key: string, type: Operation['data']['type'], value: unknown, updateValue?: unknown) {
+    updateProperty(key: string, type: Operation['data']['type'], value: unknown, updateValue?: unknown): PropertyUpdateData | undefined {
         try {
             // Sanitize inputs
             value = this.#sanitizeValue(value);
@@ -140,7 +140,7 @@ export default class CRDTManager {
             const currentOps = [...(this.#keyOperations.get(key) ?? [])];
 
             // Add operation
-            const newOp = this.#createOperation({ type, value, updateValue }, new Map(this.#vectorClock.entries().toArray()));
+            const newOp = this.#createOperation({ type, value, updateValue }, new Map(this.#vectorClock.entries()));
             currentOps.push(newOp);
             this.#keyOperations.set(key, currentOps); // Update the operations (no need to sort via vector clock since local updates are always the latest)
             this.#processLocalProperty(key); // Process local value
@@ -150,7 +150,7 @@ export default class CRDTManager {
             return {
                 key,
                 operation: { ...newOp },
-                vectorClock: Array.from(this.#vectorClock.entries())
+                vectorClock: new Map(this.#vectorClock.entries())
             };
         } catch (error) {
             console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
@@ -348,7 +348,7 @@ export default class CRDTManager {
     }
 
     // Get property store
-    get getPropertyStore() {
+    get getPropertyStore(): Record<string, unknown> {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
@@ -358,7 +358,7 @@ export default class CRDTManager {
     }
 
     // Check for changes in the local property store
-    get didPropertiesChange() {
+    get didPropertiesChange(): boolean {
         try {
             if (JSON.stringify(this.#propertyStore) !== JSON.stringify(this.#lastPropertyStore)) {
                 this.#lastPropertyStore = structuredClone(this.#propertyStore);
@@ -369,10 +369,10 @@ export default class CRDTManager {
     }
 
     // Get state (can be imported using importState, converts the maps to arrays for serialization)
-    get getState() {
+    get getState(): State {
         return {
-            keyOperations: [...this.#keyOperations.entries()],
-            vectorClock: [...this.#vectorClock.entries()]
+            keyOperations: new Map(this.#keyOperations.entries()),
+            vectorClock: new Map(this.#vectorClock.entries())
         };
     }
 }

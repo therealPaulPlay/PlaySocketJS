@@ -39,7 +39,6 @@
 
         // custom
         "allowArbitraryExtensions": true,
-        "allowJs": true,
         "allowUnreachableCode": false,
         "erasableSyntaxOnly": true,
         "noImplicitThis": true,
@@ -47,7 +46,8 @@
         "strictBuiltinIteratorReturn": true,
         "strictFunctionTypes": true,
         "noImplicitAny": true,
-        "checkJs": true,
+        "allowJs": false,
+        "isolatedDeclarations": true
     },
-    "include": ["src"],
+    "include": ["src"]
 }
