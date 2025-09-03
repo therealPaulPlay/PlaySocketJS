@@ -22,73 +22,85 @@ npm install playsocketjs
 Note that in production, you should **always try...catch** promises, such as socket.init() – they can reject!
 
 Initializing the client:
+
 ```javascript
-import PlaySocket from 'playsocketjs';
+import PlaySocket from "playsocketjs";
 
 // Create a new instance
-const socket = new PlaySocket('unique-client-id', { // You can pass no ID to let the server pick one
-    endpoint: 'wss://example.com/socket'
+const socket = new PlaySocket("unique-client-id", { // You can pass no ID to let the server pick one
+    endpoint: "wss://example.com/socket"
 });
 
 // Set up event handlers (optional)
-socket.onEvent('status', status => console.log('Status:', status));
-socket.onEvent('error', status => console.log('Error:', status));
+socket.onEvent("status", (status) => console.log("Status:", status));
+socket.onEvent("error", (status) => console.log("Error:", status));
 
 const clientId = await socket.init(); // Initialize the socket
 ```
 
 Creating a room:
+
 ```javascript
 // Create a new room
 const roomId = await socket.createRoom();
 
 // Optionally, with initial storage
 const roomId = await socket.createRoom({
-  players: ["this-player"],
-  latestPlayer: null,
+    players: ["this-player"],
+    latestPlayer: null
 });
 ```
 
 Joining a room:
+
 ```javascript
-await socket.joinRoom('room-id'); // Join an existing room
+await socket.joinRoom("room-id"); // Join an existing room
 ```
 
 Leaving a room:
+
 ```javascript
 socket.destroy(); // To leave the room, destroy the instance
 ```
 
 Using the storage update event for reactivity:
+
 ```javascript
 const reactiveVariable = useState(); // Or $state(), reactive(), depending on your framework
-socket.onEvent('storageUpdated', storage => (reactiveVariable = storage)); // Assign on update
+socket.onEvent("storageUpdated", (storage) => (reactiveVariable = storage)); // Assign on update
 ```
 
 Interfacing with the synchronized storage (examples):
+
 ```javascript
 const currentState = socket.getStorage; // Synchronous, local access
-socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 }); // Special method to enable conflict-free additions for arrays
-socket.updateStorage('latestPlayer', 'set', 'Player4'); // Regular synced storage update
+socket.updateStorage("players", "array-add-unique", {
+    username: "Player4",
+    level: 2
+}); // Special method to enable conflict-free additions for arrays
+socket.updateStorage("latestPlayer", "set", "Player4"); // Regular synced storage update
 ```
 
 Sending traditional requests to the server:
+
 ```javascript
-socket.sendRequest('chosen-request-name', { fact: "You can build server-authoritative logic using this!" })
+socket.sendRequest("chosen-request-name", {
+    fact: "You can build server-authoritative logic using this!"
+});
 ```
 
 ## API Reference
 
 ### Constructor
 
-Creates a new PlaySocket instance with a specified ID and configuration options.
-The ID can be set to `null` to let the server pick a unique one.
+Creates a new PlaySocket instance with a specified ID and configuration options. The ID can be set to `null` to let the server pick a unique one.
 
 ```javascript
 new PlaySocket(id?: string, options: PlaySocketOptions)
 ```
 
 #### Configuration options
+
 - `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
 - `customData`: You can pass arbitrary data to the "clientRegistered" server event (optional)
 - `debug`: Set this property to true to enable extra logging
@@ -99,7 +111,8 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 - `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID. The room participant maximum is 100
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
-- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage (max. 100 keys). Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
+- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage (max. 100 keys). Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the
+  'array-update-matching' operation type
 - `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the `requestReceived` server event)
 - `onEvent(event: string, callback: Function)`: Register an event callback
 
@@ -141,7 +154,7 @@ Here are usage examples for a standalone server and an Express.js application.
 ### Standalone server
 
 ```javascript
-import PlaySocketServer from 'playsocketjs/server'; // Both ES Module & CommonJS Module syntax is supported
+import PlaySocketServer from "playsocketjs/server"; // Both ES Module & CommonJS Module syntax is supported
 
 const server = new PlaySocketServer(); // Create and start the server (default path is /)
 
@@ -152,29 +165,29 @@ function shutdown() {
 }
 
 // Handle both SIGINT (Ctrl+C) and SIGTERM (Docker stop)
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 ```
 
 ### Together with Express.js (or other Backend frameworks)
 
 ```javascript
-const express = require('express');
-const http = require('http');
-const PlaySocketServer = require('playsocketjs/server');
+const express = require("express");
+const http = require("http");
+const PlaySocketServer = require("playsocketjs/server");
 
 const app = express();
 const httpServer = http.createServer(app);
 
 // Create PlaySocket server with your HTTP server
 const playSocketServer = new PlaySocketServer({
-  server: httpServer,
-  path: '/socket'
+    server: httpServer,
+    path: "/socket"
 });
 
 // Start the server
 httpServer.listen(3000, () => {
-  console.log('Server running on port 3000');
+    console.log("Server running on port 3000");
 });
 
 // Gracefully disconnect all clients and close the server (recommended)
@@ -184,8 +197,8 @@ function shutdown() {
 }
 
 // Handle both SIGINT (Ctrl+C) and SIGTERM (Docker stop)
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 ```
 
 ## API Reference

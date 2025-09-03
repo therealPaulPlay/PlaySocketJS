@@ -1,14 +1,14 @@
 /**
- * Simple PlaySocket server for the chat example (ESM version). 
+ * Simple PlaySocket server for the chat example (ESM version).
  * Ensure the dependencies are installed (see readme).
  */
 // Import the PlaySocketServer
-import PlaySocketServer from '../dist/playsocket-server.mjs';
+import PlaySocketServer from '../dist/server.js';
 
 // Create and start the server
 const server = new PlaySocketServer({ debug: true });
 
-server.onEvent("requestReceived", ({ name, roomId, data, clientId }) => {
+server.onEvent("requestReceived", ({ name, roomId, data }) => {
     if (name == "test") server.updateRoomStorage(roomId, 'messages', 'array-add', { sender: "server", text: "Testing 1.. 2.. 3.. Test data: " + data });
 });
 

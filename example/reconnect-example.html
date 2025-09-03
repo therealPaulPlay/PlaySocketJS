@@ -1,149 +1,164 @@
 <!DOCTYPE html>
 <html>
+    <head>
+        <title>PlaySocket Chat Example - Reconnection Test</title>
+        <style>
+            #messages {
+                height: 300px;
+                border: 1px solid #ccc;
+                overflow-y: scroll;
+                margin-bottom: 10px;
+                padding: 10px;
+            }
 
-<head>
-    <title>PlaySocket Chat Example - Reconnection Test</title>
-    <style>
-        #messages {
-            height: 300px;
-            border: 1px solid #ccc;
-            overflow-y: scroll;
-            margin-bottom: 10px;
-            padding: 10px;
-        }
+            #chatInput {
+                width: 80%;
+                padding: 5px;
+            }
 
-        #chatInput {
-            width: 80%;
-            padding: 5px;
-        }
+            .controls {
+                margin-bottom: 20px;
+            }
+        </style>
+    </head>
 
-        .controls {
-            margin-bottom: 20px;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="controls">
-        <p id="clientIdDisplay"></p>
-        <div id="host-container">
-            <button onclick="host()">Host Room</button>
+    <body>
+        <div class="controls">
+            <p id="clientIdDisplay"></p>
+            <div id="host-container">
+                <button onclick="host()">Host Room</button>
+            </div>
+            <br>
+            <div id="join-container">
+                <input type="text" id="hostId" placeholder="Host ID">
+                <button onclick="join()">Join Room</button>
+            </div>
         </div>
-        <br>
-        <div id="join-container">
-            <input type="text" id="hostId" placeholder="Host ID">
-            <button onclick="join()">Join Room</button>
-        </div>
-    </div>
 
-    <div id="messages"></div>
-    <input type="text" id="chatInput" placeholder="Type message...">
-    <button onclick="sendMessage()">Send</button>
-    <button onclick="clearChat()">Clear chat</button>
+        <div id="messages"></div>
+        <input type="text" id="chatInput" placeholder="Type message...">
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="clearChat()">Clear chat</button>
 
-    <script type="module">
-        import PlaySocket from '../dist/playsocket-client.js';
+        <script type="module">
+            import PlaySocket from "../dist/playsocket-client.js";
 
-        let socket;
-        let capturedWebSocket = null;
-        let networkDown = false;
+            let socket;
+            let capturedWebSocket = null;
+            let networkDown = false;
 
-        // Hook WebSocket to capture connection and simulate network outages
-        const OriginalWebSocket = window.WebSocket;
-        window.WebSocket = class extends OriginalWebSocket {
-            constructor(...args) {
-                if (networkDown) {
-                    // Simulate network being down - throw connection error
-                    throw new Error('Network unreachable');
+            // Hook WebSocket to capture connection and simulate network outages
+            const OriginalWebSocket = window.WebSocket;
+            window.WebSocket = class extends OriginalWebSocket {
+                constructor(...args) {
+                    if (networkDown) {
+                        // Simulate network being down - throw connection error
+                        throw new Error("Network unreachable");
+                    }
+                    super(...args);
+                    capturedWebSocket = this;
+                    console.log("🔗 WebSocket captured");
                 }
-                super(...args);
-                capturedWebSocket = this;
-                console.log('🔗 WebSocket captured');
-            }
-        };
-
-        // Auto-generate client ID
-        const clientId = Math.random().toString(36).substring(2, 12);
-        document.getElementById('clientIdDisplay').textContent = `Your client ID: ${clientId}`;
-
-        // Random disconnect every 10 seconds
-        setInterval(() => {
-            if (capturedWebSocket && capturedWebSocket.readyState === WebSocket.OPEN) {
-                const disconnectDuration = Math.random() * 5000; // 0-5s
-                console.log(`🔌 Network going down for ${Math.round(disconnectDuration / 1000)}s`);
-
-                networkDown = true; // Block new connections
-                capturedWebSocket.close(); // Close current connection
-
-                setTimeout(() => {
-                    networkDown = false; // Restore network
-                    console.log('🔄 Network restored');
-                }, disconnectDuration);
-            }
-        }, 10000);
-
-        async function initSocket(id) {
-            socket = new PlaySocket(id, { endpoint: "ws://localhost:3000", debug: true });
-
-            socket.onEvent('status', status => console.log('Status:', status));
-            socket.onEvent('error', error => console.log('Error:', error));
-            socket.onEvent('storageUpdated', (storage) => {
-                const messages = document.getElementById('messages');
-                messages.innerHTML = storage.messages?.map(msg =>
-                    `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`
-                ).join('') || '';
-                messages.scrollTop = messages.scrollHeight;
-            });
-
-            await socket.init();
-        }
-
-        async function host() {
-            document.getElementById("join-container").style.display = "none";
-            document.getElementById("host-container").style.pointerEvents = "none";
-            document.getElementById("host-container").style.opacity = "0.5";
-            if (!socket) await initSocket(clientId);
-            await socket.createRoom({ messages: [] });
-        }
-
-        async function join() {
-            const hostId = document.getElementById('hostId').value;
-            document.getElementById("host-container").style.display = "none";
-            document.getElementById("join-container").style.pointerEvents = "none";
-            document.getElementById("join-container").style.opacity = "0.5";
-            if (!hostId) return alert('Please enter the Room code (Host ID)');
-            if (!socket) await initSocket(clientId);
-            await socket.joinRoom(hostId);
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const text = input.value.trim();
-            input.value = '';
-            if (!text) return;
-
-            const newMessage = {
-                sender: socket.id,
-                text: text
             };
-            socket.updateStorageArray('messages', 'add', newMessage);
-        }
 
-        function clearChat() {
-            socket.updateStorage('messages', []);
-        }
+            // Auto-generate client ID
+            const clientId = Math.random().toString(36).substring(2, 12);
+            document.getElementById("clientIdDisplay").textContent = `Your client ID: ${clientId}`;
 
-        // Make functions globally available
-        window.host = host;
-        window.join = join;
-        window.sendMessage = sendMessage;
-        window.clearChat = clearChat;
+            // Random disconnect every 10 seconds
+            setInterval(() => {
+                if (
+                    capturedWebSocket &&
+                    capturedWebSocket.readyState === WebSocket.OPEN
+                ) {
+                    const disconnectDuration = Math.random() * 5000; // 0-5s
+                    console.log(
+                        `🔌 Network going down for ${Math.round(disconnectDuration / 1000)}s`
+                    );
 
-        // Enter key to send
-        document.getElementById('chatInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-    </script>
-</body>
+                    networkDown = true; // Block new connections
+                    capturedWebSocket.close(); // Close current connection
 
+                    setTimeout(() => {
+                        networkDown = false; // Restore network
+                        console.log("🔄 Network restored");
+                    }, disconnectDuration);
+                }
+            }, 10000);
+
+            async function initSocket(id) {
+                socket = new PlaySocket(id, {
+                    endpoint: "ws://localhost:3000",
+                    debug: true
+                });
+
+                socket.onEvent(
+                    "status",
+                    (status) => console.log("Status:", status)
+                );
+                socket.onEvent(
+                    "error",
+                    (error) => console.log("Error:", error)
+                );
+                socket.onEvent("storageUpdated", (storage) => {
+                    const messages = document.getElementById("messages");
+                    messages.innerHTML = storage.messages?.map((msg) => `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`).join("") || "";
+                    messages.scrollTop = messages.scrollHeight;
+                });
+
+                await socket.init();
+            }
+
+            async function host() {
+                document.getElementById("join-container").style.display = "none";
+                document.getElementById("host-container").style.pointerEvents = "none";
+                document.getElementById("host-container").style.opacity = "0.5";
+                if (!socket) await initSocket(clientId);
+                await socket.createRoom({ messages: [] });
+            }
+
+            async function join() {
+                const hostId = document.getElementById("hostId").value;
+                document.getElementById("host-container").style.display = "none";
+                document.getElementById("join-container").style.pointerEvents = "none";
+                document.getElementById("join-container").style.opacity = "0.5";
+                if (!hostId) {
+                    return alert("Please enter the Room code (Host ID)");
+                }
+                if (!socket) await initSocket(clientId);
+                await socket.joinRoom(hostId);
+            }
+
+            function sendMessage() {
+                const input = document.getElementById("chatInput");
+                const text = input.value.trim();
+                input.value = "";
+                if (!text) return;
+
+                const newMessage = {
+                    sender: socket.id,
+                    text: text
+                };
+                socket.updateStorageArray("messages", "add", newMessage);
+            }
+
+            function clearChat() {
+                socket.updateStorage("messages", []);
+            }
+
+            // Make functions globally available
+            window.host = host;
+            window.join = join;
+            window.sendMessage = sendMessage;
+            window.clearChat = clearChat;
+
+            // Enter key to send
+            document.getElementById("chatInput").addEventListener(
+                "keypress",
+                (e) => {
+                    if (e.key === "Enter") sendMessage();
+                }
+            );
+        </script>
+    </body>
 </html>
