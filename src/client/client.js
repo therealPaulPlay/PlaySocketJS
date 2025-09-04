@@ -1,7 +1,3 @@
-/**
- * PlaySocket - WebSocket-based multiplayer for games
- */
-
 import { encode, decode } from "@msgpack/msgpack";
 import CRDTManager from "../universal/crdtManager";
 
@@ -10,6 +6,9 @@ const WARNING_PREFIX = "PlaySocket warning: ";
 const LOG_PREFIX = "PlaySocket log: ";
 const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
 
+/**
+ * PlaySocket Client
+ */
 export default class PlaySocket {
     // Core properties
     #id; // Unique client ID

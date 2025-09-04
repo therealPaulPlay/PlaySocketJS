@@ -1,10 +1,10 @@
 import { WebSocketServer } from 'ws';
-import * as http from 'node:http';
+import { createServer } from 'node:http';
 import { encode, decode } from '@msgpack/msgpack';
 import CRDTManager from '../universal/crdtManager';
 
 /**
- * PlaySocketServer - WebSocket server for PlaySocket multiplayer library
+ * PlaySocket Server
  */
 export default class PlaySocketServer {
     #server;
@@ -45,7 +45,7 @@ export default class PlaySocketServer {
             this.#server = server; // Use provided HTTP server
         } else {
             this.#ownsServer = true;
-            this.#server = http.createServer(); // Create HTTP server and start it
+            this.#server = createServer(); // Create HTTP server and start it
             this.#server.listen(port, () => {
                 console.log(`PlaySocket server running on port ${port}.`);
             });
