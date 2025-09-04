@@ -3,43 +3,53 @@
  */
 
 import { decode, encode } from "@msgpack/msgpack";
-import CRDTManager, { type PropertyUpdateData, type State } from "./crdtManager";
+import CRDTManager, { type PropertyUpdateData, type State } from "./crdtManager.ts";
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
 const LOG_PREFIX = "PlaySocket log: ";
 const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
 
-type Message = {
+type EventCallbacks<T extends Record<string, unknown>> = {
+        status: (status: string) => void;
+        error: (error: Error) => void;
+        instanceDestroyed: () => void;
+        storageUpdated: (storage: T) => void;
+        hostMigrated: (newHostId: string) => void;
+        clientConnected: (clientId: string) => void;
+        clientDisconnected: (clientId: string) => void;
+    };
+
+type Message<T extends Record<string, unknown>> = {
     type: string;
     size: number;
     reason?: string;
     id?: string;
     sessionToken: string;
-    state: State;
+    state: State<T>;
     participantCount: number;
     host: string;
     version: number;
     roomId?: string;
-    update: PropertyUpdateData;
-    roomData?: { state: State; version: number; participantCount: number; host: string };
+    update: PropertyUpdateData<T>;
+    roomData?: { state: State<T>; version: number; participantCount: number; host: string };
     newHost: string;
     client?: string;
 };
-type ClientConstructorOptions = {
+type ClientConstructorOptions<T> = {
     endpoint: string;
-    customData?: object;
+    customData?: T;
     debug?: boolean;
 };
 
-export default class PlaySocket {
+export default class PlaySocket<T extends Record<string, unknown> = Record<string, unknown>> {
     // Core properties
     #id; // Unique client ID
     #sessionToken: string | undefined; // Unique session token
     #endpoint;
     #socket: WebSocket | undefined; // WebSocket connection
     #initialized = false; // Initialization status
-    #customData: object;
+    #customData: T;
 
     // Room properties
     #roomHost: string | undefined;
@@ -49,7 +59,7 @@ export default class PlaySocket {
     #roomVersion = 0; // Update version (used to compare local vs. remote state to detect package loss)
 
     // Event handling
-    #callbacks = new Map<string, ((...args: unknown[]) => void)[]>(); // Event callbacks
+    #callbacks = new Map<keyof EventCallbacks<T>, Function[]>(); // Event callbacks
 
     // Async server operations
     #pendingJoin: { resolve: (value?: unknown) => void; reject: (error?: Error) => void } | undefined;
@@ -71,13 +81,13 @@ export default class PlaySocket {
      * @param id - Unique identifier for this client
      * @param [options.customData] - Custom registration data
      */
-    constructor(id: string, options: ClientConstructorOptions) {
-        const { endpoint, customData = {}, debug } = options;
+    constructor(id: string, options: ClientConstructorOptions<T>) {
+        const { endpoint, customData = {} as T, debug } = options;
         this.#id = id;
         this.#endpoint = endpoint ?? "/";
         this.#customData = { ...customData };
         this.#debug = debug ?? false; // Enabling extra logging
-        this.#crdtManager = new CRDTManager(this.#debug);
+        this.#crdtManager = new CRDTManager<T>(this.#debug);
     }
 
     /**
@@ -89,9 +99,9 @@ export default class PlaySocket {
 
     /**
      * Register an event callback
-     * @param {string} event - Event name
+     * @param event - Event name
      */
-    onEvent(event: string, callback: () => void): void {
+    onEvent<K extends keyof EventCallbacks<T>>(event: K, callback: EventCallbacks<T>[K]): void {
         const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"];
         if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
@@ -101,7 +111,7 @@ export default class PlaySocket {
     /**
      * Trigger an event to registered callbacks
      */
-    #triggerEvent(event: string, ...args: unknown[]) {
+    #triggerEvent<K extends keyof EventCallbacks<T>>(event: K, ...args: Parameters<EventCallbacks<T>[K]>) {
         const callbacks = this.#callbacks.get(event);
         callbacks?.forEach((callback) => {
             try {
@@ -151,18 +161,20 @@ export default class PlaySocket {
      * @returns Resolves when the connection was established
      */
     async #connect() {
-        return Promise.race([
+        try {
+          return await Promise.race([
             new Promise((resolve, reject) => {
-                this.#pendingConnect = { reject };
-                this.#socket = new WebSocket(this.#endpoint);
-                this.#socket.binaryType = "arraybuffer"; // Important for MessagePack binary data
-                this.#setupSocketHandlers(); // Message & close events
-                this.#socket.onopen = resolve;
+              this.#pendingConnect = { reject };
+              this.#socket = new WebSocket(this.#endpoint);
+              this.#socket.binaryType = "arraybuffer"; // Important for MessagePack binary data
+              this.#setupSocketHandlers(); // Message & close events
+              this.#socket.onopen = resolve;
             }),
             this.#createTimeout("Connection attempt")
-        ]).finally(() => {
-            this.#pendingConnect = null;
-        });
+          ]);
+        } finally {
+          this.#pendingConnect = null;
+        }
     }
 
     /**
@@ -171,14 +183,14 @@ export default class PlaySocket {
     #setupSocketHandlers() {
         this.#socket!.onmessage = (event: MessageEvent) => {
             try {
-                const message = decode(new Uint8Array(event.data)) as Message;
+                const message = decode(new Uint8Array(event.data)) as Message<T>;
                 if (!message.type) return;
 
                 switch (message.type) {
                     case "registration_failed":
                         if (this.#pendingRegistration) {
                             this.#pendingRegistration.reject(new Error("Failed to register: " + message.reason));
-                            this.#triggerEvent("error", "Failed to register: " + message.reason);
+                            this.#triggerEvent("error", new Error("Failed to register: " + message.reason));
                         }
                         break;
 
@@ -228,7 +240,7 @@ export default class PlaySocket {
                                 this.#triggerEvent("storageUpdated", this.getStorage);
                             } else if (this.#inRoom) {
                                 // If no room data received, but client thinks they were in a room...
-                                this.#triggerEvent("error", "Reconnected, but room no longer exists.");
+                                this.#triggerEvent("error", new Error("Reconnected, but room no longer exists."));
                                 return this.destroy();
                             }
                             this.#triggerEvent("status", "Reconnected.");
@@ -252,7 +264,7 @@ export default class PlaySocket {
 
                     case "room_creation_failed":
                         if (this.#pendingCreate) {
-                            this.#triggerEvent("error", "Failed to create room: " + message.reason);
+                            this.#triggerEvent("error", new Error("Failed to create room: " + message.reason));
                             this.#pendingCreate.reject(new Error("Failed to create room: " + message.reason));
                         }
                         break;
@@ -263,24 +275,24 @@ export default class PlaySocket {
                         this.#crdtManager.importPropertyUpdate(message.update);
                         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
                         if (this.#roomVersion != message.version && this.#initialized && this.#socket?.readyState === WebSocket.OPEN) {
-                            this.#triggerEvent("error", "Detected skipped update – forcing reconnect.");
+                            this.#triggerEvent("error", new Error("Detected skipped update – forcing reconnect."));
                             this.#socket?.close();
                         }
                         break;
 
                     case "property_update_rejected":
-                        this.#triggerEvent("error", "Property update rejected. Re-syncing state.");
+                        this.#triggerEvent("error", new Error("Property update rejected. Re-syncing state."));
                         this.#crdtManager.importState(message.state);
                         this.#triggerEvent("storageUpdated", this.getStorage);
                         break;
 
                     case "server_stopped":
-                        this.#triggerEvent("error", "Server restart.");
+                        this.#triggerEvent("error", new Error("Server restart."));
                         this.destroy();
                         break;
 
                     case "kicked":
-                        this.#triggerEvent("error", `Kicked out of room: ${message.reason ?? "No reason provided."}`);
+                        this.#triggerEvent("error", new Error(`Kicked out of room: ${message.reason ?? "No reason provided."}`));
                         this.destroy();
                         break;
 
@@ -290,13 +302,13 @@ export default class PlaySocket {
 
                     case "client_disconnected":
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-                        this.#triggerEvent("clientDisconnected", message.client);
+                        this.#triggerEvent("clientDisconnected", message.client!);
                         this.#triggerEvent("status", `Client ${message.client} disconnected.`);
                         break;
 
                     case "client_connected":
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-                        this.#triggerEvent("clientConnected", message.client);
+                        this.#triggerEvent("clientConnected", message.client!);
                         this.#triggerEvent("status", `Client ${message.client} connected.`);
                         break;
                 }
@@ -307,7 +319,7 @@ export default class PlaySocket {
 
         // Handle socket errors
         this.#socket!.onerror = () => {
-            this.#triggerEvent("error", "WebSocket error.");
+            this.#triggerEvent("error", new Error("WebSocket error."));
             if (this.#pendingConnect) this.#pendingConnect.reject(new Error("WebSocket error"));
         };
 
@@ -326,7 +338,7 @@ export default class PlaySocket {
     async #attemptReconnect() {
         this.#reconnectCount++;
         if (this.#reconnectCount > 9) {
-            this.#triggerEvent("error", "Disconnected from server.");
+            this.#triggerEvent("error", new Error("Disconnected from server."));
             return this.destroy();
         }
 
@@ -347,7 +359,7 @@ export default class PlaySocket {
             ]).finally(() => {
                 this.#pendingReconnect = undefined;
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (!this.#initialized) return;
             if (!("message" in error)) {
                 throw error;
@@ -377,9 +389,9 @@ export default class PlaySocket {
         }
         try {
             this.#socket.send(encode(data));
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(ERROR_PREFIX + "Error sending message:", error);
-            this.#triggerEvent("error", "Error sending message: " + error.message);
+            this.#triggerEvent("error", new Error("Error sending message: " + error.message));
         }
     }
 
@@ -389,9 +401,9 @@ export default class PlaySocket {
      * @param maxSize - Max number of participants
      * @returns Resolves with room ID
      */
-    async createRoom(initialStorage = {}, maxSize: number): Promise<string> {
+    createRoom(initialStorage: T | undefined = {} as T, maxSize: number): Promise<string> {
         if (!this.#initialized) {
-            this.#triggerEvent("error", "Cannot create room - not initialized");
+            this.#triggerEvent("error", new Error("Cannot create room - not initialized"));
             return Promise.reject(new Error("Not initialized"));
         }
 
@@ -418,25 +430,27 @@ export default class PlaySocket {
      */
     async joinRoom(roomId: string): Promise<unknown> {
         if (!this.#initialized) {
-            this.#triggerEvent("error", "Cannot join room - not initialized");
+            this.#triggerEvent("error", new Error("Cannot join room - not initialized"));
             return Promise.reject(new Error("Not initialized"));
         }
 
-        return Promise.race([
+        try {
+          return await Promise.race([
             new Promise((resolve, reject) => {
-                this.#pendingJoin = { resolve, reject };
+              this.#pendingJoin = { resolve, reject };
 
-                // Send connection request
-                this.#triggerEvent("status", `Connecting to room ${roomId}...`);
-                this.#sendToServer({
-                    type: "join_room",
-                    roomId
-                });
+              // Send connection request
+              this.#triggerEvent("status", `Connecting to room ${roomId}...`);
+              this.#sendToServer({
+                type: "join_room",
+                roomId
+              });
             }),
             this.#createTimeout("Room join")
-        ]).finally(() => {
-            this.#pendingJoin = undefined;
-        });
+          ]);
+        } finally {
+          this.#pendingJoin = undefined;
+        }
     }
 
     /**
@@ -447,16 +461,16 @@ export default class PlaySocket {
      * @param updateValue - New value for update-matching
      */
     updateStorage(
-        key: string,
+        key: keyof T,
         type: "set" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching",
-        value: unknown,
+        value: T[keyof T],
         updateValue?: unknown,
     ): void {
-        if (!this.#inRoom) return this.#triggerEvent("error", "Cannot update storage when not in a room.");
+        if (!this.#inRoom) return this.#triggerEvent("error", new Error("Cannot update storage when not in a room."));
         if (this.#debug) {
             console.log(
                 LOG_PREFIX +
-                    `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`,
+                    `Property update for key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`,
             );
         }
         const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
@@ -469,7 +483,7 @@ export default class PlaySocket {
 
     /**
      * Send a custom request to the server
-     * @param {string} name - Name of the request
+     * @param name - Name of the request
      * @param {unknown} [data] - Custom data
      */
     sendRequest(name: string, data?: unknown): void {
@@ -519,7 +533,7 @@ export default class PlaySocket {
 
     // Public getters
     get connectionCount(): number { return this.#connectionCount; }
-    get getStorage(): Record<string, unknown> { return this.#crdtManager.getPropertyStore; }
+    get getStorage(): T { return this.#crdtManager.getPropertyStore; }
     get isHost(): boolean { return this.#id == this.#roomHost; }
     get id(): string { return this.#id; }
 }

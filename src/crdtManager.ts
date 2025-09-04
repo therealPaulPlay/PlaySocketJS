@@ -14,26 +14,26 @@ export type Operation = {
 };
 type Operations = Operation[];
 export type VectorClock = Map<string, number>;
-export type PropertyUpdateData = {
-    key: string;
+export type PropertyUpdateData<T> = {
+    key: keyof T;
     operation: Operation;
     vectorClock: VectorClock;
 };
 
-export type State = {
-    keyOperations: Map<string, Operations>;
+export type State<T> = {
+    keyOperations: Map<keyof T, Operations>;
     vectorClock: VectorClock;
 };
 
-export default class CRDTManager {
+export default class CRDTManager<T extends Record<string, unknown> = Record<string, unknown>> {
     // Storage
     #replicaId: string;
-    #keyOperations = new Map<string, Operations>();
+    #keyOperations = new Map<keyof T, Operations>();
     #vectorClock: VectorClock = new Map();
 
     // Local only
-    #propertyStore: Record<string, unknown> = {};
-    #lastPropertyStore: Record<string, unknown> = {};
+    #propertyStore = {} as T;
+    #lastPropertyStore = {} as T;
 
     // Local Garbage Collection
     #lastGCCheck: number = 0;
@@ -50,15 +50,15 @@ export default class CRDTManager {
     }
 
     /** Import the entire state of the CRDT manager (this overwrites the old state) */
-    importState(state: State): void {
+    importState(state: State<T>): void {
         try {
             const { keyOperations, vectorClock } = state;
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing state:", state);
 
             // Resets
             this.#opUuidTimestamp.clear();
-            this.#propertyStore = {};
-            this.#lastPropertyStore = {};
+            this.#propertyStore = {} as T;
+            this.#lastPropertyStore = {} as T;
 
             this.#keyOperations = new Map(keyOperations); // Rebuild the operations map
             this.#vectorClock = new Map(vectorClock); // Rebuild the vector clock map
@@ -82,7 +82,7 @@ export default class CRDTManager {
      * Import property update
      * @param data - Data to import
      */
-    importPropertyUpdate(data: PropertyUpdateData): void {
+    importPropertyUpdate(data: PropertyUpdateData<T>): void {
         try {
             const { key, operation: rawOperation, vectorClock } = data;
             const operation = this.#sanitizeValue(rawOperation) as Operation;
@@ -123,14 +123,14 @@ export default class CRDTManager {
      * Update a property
      * @returns Returns the property update
      */
-    updateProperty(key: string, type: Operation['data']['type'], value: unknown, updateValue?: unknown): PropertyUpdateData | undefined {
+    updateProperty(key: keyof T, type: Operation['data']['type'], value: unknown, updateValue?: unknown): PropertyUpdateData<T> | undefined {
         try {
             // Sanitize inputs
             value = this.#sanitizeValue(value);
             updateValue = this.#sanitizeValue(updateValue);
 
             // Debug log
-            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and updateValue ${updateValue}.`);
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${String(key)}, type ${type}, value ${value} and updateValue ${updateValue}.`);
 
             // Increment vector clock
             const counter = this.#vectorClock.get(this.#replicaId) ?? 0;
@@ -153,7 +153,7 @@ export default class CRDTManager {
                 vectorClock: new Map(this.#vectorClock.entries())
             };
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
+            console.error(CONSOLE_PREFIX + `Failed to add operation for key "${String(key)}":`, error);
             return undefined;
         }
     }
@@ -180,7 +180,7 @@ export default class CRDTManager {
                 });
 
                 if (retainCount < operations.length) {
-                    if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
+                    if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${String(key)} with current operations:`, operations);
                     const retainOps = operations.slice(-retainCount); // Newest ops
                     const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
                     const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock ?? new Map<string, number>(); // Use the vector clock from the last operation that we remove/overwrite
@@ -227,13 +227,13 @@ export default class CRDTManager {
     /**
      * Process a property's value by applying all operations and set it in the property store
      */
-    #processLocalProperty(key: string) {
+    #processLocalProperty(key: keyof T) {
         try {
             const ops = this.#keyOperations.get(key);
             if (!ops?.length) return;
 
             // Apply all operations in order
-            let value = null;
+            let value: unknown = null;
 
             for (const op of ops) {
                 if (!op.data) continue;
@@ -245,9 +245,9 @@ export default class CRDTManager {
                 );
             }
 
-            this.#propertyStore[key] = value; // Save locally
+            this.#propertyStore[key] = value as T[keyof T]; // Save locally
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to process property for key ${key}:`, error);
+            console.error(CONSOLE_PREFIX + `Failed to process property for key ${String(key)}:`, error);
         }
     }
 
@@ -317,12 +317,12 @@ export default class CRDTManager {
                     if (!curValArray.some(compare)) curValArray.push(value);
                     break;
                 case "array-remove-matching":
-                    curValArray = curValArray.filter((item: any) => !compare(item));
+                    curValArray = curValArray.filter((item) => !compare(item));
                     break;
-                case "array-update-matching":
+                case "array-update-matching": {
                     const index = curValArray.findIndex(compare);
                     if (index !== -1) curValArray[index] = updateValue;
-                    break;
+                } break;
             }
 
             return curValArray;
@@ -348,12 +348,12 @@ export default class CRDTManager {
     }
 
     // Get property store
-    get getPropertyStore(): Record<string, unknown> {
+    get getPropertyStore(): T {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
             console.error(CONSOLE_PREFIX + "Failed to parse property store");
-            return {} as Record<string, unknown>;
+            return {} as T;
         }
     }
 
@@ -364,12 +364,12 @@ export default class CRDTManager {
                 this.#lastPropertyStore = structuredClone(this.#propertyStore);
                 return true;
             }
-        } catch { }
+        } catch { /** ignore */ }
         return false;
     }
 
     // Get state (can be imported using importState, converts the maps to arrays for serialization)
-    get getState(): State {
+    get getState(): State<T> {
         return {
             keyOperations: new Map(this.#keyOperations.entries()),
             vectorClock: new Map(this.#vectorClock.entries())
