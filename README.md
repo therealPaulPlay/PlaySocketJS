@@ -29,7 +29,7 @@ import PlaySocket from "playsocketjs";
 
 // Create a new instance
 const socket = new PlaySocket("unique-client-id", { // You can pass no ID to let the server pick one
-    endpoint: "wss://example.com/socket",
+    endpoint: "wss://example.com/socket"
 });
 
 // Set up event handlers (optional)
@@ -48,7 +48,7 @@ const roomId = await socket.createRoom();
 // Optionally, with initial storage
 const roomId = await socket.createRoom({
     players: ["this-player"],
-    latestPlayer: null,
+    latestPlayer: null
 });
 ```
 
@@ -77,7 +77,7 @@ Interfacing with the synchronized storage (examples):
 const currentState = socket.getStorage; // Synchronous, local access
 socket.updateStorage("players", "array-add-unique", {
     username: "Player4",
-    level: 2,
+    level: 2
 }); // Special method to enable conflict-free additions for arrays
 socket.updateStorage("latestPlayer", "set", "Player4"); // Regular synced storage update
 ```
@@ -86,7 +86,7 @@ Sending traditional requests to the server:
 
 ```javascript
 socket.sendRequest("chosen-request-name", {
-    fact: "You can build server-authoritative logic using this!",
+    fact: "You can build server-authoritative logic using this!"
 });
 ```
 
@@ -189,7 +189,7 @@ const httpServer = http.createServer(app);
 // Create PlaySocket server with your HTTP server
 const playSocketServer = new PlaySocketServer({
     server: httpServer,
-    path: "/socket",
+    path: "/socket"
 });
 
 // Start the server

@@ -6,7 +6,7 @@
 import PlaySocketServer from "../src/server.ts";
 import process from "node:process";
 
-type Storage = {messages: {sender: string, text: string}[]};
+type Storage = { messages: { sender: string; text: string }[] };
 
 // Create and start the server
 const server = new PlaySocketServer<Storage>({ debug: true });
@@ -15,7 +15,7 @@ server.onEvent("requestReceived", ({ name, roomId, data }) => {
     if (name == "test") {
         server.updateRoomStorage(roomId!, "messages", "array-add", {
             sender: "server",
-            text: "Testing 1.. 2.. 3.. Test data: " + data,
+            text: "Testing 1.. 2.. 3.. Test data: " + data
         });
     }
 });

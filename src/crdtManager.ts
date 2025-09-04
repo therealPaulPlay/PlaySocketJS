@@ -3,7 +3,7 @@
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
 export type Operation = {
-    vectorClock: Map<string, number>;
+    vectorClock: VectorClock;
     source: string;
     uuid: string;
     data: {
@@ -12,8 +12,7 @@ export type Operation = {
         updateValue?: unknown;
     };
 };
-type Operations = Operation[];
-export type VectorClock = Map<string, number>;
+type VectorClock = Map<string, number>;
 export type PropertyUpdateData<T> = {
     key: keyof T;
     operation: Operation;
@@ -21,15 +20,15 @@ export type PropertyUpdateData<T> = {
 };
 
 export type State<T> = {
-    keyOperations: Map<keyof T, Operations>;
+    keyOperations: Map<keyof T, Operation[]>;
     vectorClock: VectorClock;
 };
 
 export default class CRDTManager<T extends Record<string, unknown> = Record<string, unknown>> {
     // Storage
     #replicaId: string;
-    #keyOperations = new Map<keyof T, Operations>();
-    #vectorClock: VectorClock = new Map();
+    #keyOperations: State<T>['keyOperations'] = new Map();
+    #vectorClock: State<T>['vectorClock'] = new Map();
 
     // Local only
     #propertyStore = {} as T;
@@ -123,7 +122,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
      * Update a property
      * @returns Returns the property update
      */
-    updateProperty(key: keyof T, type: Operation['data']['type'], value: unknown, updateValue?: unknown): PropertyUpdateData<T> | undefined {
+    updateProperty(key: keyof T, type: Operation["data"]["type"], value: unknown, updateValue?: unknown): PropertyUpdateData<T> | undefined {
         try {
             // Sanitize inputs
             value = this.#sanitizeValue(value);
@@ -140,7 +139,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
             const currentOps = [...(this.#keyOperations.get(key) ?? [])];
 
             // Add operation
-            const newOp = this.#createOperation({ type, value, updateValue }, new Map(this.#vectorClock.entries()));
+            const newOp = this.#createOperation({ type, value, updateValue }, Array.from(this.#vectorClock.entries()));
             currentOps.push(newOp);
             this.#keyOperations.set(key, currentOps); // Update the operations (no need to sort via vector clock since local updates are always the latest)
             this.#processLocalProperty(key); // Process local value
@@ -150,7 +149,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
             return {
                 key,
                 operation: { ...newOp },
-                vectorClock: new Map(this.#vectorClock.entries())
+                vectorClock: Array.from(this.#vectorClock.entries())
             };
         } catch (error) {
             console.error(CONSOLE_PREFIX + `Failed to add operation for key "${String(key)}":`, error);
@@ -183,7 +182,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
                     if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${String(key)} with current operations:`, operations);
                     const retainOps = operations.slice(-retainCount); // Newest ops
                     const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
-                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock ?? new Map<string, number>(); // Use the vector clock from the last operation that we remove/overwrite
+                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock ?? []; // Use the vector clock from the last operation that we remove/overwrite
 
                     // Calculate the value at the point where retained operations start
                     let baselineValue = null;
@@ -255,7 +254,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
      * Sort by vector clock (causal order)
      * @returns Sorted operations
      */
-    #sortByVectorClock(operations: Operations) {
+    #sortByVectorClock(operations: Operation[]) {
         return [...operations].sort((a, b) => {
             const clockA = new Map(a.vectorClock ?? []);
             const clockB = new Map(b.vectorClock ?? []);
@@ -298,34 +297,38 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
             // Set operation
             if (type === "set") return value;
 
-            if (type.startsWith("array")) throw new Error(`Value must be an array for operation type ${type}!`);
+            if (!type.startsWith('array'))
+                throw new Error(`Unsupported operation type: ${type}`);
 
-            if (!Array.isArray(curValue)) curValue = [] as unknown[]; // Auto-convert to array if current value isn't one
+            if (!Array.isArray(curValue)) curValue = [] as object[]; // Auto-convert to array if current value isn't one
+
+            let curValueArr = curValue as unknown[]; // Type assertion
 
             // Comparison function
-            const isObject = typeof value === "object" && value !== null;
+            const isObject = (foo: unknown) => typeof foo === 'object' && foo !== null;
             const compare = (item: unknown) => {
-                if (isObject && typeof item === "object" && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
+                if (isObject(value) && isObject(item)) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                 return item === value; // Value comparison
             };
-            let curValArray = curValue as unknown[];
+
             switch (type) {
-                case "array-add":
-                    curValArray.push(value);
+                case 'array-add':
+                    curValueArr.push(value);
                     break;
-                case "array-add-unique":
-                    if (!curValArray.some(compare)) curValArray.push(value);
+                case 'array-add-unique':
+                    if (!curValueArr.some(compare)) curValueArr.push(value);
                     break;
-                case "array-remove-matching":
-                    curValArray = curValArray.filter((item) => !compare(item));
+                case 'array-remove-matching':
+                    curValueArr = curValueArr.filter(item => !compare(item));
                     break;
-                case "array-update-matching": {
-                    const index = curValArray.findIndex(compare);
-                    if (index !== -1) curValArray[index] = updateValue;
+                case 'array-update-matching': {
+                    const index = curValueArr.findIndex(compare);
+                    if (index !== -1) curValueArr[index] = updateValue;
                 } break;
             }
 
-            return curValArray;
+            return curValueArr;
+
         } catch (error) {
             console.error(CONSOLE_PREFIX + `Failed to handle operation with curValue ${curValue}:`, error);
             return curValue;
@@ -371,8 +374,8 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
     // Get state (can be imported using importState, converts the maps to arrays for serialization)
     get getState(): State<T> {
         return {
-            keyOperations: new Map(this.#keyOperations.entries()),
-            vectorClock: new Map(this.#vectorClock.entries())
+            keyOperations: [...this.#keyOperations.entries()],
+            vectorClock: [...this.#vectorClock.entries()]
         };
     }
 }

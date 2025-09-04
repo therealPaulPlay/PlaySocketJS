@@ -68,9 +68,7 @@
                 );
                 socket.onEvent("storageUpdated", (storage) => {
                     const messages = document.getElementById("messages");
-                    messages.innerHTML = storage.messages?.map((msg) =>
-                        `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`
-                    ).join("") || "";
+                    messages.innerHTML = storage.messages?.map((msg) => `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`).join("") || "";
                     messages.scrollTop = messages.scrollHeight;
                 });
 

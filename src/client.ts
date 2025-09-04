@@ -3,7 +3,7 @@
  */
 
 import { decode, encode } from "@msgpack/msgpack";
-import CRDTManager, { type PropertyUpdateData, type State } from "./crdtManager.ts";
+import CRDTManager, { type Operation, type PropertyUpdateData, type State } from "./crdtManager.ts";
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
@@ -11,14 +11,14 @@ const LOG_PREFIX = "PlaySocket log: ";
 const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
 
 type EventCallbacks<T extends Record<string, unknown>> = {
-        status: (status: string) => void;
-        error: (error: Error) => void;
-        instanceDestroyed: () => void;
-        storageUpdated: (storage: T) => void;
-        hostMigrated: (newHostId: string) => void;
-        clientConnected: (clientId: string) => void;
-        clientDisconnected: (clientId: string) => void;
-    };
+    status: (status: string) => void;
+    error: (error: Error) => void;
+    instanceDestroyed: () => void;
+    storageUpdated: (storage: T) => void;
+    hostMigrated: (newHostId: string) => void;
+    clientConnected: (clientId: string) => void;
+    clientDisconnected: (clientId: string) => void;
+};
 
 type Message<T extends Record<string, unknown>> = {
     type: string;
@@ -162,18 +162,18 @@ export default class PlaySocket<T extends Record<string, unknown>> {
      */
     async #connect() {
         try {
-          return await Promise.race([
-            new Promise((resolve, reject) => {
-              this.#pendingConnect = { reject };
-              this.#socket = new WebSocket(this.#endpoint);
-              this.#socket.binaryType = "arraybuffer"; // Important for MessagePack binary data
-              this.#setupSocketHandlers(); // Message & close events
-              this.#socket.onopen = resolve;
-            }),
-            this.#createTimeout("Connection attempt")
-          ]);
+            return await Promise.race([
+                new Promise((resolve, reject) => {
+                    this.#pendingConnect = { reject };
+                    this.#socket = new WebSocket(this.#endpoint);
+                    this.#socket.binaryType = "arraybuffer"; // Important for MessagePack binary data
+                    this.#setupSocketHandlers(); // Message & close events
+                    this.#socket.onopen = resolve;
+                }),
+                this.#createTimeout("Connection attempt")
+            ]);
         } finally {
-          this.#pendingConnect = null;
+            this.#pendingConnect = null;
         }
     }
 
@@ -437,21 +437,21 @@ export default class PlaySocket<T extends Record<string, unknown>> {
         }
 
         try {
-          return await Promise.race([
-            new Promise((resolve, reject) => {
-              this.#pendingJoin = { resolve, reject };
+            return await Promise.race([
+                new Promise((resolve, reject) => {
+                    this.#pendingJoin = { resolve, reject };
 
-              // Send connection request
-              this.#triggerEvent("status", `Connecting to room ${roomId}...`);
-              this.#sendToServer({
-                type: "join_room",
-                roomId
-              });
-            }),
-            this.#createTimeout("Room join")
-          ]);
+                    // Send connection request
+                    this.#triggerEvent("status", `Connecting to room ${roomId}...`);
+                    this.#sendToServer({
+                        type: "join_room",
+                        roomId
+                    });
+                }),
+                this.#createTimeout("Room join")
+            ]);
         } finally {
-          this.#pendingJoin = undefined;
+            this.#pendingJoin = undefined;
         }
     }
 
@@ -462,17 +462,12 @@ export default class PlaySocket<T extends Record<string, unknown>> {
      * @param value - New value or value to operate on
      * @param updateValue - New value for update-matching
      */
-    updateStorage(
-        key: keyof T,
-        type: "set" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching",
-        value: T[keyof T],
-        updateValue?: unknown,
-    ): void {
+    updateStorage<K extends KeysWhereValueIsArray<T>, V extends Extract<T[K], unknown[]>, Op extends Operation["data"]["type"]>(key: Op extends "set" ? keyof T : K, type: Op, value: Op extends "set" ? T : V[number], updateValue?: unknown): void {
         if (!this.#inRoom) return this.#triggerEvent("error", new Error("Cannot update storage when not in a room."));
         if (this.#debug) {
             console.log(
                 LOG_PREFIX +
-                    `Property update for key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`,
+                    `Property update for key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`
             );
         }
         const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
@@ -539,3 +534,7 @@ export default class PlaySocket<T extends Record<string, unknown>> {
     get isHost(): boolean { return this.#id == this.#roomHost; }
     get id(): string { return this.#id; }
 }
+
+type KeysWhereValueIsArray<T> = {
+  [K in keyof T]: T[K] extends unknown[] ? K : never;
+}[keyof T];

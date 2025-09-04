@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import { decode, encode } from "@msgpack/msgpack";
 import CRDTManager, { type Operation, type PropertyUpdateData } from "./crdtManager.ts";
 import type { Buffer } from "node:buffer";
-import { setTimeout, clearTimeout } from "node:timers";
+import { clearTimeout, setTimeout } from "node:timers";
 
 type HttpServer = Server;
 type Room<T extends Record<string, unknown>> = {
@@ -83,7 +83,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
         this.#wss = new WebSocketServer({
             server: this.#server,
             path
-        }) as WebSocketServer & {clients: Set<WebSocket & WebSocketExtension>};
+        }) as WebSocketServer & { clients: Set<WebSocket & WebSocketExtension> };
 
         // Set up ws event handlers
         this.#wss.on("connection", (ws: WebSocket & WebSocketExtension) => {
@@ -465,7 +465,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
     /**
      * Disconnect a client
      */
-    #disconnectClient(ws: WebSocket & {clientId : string}) {
+    #disconnectClient(ws: WebSocket & { clientId: string }) {
         this.#pendingDisconnects.delete(ws.clientId);
         this.#clientTokens.delete(ws.clientId);
         const roomId = this.#clientRooms.get(ws.clientId)!;
@@ -552,7 +552,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
      * @param value - New value or value to operate on
      * @param updateValue - New value for update-matching
      */
-    updateRoomStorage(roomId: string, key: keyof T, type: Operation['data']['type'], value: unknown, updateValue?: unknown): void {
+    updateRoomStorage(roomId: string, key: keyof T, type: Operation["data"]["type"], value: unknown, updateValue?: unknown): void {
         if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
         if (roomId in this.#rooms) {
             const room = this.#rooms[roomId]!;

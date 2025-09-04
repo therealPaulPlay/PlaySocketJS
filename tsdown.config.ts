@@ -9,7 +9,7 @@ export default defineConfig([
         dts: true,
         outDir: "dist/client",
         sourcemap: false,
-        noExternal: ["@msgpack/msgpack"],
+        noExternal: ["@msgpack/msgpack"]
     },
     {
         entry: "src/server.ts",
@@ -17,6 +17,6 @@ export default defineConfig([
         minify: false,
         dts: true,
         outDir: "dist/server",
-        external: ["ws", "http", "express", "cors", "@msgpack/msgpack"],
-    },
+        external: ["ws", "http", "express", "cors", "@msgpack/msgpack"]
+    }
 ]);
