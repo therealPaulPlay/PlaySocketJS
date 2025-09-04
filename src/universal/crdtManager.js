@@ -1,18 +1,27 @@
+// @ts-check
 // Custom conflict-free replicated data type system with vector clocks
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
+/**
+ * CRDT Manager class
+ * @template {Record<string, any>} [T=Record<string, any>] - Type of the property store
+ */
 export default class CRDTManager {
     // Storage
     #replicaId;
+	/** @type {Map<string, {vectorClock: unknown}[]>} */
     #keyOperations = new Map();
+	/** @type {Map<string, number>} */
     #vectorClock = new Map();
 
-    // Local only
+    /** @type {T} - Local only */
     #propertyStore = {}; // Current local values per key, as object
+	/** @type {T} */
     #lastPropertyStore = {}; // Last property store to compare against
 
     // Local Garbage Collection
+	/** @type {number} */
     #lastGCCheck = 0;
     #opUuidTimestamp = new Map(); // Map every operation to a timestamp for garbage collection
 
@@ -21,6 +30,7 @@ export default class CRDTManager {
 
     /**
      * Create a new instance
+	 * @param {boolean} [debug=false] - Enable debug logging
      */
     constructor(debug) {
         if (debug) this.#debug = true;
@@ -30,7 +40,7 @@ export default class CRDTManager {
 
     /**
      * Import the entire state of the CRDT manager (this overwrites the old state)
-     * @param {Object} state
+     * @param {T} state
      */
     importState(state) {
         try {
@@ -47,7 +57,7 @@ export default class CRDTManager {
             if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Add own vector clock if it wasn't present in the imported state
 
             // Map all operation uuids to current timestamp
-            this.#keyOperations.forEach((value, key) => {
+            this.#keyOperations.forEach((value, _key) => {
                 value?.forEach((operation) => {
                     this.#opUuidTimestamp.set(operation?.uuid, Date.now());
                 })
@@ -63,7 +73,7 @@ export default class CRDTManager {
 
     /**
      * Import property update
-     * @param {Object} data - Data to import
+     * @param {T} data - Data to import
      */
     importPropertyUpdate(data) {
         try {
@@ -105,11 +115,11 @@ export default class CRDTManager {
 
     /**
      * Update a property
-     * @param {string} key 
-     * @param {string} type 
-     * @param {*} value 
-     * @param {*} updateValue 
-     * @returns {Object} - Returns the property update
+     * @param {string} key
+     * @param {string} type
+     * @param {*} value
+     * @param {*} updateValue
+     * @returns {Object | undefined} - Returns the property update
      */
     updateProperty(key, type, value, updateValue) {
         try {
@@ -171,7 +181,7 @@ export default class CRDTManager {
                     if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
                     const retainOps = operations.slice(-retainCount); // Newest ops
                     const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
-                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
+                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite
 
                     // Calculate the value at the point where retained operations start
                     let baselineValue = null;
@@ -202,8 +212,8 @@ export default class CRDTManager {
 
     /**
      * Create an operation object
-     * @param {Object} data 
-     * @param {Array} vectorClock 
+     * @param {Object} data
+     * @param {Array} vectorClock
      * @returns {Object} - Operation object
      */
     #createOperation(data, vectorClock) {
@@ -219,7 +229,7 @@ export default class CRDTManager {
 
     /**
      * Process a property's value by applying all operations and set it in the property store
-     * @param {string} key 
+     * @param {string} key
      */
     #processLocalProperty(key) {
         try {
@@ -247,8 +257,8 @@ export default class CRDTManager {
 
     /**
      * Sort by vector clock (causal order)
-     * @param {Array} operations
-     * @returns {Array} - Sorted operations
+     * @param {{vectorClock?: unknown, source: string}[]} operations
+     * @returns Sorted operations
      */
     #sortByVectorClock(operations) {
         return [...operations].sort((a, b) => {
@@ -283,9 +293,9 @@ export default class CRDTManager {
 
     /**
      * Handle an operation
-     * @param {*} curValue 
-     * @param {string} type 
-     * @param {*} value 
+     * @param {object[]} curValue
+     * @param {"set" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching"} type
+     * @param {*} value
      * @param {*} [updateValue]
      * @returns {*} - Value after the operation
      */
@@ -303,6 +313,7 @@ export default class CRDTManager {
 
                 // Comparison function
                 const isObject = typeof value === 'object' && value !== null;
+                /** @param {object} item */
                 const compare = (item) => {
                     if (isObject && typeof item === 'object' && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     return item === value; // Value comparison
@@ -318,10 +329,11 @@ export default class CRDTManager {
                     case 'array-remove-matching':
                         curValue = curValue.filter(item => !compare(item));
                         break;
-                    case 'array-update-matching':
-                        const index = curValue.findIndex(compare);
+                    case 'array-update-matching': {
+						const index = curValue.findIndex(compare);
                         if (index !== -1) curValue[index] = updateValue;
                         break;
+					}
                 }
             }
 
@@ -335,8 +347,8 @@ export default class CRDTManager {
 
     /**
      * Remove HTML to prevent XSS and enforce size limits
-     * @param {Object} obj
-     * @returns {Object} - Sanitized object
+     * @param {T} obj
+     * @returns {T} - Sanitized object
      */
     #sanitizeValue(obj) {
         // Check total serialized size
@@ -349,13 +361,16 @@ export default class CRDTManager {
         return obj;
     }
 
-    // Get property store
+    /**
+	 * Get property store
+	 * @returns {T}
+	 */
     get getPropertyStore() {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
             console.error(CONSOLE_PREFIX + "Failed to parse property store")
-            return {};
+            return {}
         }
     }
 
@@ -366,7 +381,7 @@ export default class CRDTManager {
                 this.#lastPropertyStore = structuredClone(this.#propertyStore);
                 return true;
             }
-        } catch { }
+        } catch { void 0; }
         return false;
     }
 
