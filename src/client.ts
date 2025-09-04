@@ -42,7 +42,7 @@ type ClientConstructorOptions<T> = {
     debug?: boolean;
 };
 
-export default class PlaySocket<T extends Record<string, unknown> = Record<string, unknown>> {
+export default class PlaySocket<T extends Record<string, unknown>> {
     // Core properties
     #id; // Unique client ID
     #sessionToken: string | undefined; // Unique session token
@@ -359,7 +359,8 @@ export default class PlaySocket<T extends Record<string, unknown> = Record<strin
             ]).finally(() => {
                 this.#pendingReconnect = undefined;
             });
-        } catch (error: unknown) {
+        // deno-lint-ignore no-explicit-any
+        } catch (error: any) {
             if (!this.#initialized) return;
             if (!("message" in error)) {
                 throw error;
@@ -389,7 +390,8 @@ export default class PlaySocket<T extends Record<string, unknown> = Record<strin
         }
         try {
             this.#socket.send(encode(data));
-        } catch (error: unknown) {
+        // deno-lint-ignore no-explicit-any
+        } catch (error: any) {
             console.error(ERROR_PREFIX + "Error sending message:", error);
             this.#triggerEvent("error", new Error("Error sending message: " + error.message));
         }
