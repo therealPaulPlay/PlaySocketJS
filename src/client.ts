@@ -479,7 +479,7 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 		key: Op extends 'set' ? keyof T : K,
 		type: Op,
 		value: Op extends 'set' ? T : V[number],
-		updateValue?: unknown
+		updateValue?: Operation['data']['updateValue']
 	): void {
 		if (!this.#inRoom) return this.#triggerEvent('error', new Error('Cannot update storage when not in a room.'));
 		if (this.#debug) {

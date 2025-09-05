@@ -573,7 +573,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
         key: Op extends 'set' ? keyof T : K,
         type: Op,
         value: Op extends 'set' ? T : V[number],
-        updateValue?: unknown
+        updateValue?: Operation['data']['updateValue']
     ): void {
         if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
         if (roomId in this.#rooms) {
