@@ -91,7 +91,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 			if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error('Key limit exceeded!');
 
 			// Get COPY of current ops (or empty array if none yet)
-			const currentOps = [...(this.#keyOperations.get(key) ?? [])];
+			const currentOps = [...(this.#keyOperations.get(key) || [])];
 			// Merge vector clocks (always take max value)
 			for (const [id, counter] of vectorClock) {
 				if (!this.#vectorClock.has(id) || this.#vectorClock.get(id)! < counter) {
@@ -132,11 +132,11 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 			if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${String(key)}, type ${type}, value ${value} and updateValue ${updateValue}.`);
 
 			// Increment vector clock
-			const counter = this.#vectorClock.get(this.#replicaId) ?? 0;
+			const counter = this.#vectorClock.get(this.#replicaId) || 0;
 			this.#vectorClock.set(this.#replicaId, counter + 1);
 
 			// Assign shallow COPY of currennt ops or fall back to empty array
-			const currentOps = [...(this.#keyOperations.get(key) ?? [])];
+			const currentOps = [...(this.#keyOperations.get(key) || [])];
 
 			// Add operation
 			const newOp = this.#createOperation({ type, value, updateValue }, Array.from(this.#vectorClock.entries()));
@@ -182,7 +182,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 					if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${String(key)} with current operations:`, operations);
 					const retainOps = operations.slice(-retainCount); // Newest ops
 					const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
-					const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock ?? []; // Use the vector clock from the last operation that we remove/overwrite
+					const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite
 
 					// Calculate the value at the point where retained operations start
 					let baselineValue = null;
@@ -256,8 +256,8 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 	 */
 	#sortByVectorClock(operations: Operation[]) {
 		return [...operations].sort((a, b) => {
-			const clockA = new Map(a.vectorClock ?? []);
-			const clockB = new Map(b.vectorClock ?? []);
+			const clockA = new Map(a.vectorClock || []);
+			const clockB = new Map(b.vectorClock || []);
 
 			// First sort by causal relationship
 			let aGreater = false, bGreater = false;
