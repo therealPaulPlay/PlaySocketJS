@@ -1,53 +1,53 @@
 {
-    // Visit https://aka.ms/tsconfig to read more about this file
-    "compilerOptions": {
-        // File Layout
-        "rootDir": "./src",
-        "outDir": "./dist",
+	// Visit https://aka.ms/tsconfig to read more about this file
+	"compilerOptions": {
+		// File Layout
+		"rootDir": "./src",
+		"outDir": "./dist",
 
-        // Environment Settings
-        "module": "esnext",
-        "target": "es2023",
-        "lib": ["esnext", "dom", "dom.iterable"],
-        "moduleResolution": "bundler",
+		// Environment Settings
+		"module": "esnext",
+		"target": "es2023",
+		"lib": ["esnext", "dom", "dom.iterable"],
+		"moduleResolution": "bundler",
 
-        // Other Outputs
-        "sourceMap": true,
-        "declaration": true,
-        "declarationMap": true,
-        "noEmitOnError": false,
+		// Other Outputs
+		"sourceMap": true,
+		"declaration": true,
+		"declarationMap": true,
+		"noEmitOnError": false,
 
-        // Stricter Typechecking Options
-        "noUncheckedIndexedAccess": true,
-        // "exactOptionalPropertyTypes": true,
+		// Stricter Typechecking Options
+		"noUncheckedIndexedAccess": true,
+		// "exactOptionalPropertyTypes": true,
 
-        // Style Options
-        "noImplicitReturns": true,
-        "noImplicitOverride": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "noFallthroughCasesInSwitch": true,
-        "noPropertyAccessFromIndexSignature": true,
+		// Style Options
+		"noImplicitReturns": true,
+		"noImplicitOverride": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"noPropertyAccessFromIndexSignature": true,
 
-        // Recommended Options
-        "strict": true,
-        "verbatimModuleSyntax": true,
-        "isolatedModules": true,
-        "noUncheckedSideEffectImports": true,
-        "moduleDetection": "auto",
-        "skipLibCheck": true,
+		// Recommended Options
+		"strict": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"noUncheckedSideEffectImports": true,
+		"moduleDetection": "auto",
+		"skipLibCheck": true,
 
-        // custom
-        "allowArbitraryExtensions": true,
-        "allowUnreachableCode": false,
-        "erasableSyntaxOnly": true,
-        "noImplicitThis": true,
-        "resolveJsonModule": true,
-        "strictBuiltinIteratorReturn": true,
-        "strictFunctionTypes": true,
-        "noImplicitAny": true,
-        "allowJs": false,
-        "isolatedDeclarations": true
-    },
-    "include": ["src"]
+		// custom
+		"allowArbitraryExtensions": true,
+		"allowUnreachableCode": false,
+		"erasableSyntaxOnly": true,
+		"noImplicitThis": true,
+		"resolveJsonModule": true,
+		"strictBuiltinIteratorReturn": true,
+		"strictFunctionTypes": true,
+		"noImplicitAny": true,
+		"allowJs": false,
+		"isolatedDeclarations": true
+	},
+	"include": ["src"]
 }

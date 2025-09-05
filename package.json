@@ -1,58 +1,58 @@
 {
-    "name": "playsocketjs",
-    "version": "2.5.2",
-    "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
-    "type": "module",
-    "module": "dist/client/client.js",
-    "exports": {
-        ".": {
-            "import": "./dist/client/client.js",
-            "types": "./dist/client/client.d.ts"
-        },
-        "./server": {
-            "import": "./dist/server/server.js",
-            "types": "./dist/server/server.d.ts"
-        }
-    },
-    "files": [
-        "dist"
-    ],
-    "scripts": {
-        "start": "node example/example-server.js",
-        "build": "tsdown"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/therealPaulPlay/PlaySocketJS.git"
-    },
-    "keywords": [
-        "WebSocket",
-        "data channel",
-        "Socket",
-        "PlayPeerJS",
-        "multiplayer",
-        "game"
-    ],
-    "author": "PaulPlay",
-    "license": "MIT",
-    "bugs": {
-        "url": "https://github.com/therealPaulPlay/PlaySocketJS/issues"
-    },
-    "homepage": "https://github.com/therealPaulPlay/PlaySocketJS#readme",
-    "devDependencies": {
-        "@types/node": "^24.3.0",
-        "@types/ws": "^8.18.1",
-        "tsdown": "^0.14.2",
-        "typescript": "^5.9.2"
-    },
-    "peerDependencies": {
-        "tslib": "^2.8.1",
-        "ws": "^8.18.1"
-    },
-    "dependencies": {
-        "@msgpack/msgpack": "^3.1.2"
-    },
-    "engines": {
-        "node": ">=22"
-    }
+	"name": "playsocketjs",
+	"version": "2.5.2",
+	"description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
+	"type": "module",
+	"module": "dist/client/client.js",
+	"exports": {
+		".": {
+			"import": "./dist/client/client.js",
+			"types": "./dist/client/client.d.ts"
+		},
+		"./server": {
+			"import": "./dist/server/server.js",
+			"types": "./dist/server/server.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"start": "node example/example-server.js",
+		"build": "tsdown"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/therealPaulPlay/PlaySocketJS.git"
+	},
+	"keywords": [
+		"WebSocket",
+		"data channel",
+		"Socket",
+		"PlayPeerJS",
+		"multiplayer",
+		"game"
+	],
+	"author": "PaulPlay",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/therealPaulPlay/PlaySocketJS/issues"
+	},
+	"homepage": "https://github.com/therealPaulPlay/PlaySocketJS#readme",
+	"devDependencies": {
+		"@types/node": "^24.3.0",
+		"@types/ws": "^8.18.1",
+		"tsdown": "^0.14.2",
+		"typescript": "^5.9.2"
+	},
+	"peerDependencies": {
+		"tslib": "^2.8.1",
+		"ws": "^8.18.1"
+	},
+	"dependencies": {
+		"@msgpack/msgpack": "^3.1.2"
+	},
+	"engines": {
+		"node": ">=22"
+	}
 }
