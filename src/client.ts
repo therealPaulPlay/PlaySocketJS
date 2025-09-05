@@ -4,6 +4,7 @@
 
 import { decode, encode } from '@msgpack/msgpack';
 import CRDTManager, { type Operation, type PropertyUpdateData, type State } from './crdtManager.ts';
+import type { KeysWhereValueIsArray } from './SharedTypes.ts';
 
 const ERROR_PREFIX = 'PlaySocket error: ';
 const WARNING_PREFIX = 'PlaySocket warning: ';
@@ -559,7 +560,3 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 		return this.#id;
 	}
 }
-
-type KeysWhereValueIsArray<T> = {
-	[K in keyof T]: T[K] extends unknown[] ? K : never;
-}[keyof T];

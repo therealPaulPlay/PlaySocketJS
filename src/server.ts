@@ -5,6 +5,7 @@ import { decode, encode } from '@msgpack/msgpack';
 import CRDTManager, { type Operation, type PropertyUpdateData } from './crdtManager.ts';
 import type { Buffer } from 'node:buffer';
 import { clearTimeout, setTimeout } from 'node:timers';
+import type { KeysWhereValueIsArray } from './SharedTypes.ts';
 
 type HttpServer = Server;
 type Room<T extends Record<string, unknown>> = {
@@ -565,11 +566,15 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
 
     /**
      * Update a value in a room's storage
-     * @param key - Storage key
-     * @param value - New value or value to operate on
      * @param updateValue - New value for update-matching
      */
-    updateRoomStorage(roomId: string, key: keyof T, type: Operation['data']['type'], value: unknown, updateValue?: unknown): void {
+    updateRoomStorage<K extends KeysWhereValueIsArray<T>, V extends Extract<T[K], unknown[]>, Op extends Operation['data']['type']>(
+        roomId: string,
+        key: Op extends 'set' ? keyof T : K,
+        type: Op,
+        value: Op extends 'set' ? T : V[number],
+        updateValue?: unknown
+    ): void {
         if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
         if (roomId in this.#rooms) {
             const room = this.#rooms[roomId]!;
