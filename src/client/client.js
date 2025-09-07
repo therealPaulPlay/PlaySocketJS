@@ -61,11 +61,13 @@ export default class PlaySocket {
 
     /**
      * Helper to create timeout promises for create room, join room etc.
+     * @param {string} name - Name of the timeout
+     * @returns {Promise} - Promise that rejects after the timeout
      * @private
      */
-    #createTimeout(operation) {
+    #createTimeout(name) {
         return new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${operation} timed out`)), TIMEOUT_MS)
+            setTimeout(() => reject(new Error(`${name} timed out`)), TIMEOUT_MS)
         );
     }
 
@@ -76,13 +78,18 @@ export default class PlaySocket {
      */
     onEvent(event, callback) {
         const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"];
-        if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
+        if (!validEvents.includes(event)) {
+            console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
+            return;
+        };
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
     }
 
     /**
      * Trigger an event to registered callbacks
+     * @param {string} event - Event name
+     * @param {...*} args - Arguments
      * @private
      */
     #triggerEvent(event, ...args) {
@@ -314,7 +321,8 @@ export default class PlaySocket {
         this.#reconnectCount++;
         if (this.#reconnectCount > 9) {
             this.#triggerEvent("error", "Disconnected from server.");
-            return this.destroy();
+            this.destroy();
+            return;
         }
 
         this.#triggerEvent("status", `Attempting to reconnect... (${this.#reconnectCount})`);
@@ -322,7 +330,7 @@ export default class PlaySocket {
         try {
             await this.#connect();
             await Promise.race([
-                new Promise(async (resolve, reject) => {
+                new Promise((resolve, reject) => {
                     this.#pendingReconnect = { resolve, reject };
                     this.#sendToServer({
                         type: 'reconnect',
@@ -355,11 +363,13 @@ export default class PlaySocket {
 
     /**
      * Send a message to the server
+     * @param {object} data - The data to send to the server
      * @private
      */
     #sendToServer(data) {
         if (!this.#socket || this.#socket?.readyState !== WebSocket.OPEN) {
-            return console.warn(WARNING_PREFIX + "Cannot send message - not connected.");
+            console.warn(WARNING_PREFIX + "Cannot send message - not connected.");
+            return;
         }
         try {
             this.#socket.send(encode(data));
@@ -400,7 +410,7 @@ export default class PlaySocket {
     /**
      * Join an existing room
      * @param {string} roomId - ID of the room
-     * @returns {Promise} Resolves when connected
+     * @returns {Promise} - Resolves when connected
      */
     async joinRoom(roomId) {
         if (!this.#initialized) {
@@ -433,7 +443,10 @@ export default class PlaySocket {
      * @param {*} updateValue - New value for update-matching
      */
     updateStorage(key, type, value, updateValue) {
-        if (!this.#inRoom) return this.#triggerEvent("error", "Cannot update storage when not in a room.");
+        if (!this.#inRoom) {
+            this.#triggerEvent("error", "Cannot update storage when not in a room.");
+            return;
+        };
         if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
         const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
         this.#sendToServer({

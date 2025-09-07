@@ -1,6 +1,6 @@
 {
   "name": "playsocketjs",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
   "type": "module",
   "module": "dist/playsocket-client.js",
@@ -9,18 +9,17 @@
       "import": "./dist/playsocket-client.js"
     },
     "./server": {
-      "import": "./dist/playsocket-server.mjs",
-      "require": "./dist/playsocket-server.cjs"
+      "import": "./dist/playsocket-server.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "start": "node example/example-server.cjs",
-    "start-module": "node example/example-server.mjs",
+    "start": "node example/example-server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rollup -c rollup.config.mjs"
+    "build": "rollup -c rollup.config.js",
+    "lint": "eslint ./src"
   },
   "repository": {
     "type": "git",
@@ -28,11 +27,10 @@
   },
   "keywords": [
     "WebSocket",
-    "data channel",
+    "Data channel",
     "Socket",
-    "PlayPeerJS",
-    "multiplayer",
-    "game"
+    "Multiplayer",
+    "Game"
   ],
   "author": "PaulPlay",
   "license": "MIT",
@@ -41,9 +39,11 @@
   },
   "homepage": "https://github.com/therealPaulPlay/PlaySocketJS#readme",
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^16.0.0",
-    "rollup": "^4.31.0"
+    "eslint": "^9.35.0",
+    "eslint-plugin-jsdoc": "^54.4.0",
+    "rollup": "^4.31.0",
+    "globals": "^16.3.0"
   },
   "peerDependencies": {
     "ws": "^8.18.1"

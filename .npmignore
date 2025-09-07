@@ -2,4 +2,6 @@ resources/
 src/
 example/
 .github/
-rollup.config.mjs
+rollup.config.js
+eslint.config.js
+prettier.config.js

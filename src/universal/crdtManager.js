@@ -2,13 +2,15 @@
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
+/**
+ * CRDT Manager
+ */
 export default class CRDTManager {
     // Storage
     #replicaId;
     #keyOperations = new Map();
     #vectorClock = new Map();
 
-    // Local only
     #propertyStore = {}; // Current local values per key, as object
     #lastPropertyStore = {}; // Last property store to compare against
 
@@ -21,6 +23,7 @@ export default class CRDTManager {
 
     /**
      * Create a new instance
+     * @param {boolean} [debug=false] - Enable debug logging
      */
     constructor(debug) {
         if (debug) this.#debug = true;
@@ -30,7 +33,7 @@ export default class CRDTManager {
 
     /**
      * Import the entire state of the CRDT manager (this overwrites the old state)
-     * @param {Object} state
+     * @param {object} state - Full state of the CRDT manager
      */
     importState(state) {
         try {
@@ -47,7 +50,7 @@ export default class CRDTManager {
             if (!this.#vectorClock.has(this.#replicaId)) this.#vectorClock.set(this.#replicaId, 0); // Add own vector clock if it wasn't present in the imported state
 
             // Map all operation uuids to current timestamp
-            this.#keyOperations.forEach((value, key) => {
+            this.#keyOperations.forEach((value, _key) => {
                 value?.forEach((operation) => {
                     this.#opUuidTimestamp.set(operation?.uuid, Date.now());
                 })
@@ -63,7 +66,7 @@ export default class CRDTManager {
 
     /**
      * Import property update
-     * @param {Object} data - Data to import
+     * @param {object} data - Property update data
      */
     importPropertyUpdate(data) {
         try {
@@ -105,11 +108,11 @@ export default class CRDTManager {
 
     /**
      * Update a property
-     * @param {string} key 
-     * @param {string} type 
-     * @param {*} value 
-     * @param {*} updateValue 
-     * @returns {Object} - Returns the property update
+     * @param {string} key - Storage key
+     * @param {string} type - Operation type
+     * @param {*} value - New value, or value to match
+     * @param {*} updateValue - New value for 'matching' operations
+     * @returns {object | undefined} - Returns the property update
      */
     updateProperty(key, type, value, updateValue) {
         try {
@@ -146,6 +149,9 @@ export default class CRDTManager {
         }
     }
 
+    /**
+     * Check if garbage collected can be performed & run it
+     */
     #checkGarbageCollection() {
         const MIN_GC_DELAY = 1000; // Minimum 1s delay between garbage collection runs
         const MIN_AGE_FOR_GC = 5000; // Garbage collect ops that are older than 5s
@@ -171,7 +177,7 @@ export default class CRDTManager {
                     if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
                     const retainOps = operations.slice(-retainCount); // Newest ops
                     const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
-                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
+                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite
 
                     // Calculate the value at the point where retained operations start
                     let baselineValue = null;
@@ -202,9 +208,9 @@ export default class CRDTManager {
 
     /**
      * Create an operation object
-     * @param {Object} data 
-     * @param {Array} vectorClock 
-     * @returns {Object} - Operation object
+     * @param {object} data - Operation data, consists of type, value and updateValue
+     * @param {Array} vectorClock - Vector clock of the replica/client
+     * @returns {object} - Operation object
      */
     #createOperation(data, vectorClock) {
         const newOperation = {
@@ -219,7 +225,7 @@ export default class CRDTManager {
 
     /**
      * Process a property's value by applying all operations and set it in the property store
-     * @param {string} key 
+     * @param {string} key - Storage key
      */
     #processLocalProperty(key) {
         try {
@@ -246,8 +252,8 @@ export default class CRDTManager {
     }
 
     /**
-     * Sort by vector clock (causal order)
-     * @param {Array} operations
+     * Sort operations by vector clock (causal order)
+     * @param {Array} operations - Full operations that include vector clocks, data and a source
      * @returns {Array} - Sorted operations
      */
     #sortByVectorClock(operations) {
@@ -283,10 +289,10 @@ export default class CRDTManager {
 
     /**
      * Handle an operation
-     * @param {*} curValue 
-     * @param {string} type 
-     * @param {*} value 
-     * @param {*} [updateValue]
+     * @param {*} curValue - Current value of the storage key
+     * @param {string} type - Operation type
+     * @param {*} value - New value, or value to match
+     * @param {*} [updateValue] - New value for 'matching' operations
      * @returns {*} - Value after the operation
      */
     #handleOperation(curValue, type, value, updateValue) {
@@ -318,10 +324,11 @@ export default class CRDTManager {
                     case 'array-remove-matching':
                         curValue = curValue.filter(item => !compare(item));
                         break;
-                    case 'array-update-matching':
+                    case 'array-update-matching': {
                         const index = curValue.findIndex(compare);
                         if (index !== -1) curValue[index] = updateValue;
                         break;
+                    }
                 }
             }
 
@@ -335,42 +342,53 @@ export default class CRDTManager {
 
     /**
      * Remove HTML to prevent XSS and enforce size limits
-     * @param {Object} obj
-     * @returns {Object} - Sanitized object
+     * @param {*} value - Value to sanitize
+     * @returns {*} - Sanitized value
      */
-    #sanitizeValue(obj) {
+    #sanitizeValue(value) {
         // Check total serialized size
-        const jsonString = JSON.stringify(obj);
+        const jsonString = JSON.stringify(value);
         if (jsonString?.length > 50000) throw new Error('Value too large!'); // 50KB limit
 
-        if (typeof obj === 'string') return (obj.includes('<') || obj.includes('>')) ? obj.replace(/[<>]/g, '') : obj;
-        if (Array.isArray(obj)) return obj.map(item => this.#sanitizeValue(item));
-        if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, this.#sanitizeValue(v)]));
-        return obj;
+        if (typeof value === 'string') return (value.includes('<') || value.includes('>')) ? value.replace(/[<>]/g, '') : value;
+        if (Array.isArray(value)) return value.map(item => this.#sanitizeValue(item));
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+        return value;
     }
 
-    // Get property store
+    /**
+     * Get property store
+     * @returns {Record<string, any>} - Object with key value pairs
+     */
     get getPropertyStore() {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
             console.error(CONSOLE_PREFIX + "Failed to parse property store")
-            return {};
+            return {}
         }
     }
 
-    // Check for changes in the local property store
+    /**
+     * Check for changes in the local property store
+     * @returns {boolean} - Check if any values changed going from the last to the current property update
+     */
     get didPropertiesChange() {
         try {
             if (JSON.stringify(this.#propertyStore) !== JSON.stringify(this.#lastPropertyStore)) {
                 this.#lastPropertyStore = structuredClone(this.#propertyStore);
                 return true;
             }
-        } catch { }
+        } catch {
+            console.error(CONSOLE_PREFIX + "Failed to stringify and compare property stores")
+        }
         return false;
     }
 
-    // Get state (can be imported using importState, converts the maps to arrays for serialization)
+    /**
+     * Export state (can be imported using importState, converts the maps to arrays for serialization)
+     * @returns {object} - State
+     */
     get getState() {
         return {
             keyOperations: [...this.#keyOperations.entries()],
