@@ -99,7 +99,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 - `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID. The room participant maximum is 100
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
-- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared storage (max. 100 keys). Safely update arrays in storage by adding, removing, or updating items. UpdateValue is only required for the 'array-update-matching' operation type
+- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement. 
 - `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the `requestReceived` server event)
 - `onEvent(event: string, callback: Function)`: Register an event callback
 
@@ -212,7 +212,7 @@ Creates a new PlaySocket Server instance with configuration options.
 - `kick(clientId: string, reason?: string)`: Kick a client by their clientID – this will close their connection and set an error message
 - `onEvent(event: string, callback: Function)`: Register a server-side event callback
 - `getRoomStorage(roomId: string)`: Get a snapshot of the current room storage (returns storage `object`)
-- `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update the shared room storage from the server.
+- `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update a key in the shared room storage from the server.
 
 #### Event types
 
