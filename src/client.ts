@@ -63,7 +63,7 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 	#callbacks = new Map<keyof EventCallbacks<T>, Function[]>(); // Event callbacks
 
 	// Async server operations
-	#pendingJoin: { resolve: (value?: unknown) => void; reject: (error?: Error) => void } | undefined;
+	#pendingJoin: { resolve: (value?: never) => void; reject: (error?: Error) => void } | undefined;
 	#pendingCreate: { resolve: (roomId?: string) => void; reject: (error?: Error) => void } | undefined;
 	#pendingRegistration: { resolve: (id?: string) => void; reject: (error?: Error) => void } | undefined;
 	#pendingConnect: { reject: (error?: Error) => void } | null = null;
@@ -93,9 +93,11 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 
 	/**
 	 * Helper to create timeout promises for create room, join room etc.
+	 * @param name - Name of the timeout
+     * @returns Promise that always rejects after the timeout
 	 */
-	#createTimeout(operation: string) {
-		return new Promise((_, reject) => setTimeout(() => reject(new Error(`${operation} timed out`)), TIMEOUT_MS));
+	#createTimeout(name: string): Promise<never> {
+		return new Promise((_, reject) => setTimeout(() => reject(new Error(`${name} timed out`)), TIMEOUT_MS));
 	}
 
 	/**
@@ -104,13 +106,15 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 	 */
 	onEvent<K extends keyof EventCallbacks<T>>(event: K, callback: EventCallbacks<T>[K]): void {
 		const validEvents = ['status', 'error', 'instanceDestroyed', 'storageUpdated', 'hostMigrated', 'clientConnected', 'clientDisconnected'];
-		if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
+		if (!validEvents.includes(event))
+			return console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
 		if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
 		this.#callbacks.get(event)!.push(callback);
 	}
 
 	/**
 	 * Trigger an event to registered callbacks
+	 * @param args - Arguments to pass to the callback
 	 */
 	#triggerEvent<K extends keyof EventCallbacks<T>>(event: K, ...args: Parameters<EventCallbacks<T>[K]>) {
 		const callbacks = this.#callbacks.get(event);
@@ -416,7 +420,7 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 	 * @param maxSize - Max number of participants
 	 * @returns Resolves with room ID
 	 */
-	createRoom(initialStorage: T | undefined = {} as T, maxSize: number): Promise<string> {
+	createRoom(initialStorage: Partial<T> | undefined = {}, maxSize: number): Promise<string> {
 		if (!this.#initialized) {
 			this.#triggerEvent('error', new Error('Cannot create room - not initialized'));
 			return Promise.reject(new Error('Not initialized'));
@@ -478,7 +482,7 @@ export default class PlaySocket<T extends Record<string, unknown>> {
 	updateStorage<K extends KeysWhereValueIsArray<T>, V extends Extract<T[K], unknown[]>, Op extends Operation['data']['type']>(
 		key: Op extends 'set' ? keyof T : K,
 		type: Op,
-		value: Op extends 'set' ? T : V[number],
+		value: Op extends 'set' ? T[keyof T] : V[number],
 		updateValue?: Operation['data']['updateValue']
 	): void {
 		if (!this.#inRoom) return this.#triggerEvent('error', new Error('Cannot update storage when not in a room.'));

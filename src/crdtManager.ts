@@ -3,7 +3,7 @@
 const CONSOLE_PREFIX = 'PlaySocket CRDT manager: ';
 
 export type Operation = {
-	vectorClock: VectorClock;
+	vectorClock: [string, number][]; // Replace with VectorClock type?
 	source: string;
 	uuid: string;
 	data: {
@@ -16,7 +16,7 @@ type VectorClock = Map<string, number>;
 export type PropertyUpdateData<T> = {
 	key: keyof T;
 	operation: Operation;
-	vectorClock: VectorClock;
+	vectorClock: [string, number][]; // Replace with VectorClock type?
 };
 
 export type State<T> = {
@@ -24,13 +24,13 @@ export type State<T> = {
 	vectorClock: VectorClock;
 };
 
+// CRDT Manager class
 export default class CRDTManager<T extends Record<string, unknown> = Record<string, unknown>> {
 	// Storage
 	#replicaId: string;
 	#keyOperations: State<T>['keyOperations'] = new Map();
 	#vectorClock: State<T>['vectorClock'] = new Map();
 
-	// Local only
 	#propertyStore = {} as T;
 	#lastPropertyStore = {} as T;
 
@@ -49,10 +49,10 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 	}
 
 	/** Import the entire state of the CRDT manager (this overwrites the old state) */
-	importState(state: State<T>): void {
+	importState(fullState: State<T>): void {
 		try {
-			const { keyOperations, vectorClock } = state;
-			if (this.#debug) console.log(CONSOLE_PREFIX + 'Importing state:', state);
+			const { keyOperations, vectorClock } = fullState;
+			if (this.#debug) console.log(CONSOLE_PREFIX + 'Importing state:', fullState);
 
 			// Resets
 			this.#opUuidTimestamp.clear();
@@ -79,7 +79,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 
 	/**
 	 * Import property update
-	 * @param data - Data to import
+	 * @param data - Property update data
 	 */
 	importPropertyUpdate(data: PropertyUpdateData<T>): void {
 		try {
@@ -120,6 +120,8 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 
 	/**
 	 * Update a property
+	 * @param value - New value, or value to match for matching operations
+	 * @param updateValue - New value to set ONLY when using update-matching operation
 	 * @returns Returns the property update
 	 */
 	updateProperty(key: keyof T, type: Operation['data']['type'], value: unknown, updateValue?: unknown): PropertyUpdateData<T> | undefined {
@@ -157,6 +159,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 		}
 	}
 
+	// Check if garbage collected can be performed & run it
 	#checkGarbageCollection() {
 		const MIN_GC_DELAY = 1000; // Minimum 1s delay between garbage collection runs
 		const MIN_AGE_FOR_GC = 5000; // Garbage collect ops that are older than 5s
@@ -287,9 +290,10 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 
 	/**
 	 * Handle an operation
+	 * @param [updateValue] - New value for ONLY for 'matching' operations
 	 * @returns - Value after the operation
 	 */
-	#handleOperation(curValue: unknown, type: Operation['data']['type'], value: Operation['data']['value'], updateValue?: Operation['data']['updateValue']) {
+	#handleOperation(curValue: unknown, type: Operation['data']['type'], value: Operation['data']['value'], updateValue?: Operation['data']['updateValue']): unknown {
 		try {
 			// Deep copy to avoid reference issues in case value is or contains object(s)
 			curValue = structuredClone(curValue);
@@ -341,17 +345,17 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 	 * Remove HTML to prevent XSS and enforce size limits
 	 * @returns Sanitized object
 	 */
-	#sanitizeValue(obj: string | unknown[] | unknown): typeof obj {
+	#sanitizeValue(value: string | unknown[] | unknown): typeof value {
 		// Check total serialized size
-		const jsonString = JSON.stringify(obj);
+		const jsonString = JSON.stringify(value);
 		if (jsonString?.length > 50000) throw new Error('Value too large!'); // 50KB limit
 
-		if (typeof obj === 'string') return (obj.includes('<') || obj.includes('>')) ? obj.replace(/[<>]/g, '') : obj;
-		if (Array.isArray(obj)) return obj.map((item) => this.#sanitizeValue(item));
-		if (obj && typeof obj === 'object') {
-			return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+		if (typeof value === 'string') return (value.includes('<') || value.includes('>')) ? value.replace(/[<>]/g, '') : value;
+		if (Array.isArray(value)) return value.map((item) => this.#sanitizeValue(item));
+		if (value && typeof value === 'object') {
+			return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
 		}
-		return obj;
+		return value;
 	}
 
 	// Get property store
@@ -364,7 +368,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 		}
 	}
 
-	// Check for changes in the local property store
+	// Check for changes in the local property store from last property update
 	get didPropertiesChange(): boolean {
 		try {
 			if (JSON.stringify(this.#propertyStore) !== JSON.stringify(this.#lastPropertyStore)) {
@@ -376,7 +380,7 @@ export default class CRDTManager<T extends Record<string, unknown> = Record<stri
 	}
 
 	// Get state (can be imported using importState, converts the maps to arrays for serialization)
-	get getState(): State<T> {
+	get getState(): {vectorClock: [string, number][]; keyOperations: [keyof T, Operation[]][]} { // Replace with State<T> type?
 		return {
 			keyOperations: [...this.#keyOperations.entries()],
 			vectorClock: [...this.#vectorClock.entries()]

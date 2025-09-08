@@ -1,13 +1,11 @@
-import type WebSocket from 'ws';
-import { WebSocketServer } from 'ws';
-import { createServer, type Server } from 'node:http';
+import { WebSocketServer, type WebSocket } from 'ws';
+import { createServer, type Server as HttpServer } from 'node:http';
 import { decode, encode } from '@msgpack/msgpack';
 import CRDTManager, { type Operation, type PropertyUpdateData } from './crdtManager.ts';
 import type { Buffer } from 'node:buffer';
 import { clearTimeout, setTimeout } from 'node:timers';
 import type { KeysWhereValueIsArray } from './SharedTypes.ts';
 
-type HttpServer = Server;
 type Room<T extends Record<string, unknown>> = {
     participants: string[];
     host: string;
@@ -30,6 +28,8 @@ type WebSocketExtension = {
     isTerminating?: boolean;
 };
 
+type MessageType = "register" | "reconnect" | "create_room" | "join_room" | "update_property" | "request" | "disconnect";
+
 type EventHandler<T> = {
     'clientRegistered': (clientId: string, customData: unknown) => void;
     'clientRegistrationRequested': (
@@ -43,10 +43,10 @@ type EventHandler<T> = {
     'roomCreationRequested': (
         data: { roomId: string; clientId: string; initialStorage: T }
     ) => T | boolean | Promise<T | boolean>;
-    'requestReceived': (data: { roomId: string | null; clientId: string; name: string; data: object }) => void;
+    'requestReceived': (data: { roomId: string | null; clientId: string; name: string; data: unknown }) => void;
     'storageUpdated': (data: { roomId: string; clientId: string | null; update: object; storage: T }) => void;
     'storageUpdateRequested': (
-        data: { roomId: string; clientId: string; update: object }
+        data: { roomId: string | undefined; clientId: string; update: object }
     ) => boolean | Promise<boolean>;
     'roomDestroyed': (roomId: string) => void;
 };
@@ -100,7 +100,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
             ws.on('pong', () => {
                 ws.isAlive = true;
             });
-            ws.on('message', (msg: ArrayBuffer | Buffer) => this.#handleMessage(ws, msg));
+            ws.on('message', (msg: Buffer) => this.#handleMessage(ws, msg));
             ws.on('close', () => this.#handleDisconnection(ws));
             ws.on('error', (error) => {
                 console.error(`PlaySocket WebSocket connection error for client ${ws.clientId ?? 'unknown'}:`, error); // Catch conn errors
@@ -125,11 +125,11 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
     /**
      * Handle WebSocket message
      */
-    async #handleMessage(ws: WebSocket & WebSocketExtension, message: ArrayBuffer | Buffer) {
+    async #handleMessage(ws: WebSocket & WebSocketExtension, message: Buffer) {
         if (ws.isTerminating) return;
         try {
             type Data = {
-                type: string;
+                type: MessageType;
                 id: string;
                 customData?: unknown;
                 sessionToken?: string;
@@ -137,7 +137,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
                 size?: number;
                 initialStorage: T;
                 update?: PropertyUpdateData<T>;
-                request: { name: string; data: object };
+                request: { name: string; data: unknown };
             };
             const data = decode(message) as Data;
 
@@ -344,27 +344,27 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
                 } break;
 
                 case "update_property": {
-                    const updateRoomId = this.#clientRooms.get(ws.clientId);
-                    const updateRoom = updateRoomId ? this.#rooms[updateRoomId] : null;
+                    const roomId = this.#clientRooms.get(ws.clientId);
+                    const room = roomId ? this.#rooms[roomId] : null;
 
-                    if (updateRoom && data.update) {
+                    if (room && data.update) {
                         // Check if update is allowed via event callback (provide clone to ensure update integrity)
-                        const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId: updateRoomId!, clientId: ws.clientId, update: structuredClone(data.update) });
+                        const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update) });
                         if (updateAllowed === false) {
                             ws.send(encode({
                                 type: 'property_update_rejected',
-                                state: updateRoom.crdtManager.getState
+                                state: room.crdtManager.getState
                             }), { binary: true });
                             return;
                         }
 
-                        updateRoom.crdtManager.importPropertyUpdate(data.update); // Import update into server state
+                        room.crdtManager.importPropertyUpdate(data.update); // Import update into server state
 
                         // Increment version for this room
-                        const currentVersion = this.#roomVersions.get(updateRoomId!)! + 1;
-                        this.#roomVersions.set(updateRoomId!, currentVersion);
+                        const currentVersion = this.#roomVersions.get(roomId!)! + 1;
+                        this.#roomVersions.set(roomId!, currentVersion);
 
-                        updateRoom.participants?.forEach((p) => {
+                        room.participants?.forEach((p) => {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(encode({
@@ -375,15 +375,15 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
                             }
                         });
 
-                        this.#triggerEvent("storageUpdated", { roomId: updateRoomId!, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(updateRoomId!)! });
+                        this.#triggerEvent("storageUpdated", { roomId: roomId!, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId!)! });
                         if (this.#debug) console.log("Property update received and imported:", data.update);
                     }
                 } break;
 
                 case "request": {
                     if (!ws.clientId) return;
-                    const requestorRoomId = this.#clientRooms.get(ws.clientId) ?? null;
-                    this.#triggerEvent("requestReceived", { roomId: requestorRoomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
+                    const roomId = this.#clientRooms.get(ws.clientId) ?? null;
+                    this.#triggerEvent("requestReceived", { roomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
                 } break;
 
                 case "disconnect": {
@@ -407,6 +407,8 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
     /**
      * If the client that disconnected (and is now in the reconnection-phase) was the room host,
      * pick a new room host immediately to avoid host-less phase (in case important logic is attached to the host)
+     * @param roomId - ID of the room that the disconnected client was in
+     * @param clientId - ID of the disconnected client
      */
     #changeHostIfDisconnected(roomId: string, clientId: string) {
         const room = this.#rooms[roomId];
@@ -432,8 +434,13 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
         return token;
     }
 
-    /** Check rate limit using token bucket algorithm */
-    #checkRateLimit(connectionId: string, operationType: string): boolean {
+    /**
+     * Check rate limit using token bucket algorithm
+     * @param connectionId - Random connection UUID which is different from the client ID
+     * @param actionType - A string describing the action
+     * @returns Whether or not the action can be allowed, false means limited
+     */
+    #checkRateLimit(connectionId: string, actionType: MessageType): boolean {
         const now = Date.now();
 
         if (!this.#rateLimits.has(connectionId)) {
@@ -449,7 +456,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
             limit.lastReset = now;
         }
 
-        const pointCost = operationType == 'create_room' ? 5 : 1;
+        const pointCost = actionType == 'create_room' ? 5 : 1;
         if (limit.points < pointCost) return false;
 
         limit.points -= pointCost;
@@ -540,7 +547,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
     /**
      * Trigger an event to registered callbacks
      */
-    async #triggerEvent<K extends keyof EventHandler<T>>(event: K, ...args: Parameters<EventHandler<T>[K]>) {
+    async #triggerEvent<K extends keyof EventHandler<T>>(event: K, ...args: Parameters<EventHandler<T>[K]>): Promise<undefined | ReturnType<EventHandler<T>[K]> | true> {
         const callbacks = this.#callbacks.get(event);
         if (!callbacks) return;
 
@@ -572,7 +579,7 @@ export default class PlaySocketServer<T extends Record<string, unknown> = Record
         roomId: string,
         key: Op extends 'set' ? keyof T : K,
         type: Op,
-        value: Op extends 'set' ? T : V[number],
+        value: Op extends 'set' ? T[keyof T] : V[number],
         updateValue?: Operation['data']['updateValue']
     ): void {
         if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${String(key)}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
