@@ -315,7 +315,7 @@ export default class PlaySocketServer {
 
                     if (room && data.update) {
                         // Check if update is allowed via event callback (provide clone to ensure update integrity)
-                        const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update) });
+                        const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId) });
                         if (updateAllowed === false) {
                             ws.send(encode({
                                 type: 'property_update_rejected',
