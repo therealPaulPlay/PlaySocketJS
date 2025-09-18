@@ -236,7 +236,7 @@ export default class PlaySocket {
                     case 'room_created':
                         if (this.#pendingCreate) {
                             this.#inRoom = true;
-                            this.#triggerEvent("status", `Room created with max. size ${message.size}.`);
+                            this.#triggerEvent("status", `Room created.`);
                             this.#crdtManager.importState(message.state);
                             this.#triggerEvent("storageUpdated", this.getStorage);
                             this.#pendingCreate.resolve(message.roomId);
@@ -265,11 +265,6 @@ export default class PlaySocket {
                         this.#triggerEvent("error", "Property update rejected. Re-syncing state.");
                         this.#crdtManager.importState(message.state);
                         this.#triggerEvent("storageUpdated", this.getStorage);
-                        break;
-
-                    case 'server_stopped':
-                        this.#triggerEvent("error", "Server restart.");
-                        this.destroy();
                         break;
 
                     case 'kicked':
@@ -382,10 +377,10 @@ export default class PlaySocket {
     /**
      * Create a new room and become host
      * @param {object} initialStorage - Initial state
-     * @param {number} maxSize - Max number of participants
+     * @param {number} size - Max number of participants
      * @returns {Promise} Resolves with room ID
      */
-    async createRoom(initialStorage = {}, maxSize) {
+    async createRoom(initialStorage = {}, size) {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Cannot create room - not initialized");
             return Promise.reject(new Error("Not initialized"));
@@ -398,7 +393,7 @@ export default class PlaySocket {
                 this.#sendToServer({
                     type: 'create_room',
                     initialStorage,
-                    size: maxSize
+                    size
                 });
             }),
             this.#createTimeout("Room creation")

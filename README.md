@@ -96,7 +96,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 ### Methods
 
 - `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's ID
-- `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID. The room participant maximum is 100
+- `createRoom(initialStorage?: object, size?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID. The room participant maximum is 100
 - `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
 - `destroy()`: Use this to leave a room and close the connection
 - `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement. 
@@ -213,6 +213,8 @@ Creates a new PlaySocket Server instance with configuration options.
 - `onEvent(event: string, callback: Function)`: Register a server-side event callback
 - `getRoomStorage(roomId: string)`: Get a snapshot of the current room storage (returns storage `object`)
 - `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update a key in the shared room storage from the server.
+- `createRoom(initialStorage?: object, size?: number, host?: string)`: Create a room (returns `object` containing room ID and state) – Rooms created with a non-player host like "server" (default) will not be deleted when the last participant leaves
+- `destroyRoom(roomId: string)`: Destroy a room & kick all participants
 
 #### Event types
 
@@ -223,7 +225,7 @@ Creates a new PlaySocket Server instance with configuration options.
 - `clientJoinRequested`: Client requests to join a room (returns the client's ID `string`, room ID `string`) – return `false` or a rejection reason `string` to block them from joining
 - `roomCreated`: Client created a room (returns room ID `string`)
 - `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room ID `string`)
-- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string`, room ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead. If you return `false`, the creation will be denied
+- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead. If you return `false`, the creation will be denied
 - `storageUpdated`: Room storage property updated (returns `object` containing the ID of the client who requested the update `string`, room ID `string`, the update `object`, and the storage `object`)
 - `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's ID `string`, room ID `string`, the update `object`, and the current storage `object` that hasn't been updated yet) – if you return `false` in the callback, the update will be blocked
 - `requestReceived`: Request from client was received by the server (returns `object` containing client's ID `string`, if in room – room ID `string`, request name `string` and optional passed data of type `any`)

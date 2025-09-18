@@ -107,7 +107,7 @@ export default class PlaySocketServer {
                 if (!ws.isTerminating) {
                     ws.isTerminating = true; // Prevent multiple terminate calls (it is async)
                     ws.terminate();
-                    console.error(`Connection ${ws.connectionId} terminated due to rate limit violations.`);
+                    console.error(`PlaySocket connection ${ws.connectionId} terminated due to rate limit violations.`);
                     return;
                 }
             }
@@ -115,7 +115,7 @@ export default class PlaySocketServer {
             switch (data.type) {
                 case 'register': {
                     // Register client ID if provided & check for a duplicate
-                    if (data.id && this.#clients.get(data.id)) {
+                    if (data.id && (this.#clients.get(data.id) || data.id === "server")) {
                         ws.send(encode({ type: 'registration_failed', reason: 'ID is taken.' }), { binary: true });
                         return;
                     }
@@ -196,8 +196,6 @@ export default class PlaySocketServer {
                 case 'create_room': {
                     if (!ws.clientId) return;
 
-                    let newRoomId;
-
                     if (this.#clientRooms.get(ws.clientId)) {
                         ws.send(encode({
                             type: 'room_creation_failed',
@@ -206,24 +204,8 @@ export default class PlaySocketServer {
                         return;
                     }
 
-                    // Generate room ID
-                    for (let i = 0; i < 50; i++) {
-                        const id = this.#generateId();
-                        if (!this.#rooms[id]) {
-                            newRoomId = id;
-                            break;
-                        }
-                    }
-
-                    if (!newRoomId) {
-                        ws.send(encode({ type: 'room_creation_failed', reason: 'No available ID found.' }), { binary: true });
-                        throw new Error('Failed to generate unique room ID!');
-                    }
-
-                    const roomCrdtManager = new CRDTManager(this.#debug); // Create the room's crdt manager
-
                     // Event callback with potential initial storage modifications
-                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { roomId: newRoomId, clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
+                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
                     if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
                     if (reviewedStorage === false) {
                         ws.send(encode({
@@ -233,33 +215,21 @@ export default class PlaySocketServer {
                         return;
                     }
 
-                    // Check if client/creator is still connected
+                    // Check if client/creator is still connected - abort if not
                     if (!this.#clients.has(ws.clientId)) {
                         if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);
-                        return; // Abort room creation if client is no longer connected
+                        return;
                     }
 
-                    // Load initial storage if provided
-                    if (data.initialStorage) {
-                        Object.entries(data.initialStorage)?.forEach(([key, value]) => {
-                            roomCrdtManager.updateProperty(key, "set", value);
-                        });
+                    try {
+                        const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId);
+                        this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
+                        this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
+                        ws.send(encode({ type: 'room_created', state: newRoom.state, roomId: newRoom.id }), { binary: true });
+                    } catch (error) {
+                        console.error("PlaySocket error creating room:", error);
+                        ws.send(encode({ type: 'room_creation_failed', reason: error.message }), { binary: true });
                     }
-
-                    // Create room
-                    const maxSize = Math.min(Number(data.size), 100) || 100; // Max. limit is 100 clients / room
-                    this.#roomVersions.set(newRoomId, 0); // Start with version 0
-                    this.#rooms[newRoomId] = {
-                        participants: [ws.clientId],
-                        host: ws.clientId,
-                        maxSize,
-                        crdtManager: roomCrdtManager
-                    };
-                    this.#clientRooms.set(ws.clientId, newRoomId); // Add client to the room
-
-                    ws.send(encode({ type: 'room_created', state: roomCrdtManager.getState, roomId: newRoomId, size: maxSize }), { binary: true });
-                    this.#triggerEvent("roomCreated", newRoomId);
-                    if (this.#debug) console.log(`Room ${newRoomId} created with initial storage:`, data.initialStorage);
                     break;
                 }
 
@@ -278,7 +248,7 @@ export default class PlaySocketServer {
 
                     if (!room) return rejectJoin("Room not found.");
                     if (this.#clientRooms.get(ws.clientId)) return rejectJoin("Already in a room.");
-                    if (room.participants.length >= room.maxSize) return rejectJoin("Room full.");
+                    if (room.participants.length >= room.size) return rejectJoin("Room full.");
 
                     room.participants.push(ws.clientId);
                     this.#clientRooms.set(ws.clientId, roomId);
@@ -360,7 +330,7 @@ export default class PlaySocketServer {
                     break;
             }
         } catch (error) {
-            console.error('Error in message handler:', error);
+            console.error('PlaySocket error in message handler:', error);
         }
     }
 
@@ -479,11 +449,8 @@ export default class PlaySocketServer {
             room.participants = room.participants.filter(p => p !== ws.clientId); // Remove client from room
             this.#clientRooms.delete(ws.clientId);
 
-            if (room.participants?.length === 0) {
-                delete this.#rooms[roomId]; // Delete room if now empty
-                this.#roomVersions.delete(roomId); // Delete room version
-                this.#triggerEvent("roomDestroyed", roomId);
-                if (this.#debug) console.log("Deleted room with id " + roomId + ".");
+            if (room.participants?.length === 0 && room.host !== "server") {
+                this.destroyRoom(roomId) // Destroy room if now empty & not created by server
                 roomId = null; // If room was destroyed, set roomId to null
             } else {
                 // Notify remaining participants
@@ -593,15 +560,71 @@ export default class PlaySocketServer {
     }
 
     /**
+     * Create a room from the server
+     * @param {object} [initialStorage] - Optional initial storage object
+     * @param {number} [size] - Max. room size, up to 100 (defaults to 100)
+     * @param {string} [host] - Host ID, defaults to "server" (when set to "server", room will not be deleted if all clients leave)
+     * @returns {object} - Object containing room state and room ID
+     */
+    createRoom(initialStorage, size, host = "server") {
+        let newRoomId;
+
+        for (let i = 0; i < 100; i++) {
+            const id = this.#generateId();
+            if (!this.#rooms[id]) {
+                newRoomId = id;
+                break;
+            }
+        }
+
+        if (!newRoomId) throw new Error("No available ID found.")
+        const roomCrdtManager = new CRDTManager(this.#debug);
+
+        if (initialStorage) Object.entries(initialStorage)?.forEach(([key, value]) => {
+            roomCrdtManager.updateProperty(key, "set", value);
+        });
+
+        this.#roomVersions.set(newRoomId, 0);
+        this.#rooms[newRoomId] = {
+            participants: [],
+            host,
+            size: Math.min(Number(size), 100) || 100,
+            crdtManager: roomCrdtManager
+        };
+
+        this.#triggerEvent("roomCreated", newRoomId);
+        if (this.#debug) console.log(`Room ${newRoomId} created with initial storage:`, initialStorage);
+        return { state: roomCrdtManager.getState, id: newRoomId };
+    }
+
+    /**
+     * Destroy a room
+     * @param {string} roomId - Room ID
+     */
+    destroyRoom(roomId) {
+        const room = this.#rooms[roomId];
+        if (!room) return; // Return if room does not exist
+
+        // Disconnect participants if still in room
+        const participants = room.participants;
+        participants.forEach((clientId) => {
+            this.kick(clientId, "Room destroyed by server.");
+        });
+
+        // Delete the room
+        delete this.#rooms[roomId];
+        this.#roomVersions.delete(roomId); // Delete room version (used to ensure all clients are up-2-date)
+        this.#triggerEvent("roomDestroyed", roomId);
+        if (this.#debug) console.log("Deleted room with id " + roomId + ".");
+    }
+
+    /**
      * Close all client connections, then close the websocket and http server
      */
     stop() {
         clearInterval(this.#heartbeatInterval);
         if (this.#wss) {
-            this.#clients.forEach(client => {
-                client.send(encode({ type: 'server_stopped' }), { binary: true });
-                client.close();
-            });
+            this.#clients.forEach((client, clientId) => this.kick(clientId, "Server restart."));
             this.#wss.close();
         }
         if (this.#server && this.#ownsServer) this.#server.close(() => { console.log('PlaySocket server stopped.'); });
