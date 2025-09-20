@@ -206,25 +206,16 @@ export default class PlaySocketServer {
                         return;
                     }
 
-                    // Event callback with potential initial storage modifications
-                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
-                    if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
-                    if (reviewedStorage === false) {
-                        ws.send(encode({
-                            type: 'room_creation_failed',
-                            reason: 'Room creation denied.'
-                        }), { binary: true });
-                        return;
-                    }
-
-                    // Check if client/creator is still connected - abort if not
-                    if (!this.#clients.has(ws.clientId)) {
-                        if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);
-                        return;
-                    }
-
                     try {
-                        const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId);
+                        const newRoom = await this.createRoom(data.initialStorage, data.size, ws.clientId);
+
+                        // Check if client/creator is still connected - abort if not
+                        if (!this.#clients.has(ws.clientId)) {
+                            this.destroyRoom(newRoom.id);
+                            if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);
+                            return;
+                        }
+
                         this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
                         this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
                         ws.send(encode({ type: 'room_created', state: newRoom.state, roomId: newRoom.id }), { binary: true });
@@ -563,12 +554,18 @@ export default class PlaySocketServer {
 
     /**
      * Create a room from the server
+     * @async
      * @param {object} [initialStorage] - Optional initial storage object
      * @param {number} [size] - Max. room size, up to 500
      * @param {string} [host] - Host ID, defaults to "server" (when set to "server", room will not be deleted if all clients leave)
-     * @returns {object} Object containing room state and room ID
+     * @returns {Promise<object>} Object containing room state and room ID
      */
-    createRoom(initialStorage, size, host = "server") {
+    async createRoom(initialStorage, size, host = "server") {
+        // Event callback with potential initial storage modifications
+        const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: host, initialStorage: structuredClone({ ...initialStorage }) });
+        if (typeof reviewedStorage === 'object') initialStorage = reviewedStorage;
+        if (reviewedStorage === false) throw new Error("Room creation denied.");
+
         let newRoomId;
 
         for (let i = 0; i < 100; i++) {
