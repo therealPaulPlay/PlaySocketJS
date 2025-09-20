@@ -102,7 +102,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 |--------|------------|-------------|-------------|
 | `init()` | - | `Promise<string>` | Initialize the WebSocket connection – Returns Promise which resolves with the client's ID |
 | `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room and become host – Returns Promise which resolves with the room ID. The room participant maximum is 100 |
-| `joinRoom()` | `hostId: string` | `Promise<void>` | Join an existing room |
+| `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room |
 | `destroy()` | - | `void` | Use this to leave a room and close the connection |
 | `updateStorage()` | `key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement |
 | `sendRequest()` | `name: string, data?: any` | `void` | Send requests to the server with optional custom data (handle these in the `requestReceived` server event) |
@@ -116,7 +116,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `error` | `error: string` | Error events |
 | `instanceDestroyed` | - | Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects |
 | `storageUpdated` | `storage: object` | Storage state changes |
-| `hostMigrated` | `hostId: string` | Host changes |
+| `hostMigrated` | `roomId: string` | Host changes |
 | `clientConnected` | `clientId: string` | New client connected to the room |
 | `clientDisconnected` | `clientId: string, roomId?: string` | Client disconnected from the room |
 
