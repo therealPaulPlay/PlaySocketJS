@@ -5,6 +5,8 @@ import CRDTManager from '../universal/crdtManager';
 
 /* eslint-disable jsdoc/require-returns */
 
+const MAX_ROOM_SIZE = 500;
+
 /**
  * @typedef {import('node:http').Server} HttpServer
  * @typedef {import('ws').WebSocket} WebSocket
@@ -562,9 +564,9 @@ export default class PlaySocketServer {
     /**
      * Create a room from the server
      * @param {object} [initialStorage] - Optional initial storage object
-     * @param {number} [size] - Max. room size, up to 100 (defaults to 100)
+     * @param {number} [size] - Max. room size, up to 500
      * @param {string} [host] - Host ID, defaults to "server" (when set to "server", room will not be deleted if all clients leave)
-     * @returns {object} - Object containing room state and room ID
+     * @returns {object} Object containing room state and room ID
      */
     createRoom(initialStorage, size, host = "server") {
         let newRoomId;
@@ -588,7 +590,7 @@ export default class PlaySocketServer {
         this.#rooms[newRoomId] = {
             participants: [],
             host,
-            size: Math.min(Number(size), 100) || 100,
+            size: Math.min(Number(size), MAX_ROOM_SIZE) || MAX_ROOM_SIZE,
             crdtManager: roomCrdtManager
         };
 
