@@ -7,7 +7,7 @@ A reactive, optimistic WebSocket library that simplifies game & app development 
 PlaySocket eliminates the traditional complexity of collaborative experiences:
 
 - **Streamlined architecture**: No additional backend code is required, but server-authoritative behavior supported
-- **State synchronization**: Built-in storage system keeps the full state synchronized across all clients, always conflict-free and in order
+- **State synchronization**: Built-in storage system keeps the full state synchronized across all clients, always conflict-free and in order
 - **Resilient & secure connections**: Automatic reconnection handling & strict rate-limiting
 - **Lightweight**: Uses WebSockets for efficient, predictable, reliable communication and has little dependencies
 
@@ -19,7 +19,7 @@ npm install playsocketjs
 
 ## Usage examples
 
-Note that in production, you should **always try...catch** promises, such as socket.init() – they can reject!
+Note that in production, you should **always try...catch** promises, such as socket.init() – they can reject!
 
 Initializing the client:
 ```javascript
@@ -89,36 +89,45 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 ```
 
 #### Configuration options
-- `endpoint`: WebSocket server endpoint (e.g., 'wss://example.com/socket')
-- `customData`: You can pass arbitrary data to the "clientRegistered" server event (optional)
-- `debug`: Set this property to true to enable extra logging
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `endpoint` | string | `none - set this!` | WebSocket server endpoint (e.g., 'wss://example.com/socket') |
+| `customData` | object | `{}` | Arbitrary data to pass to the "clientRegistered" server event (optional) |
+| `debug` | boolean | `false` | Set to true to enable extra logging |
 
 ### Methods
 
-- `init()`: Initialize the WebSocket connection – Returns Promise (async) which resolves with the client's ID
-- `createRoom(initialStorage?: object, size?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the room ID. The room participant maximum is 100
-- `joinRoom(hostId: string)`: Join an existing room – Returns Promise (async)
-- `destroy()`: Use this to leave a room and close the connection
-- `updateStorage(key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement. 
-- `sendRequest(name: string, data?: any)`: Send requests to the server with optional custom data (handle these in the `requestReceived` server event)
-- `onEvent(event: string, callback: Function)`: Register an event callback
+| Method | Parameters | Return type | Description |
+|--------|------------|-------------|-------------|
+| `init()` | - | `Promise<string>` | Initialize the WebSocket connection – Returns Promise which resolves with the client's ID |
+| `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room and become host – Returns Promise which resolves with the room ID. The room participant maximum is 100 |
+| `joinRoom()` | `hostId: string` | `Promise<void>` | Join an existing room |
+| `destroy()` | - | `void` | Use this to leave a room and close the connection |
+| `updateStorage()` | `key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement |
+| `sendRequest()` | `name: string, data?: any` | `void` | Send requests to the server with optional custom data (handle these in the `requestReceived` server event) |
+| `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback |
 
-#### Event types
+### Event types
 
-- `status`: Connection status updates (returns status `string`)
-- `error`: Error events (returns error `string`)
-- `instanceDestroyed`: Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects
-- `storageUpdated`: Storage state changes (returns storage `object`)
-- `hostMigrated`: Host changes (returns the new host's ID `string`)
-- `clientConnected`: New client connected to the room (returns client's ID `string`)
-- `clientDisconnected`: Client disconnected from the room (returns client's ID `string`, room ID (if available) `string`)
+| Event | Callback parameter | Description |
+|-------|-------------------|-------------|
+| `status` | `status: string` | Connection status updates |
+| `error` | `error: string` | Error events |
+| `instanceDestroyed` | - | Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects |
+| `storageUpdated` | `storage: object` | Storage state changes |
+| `hostMigrated` | `hostId: string` | Host changes |
+| `clientConnected` | `clientId: string` | New client connected to the room |
+| `clientDisconnected` | `clientId: string, roomId?: string` | Client disconnected from the room |
 
 ### Properties (Read-only)
 
-- `id`: Client's unique identifier on the WebSocket server
-- `isHost`: If this user is currently assigned the host role
-- `connectionCount`: Number of active client connections in room (without yourself)
-- `getStorage`: Retrieve storage object
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Client's unique identifier on the WebSocket server |
+| `isHost` | boolean | If this user is currently assigned the host role |
+| `connectionCount` | number | Number of active client connections in room (without yourself) |
+| `getStorage` | object | Retrieve storage object |
 
 &nbsp;
 
@@ -192,47 +201,55 @@ process.on('SIGTERM', shutdown);
 
 ### Constructor
 
+Creates a new PlaySocket Server instance with configuration options.
+
 ```javascript
 new PlaySocket(options: PlaySocketServerOptions)
 ```
 
-Creates a new PlaySocket Server instance with configuration options.
-
 ### Configuration options
 
-- `port`: Port to listen on (default: 3000, used only if no server provided)
-- `path`: WebSocket endpoint path (default: '/')
-- `server`: Existing http server (optional)
-- `rateLimit`: Adjust the messages/second rate limit (defaults to 20)
-- `debug`: Set this property to true to enable extra logging
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `port` | number | 3000 | Port to listen on (used only if no server provided) |
+| `path` | string | '/' | WebSocket endpoint path |
+| `server` | http.Server | - | Existing http server (optional) |
+| `rateLimit` | number | 20 | Adjust the messages/second rate limit |
+| `debug` | boolean | false | Set to true to enable extra logging |
 
 ### Methods
 
-- `stop`: Closes all active client connections, the websocket server and the underlying http server if it's standalone
-- `kick(clientId: string, reason?: string)`: Kick a client by their clientID – this will close their connection and set an error message
-- `onEvent(event: string, callback: Function)`: Register a server-side event callback
-- `getRoomStorage(roomId: string)`: Get a snapshot of the current room storage (returns storage `object`)
-- `updateRoomStorage(roomId: string, key: string, type: 'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching', value: any, updateValue?: any)`: Update a key in the shared room storage from the server.
-- `createRoom(initialStorage?: object, size?: number, host?: string)`: Create a room (returns `object` containing room ID and state) – Rooms created with a non-player host like "server" (default) will not be deleted when the last participant leaves
-- `destroyRoom(roomId: string)`: Destroy a room & kick all participants
+| Method | Parameters | Return Type | Description |
+|--------|------------|-------------|-------------|
+| `stop()` | - | `void` | Closes all active client connections, the websocket server and the underlying http server if it's standalone |
+| `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their clientID – this will close their connection and set an error message |
+| `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
+| `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
+| `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared room storage from the server |
+| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state) – Rooms created with a non-player host like "server" (default) will not be deleted when the last participant leaves |
+| `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants |
 
-#### Event types
+### Event types
 
-- `clientRegistered`: Client registered with the server (returns the client's ID `string`, customData `object`)
-- `clientRegistrationRequested`: Client requests to register (returns the client's ID `string`, customData `object`) – return `false` or a rejection reason `string` to block the registration
-- `clientDisconnected`: Client disconnected from the server (returns the client's ID `string`)
-- `clientJoinedRoom`: Client joined a room – note that clients can only leave by disconnecting (returns the client's ID `string`, room ID `string`)
-- `clientJoinRequested`: Client requests to join a room (returns the client's ID `string`, room ID `string`) – return `false` or a rejection reason `string` to block them from joining
-- `roomCreated`: Client created a room (returns room ID `string`)
-- `roomDestroyed`: Room was destroyed, this happens when all participants leave (returns room ID `string`)
-- `roomCreationRequested`: Room creation requested by client (returns `object` containing the client's ID `string` and the initialStorage `object`) – if you return an `object` in the callback, it will take that as the initial storage instead. If you return `false`, the creation will be denied
-- `storageUpdated`: Room storage property updated (returns `object` containing the ID of the client who requested the update `string`, room ID `string`, the update `object`, and the storage `object`)
-- `storageUpdateRequested`: Room storage property update requested by client (returns `object` containing the client's ID `string`, room ID `string`, the update `object`, and the current storage `object` that hasn't been updated yet) – if you return `false` in the callback, the update will be blocked
-- `requestReceived`: Request from client was received by the server (returns `object` containing client's ID `string`, if in room – room ID `string`, request name `string` and optional passed data of type `any`)
+| Event | Callback parameters | Description | Return for action |
+|-------|-------------------|-------------|--------------|
+| `clientRegistered` | `clientId: string, customData: object` | Client registered with the server | - |
+| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requests to register | Return `false` or rejection reason `string` to block |
+| `clientDisconnected` | `clientId: string` | Client disconnected from the server | - |
+| `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room (clients can only leave by disconnecting) | - |
+| `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room | Return `false` or rejection reason `string` to block |
+| `roomCreated` | `roomId: string` | Client created a room | - |
+| `roomDestroyed` | `roomId: string` | Room was destroyed (happens when all participants leave) | - |
+| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Room creation requested by client | Return `object` to override initial storage, `false` to deny |
+| `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage property updated | - |
+| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage property update requested by client | Return `false` to block the update |
+| `requestReceived` | `{clientId: string, roomId?: string, requestName: string, data?: any}` | Request from client was received by the server | - |
 
 ### Properties (Read-only)
 
-- `getRooms`: Retrieve the rooms object
+| Property | Type | Description |
+|----------|------|-------------|
+| `getRooms` | object | Retrieve the rooms object |
 
 # License
 
