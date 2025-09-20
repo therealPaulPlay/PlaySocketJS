@@ -77,7 +77,7 @@ Sending traditional requests to the server:
 socket.sendRequest('chosen-request-name', { fact: "You can build server-authoritative logic using this!" })
 ```
 
-## API Reference
+## API reference
 
 ### Constructor
 
@@ -197,7 +197,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
 
-## API Reference
+## API reference
 
 ### Constructor
 
@@ -219,7 +219,7 @@ new PlaySocket(options: PlaySocketServerOptions)
 
 ### Methods
 
-| Method | Parameters | Return Type | Description |
+| Method | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
 | `stop()` | - | `void` | Closes all active client connections, the websocket server and the underlying http server if it's standalone |
 | `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their clientID – this will close their connection and set an error message |
