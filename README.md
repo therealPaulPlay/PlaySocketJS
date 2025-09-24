@@ -226,7 +226,7 @@ new PlaySocket(options: PlaySocketServerOptions)
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
 | `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared room storage from the server |
-| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `Promise<object>` | Create a room (returns object containing room ID and state) – Rooms created with a non-player host like "server" (default) will not be deleted when the last participant leaves |
+| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state) – Rooms created with a non-player host like "server" (default) will not be deleted when the last participant leaves |
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants |
 
 ### Event types
