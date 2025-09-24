@@ -207,7 +207,12 @@ export default class PlaySocketServer {
                     }
 
                     try {
-                        const newRoom = await this.createRoom(data.initialStorage, data.size, ws.clientId);
+                        // Event callback with potential initial storage modifications
+                        const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
+                        if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
+                        if (reviewedStorage === false) throw new Error("Room creation request denied.");
+
+                        const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
 
                         // Check if client/creator is still connected - abort if not
                         if (!this.#clients.has(ws.clientId)) {
@@ -554,18 +559,12 @@ export default class PlaySocketServer {
 
     /**
      * Create a room from the server
-     * @async
      * @param {object} [initialStorage] - Optional initial storage object
      * @param {number} [size] - Max. room size, up to 500
      * @param {string} [host] - Host ID, defaults to "server" (when set to "server", room will not be deleted if all clients leave)
-     * @returns {Promise<object>} Object containing room state and room ID
+     * @returns {object} Object containing room state and room ID
      */
-    async createRoom(initialStorage, size, host = "server") {
-        // Event callback with potential initial storage modifications
-        const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: host, initialStorage: structuredClone({ ...initialStorage }) });
-        if (typeof reviewedStorage === 'object') initialStorage = reviewedStorage;
-        if (reviewedStorage === false) throw new Error("Room creation denied.");
-
+    createRoom(initialStorage, size, host = "server") {
         let newRoomId;
 
         for (let i = 0; i < 100; i++) {
