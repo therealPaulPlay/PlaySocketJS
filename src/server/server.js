@@ -179,6 +179,9 @@ export default class PlaySocketServer {
                         const formerRoomId = this.#clientRooms.get(data.id);
                         const formerRoom = this.#rooms[formerRoomId];
                         if (formerRoom) {
+                            // If the room has no host (they were the only one and disconnected), restore them as host
+                            if (formerRoom.host === null) formerRoom.host = data.id;
+
                             if (this.#debug) console.log(`State sent for reconnection for room ${formerRoomId}:`, formerRoom.crdtManager.getState);
                             roomData = {
                                 state: formerRoom.crdtManager.getState,
@@ -260,6 +263,17 @@ export default class PlaySocketServer {
                         host: room.host,
                         version: this.#roomVersions.get(roomId)
                     }), { binary: true });
+
+                    // If the room has no host (previous host disconnected and was the only participant), make joiner the host
+                    // Since the room had to be empty, only the joiner needs to be notified
+                    const becameHost = room.host === null;
+                    if (becameHost) {
+                        room.host = ws.clientId;
+                        ws.send(encode({
+                            type: 'host_migrated',
+                            newHost: room.host,
+                        }), { binary: true });
+                    }
 
                     // Notify existing participants
                     room.participants.forEach(p => {
@@ -349,18 +363,21 @@ export default class PlaySocketServer {
      */
     #changeHostIfDisconnected(roomId, clientId) {
         const room = this.#rooms[roomId];
-        if (room && room.host === clientId && room.participants.length > 1) {
+        if (room && room.host === clientId) {
             const participantsWithoutClient = room.participants.filter((e) => e !== clientId);
-            room.host = participantsWithoutClient[0]; // Set new host
 
-            // Inform all participants about the new host
-            participantsWithoutClient.forEach(p => {
-                const client = this.#clients.get(p);
-                if (client) client.send(encode({
-                    type: 'host_migrated',
-                    newHost: room.host,
-                }), { binary: true });
-            });
+            if (participantsWithoutClient.length >= 1) {
+                room.host = participantsWithoutClient[0]; // Set new host
+
+                // Inform all participants about the new host
+                participantsWithoutClient.forEach(p => {
+                    const client = this.#clients.get(p);
+                    if (client) client.send(encode({
+                        type: 'host_migrated',
+                        newHost: room.host,
+                    }), { binary: true });
+                });
+            } else room.host = null; // The next person to join will become the host
         }
     }
 
