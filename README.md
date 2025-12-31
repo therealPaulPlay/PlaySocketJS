@@ -226,7 +226,7 @@ new PlaySocket(options: PlaySocketServerOptions)
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
 | `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared room storage from the server |
-| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state) – Rooms created with a non-player host like "server" (default) will not be deleted when the last participant leaves |
+| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state)|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants |
 
 ### Event types
@@ -239,7 +239,7 @@ new PlaySocket(options: PlaySocketServerOptions)
 | `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room (clients can only leave by disconnecting) | - |
 | `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room | Return `false` or rejection reason `string` to block |
 | `roomCreated` | `roomId: string` | Client created a room | - |
-| `roomDestroyed` | `roomId: string` | Room was destroyed (happens when all participants leave) | - |
+| `roomDestroyed` | `roomId: string` | Room was destroyed (happens when all participants leave, unless room host is "server") | - |
 | `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Room creation requested by client | Return `object` to override initial storage, `false` to deny |
 | `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage property updated | - |
 | `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage property update requested by client | Return `false` to block the update |
