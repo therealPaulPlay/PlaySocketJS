@@ -216,6 +216,26 @@ new PlaySocket(options: PlaySocketServerOptions)
 | `server` | http.Server | - | Existing http server (optional) |
 | `rateLimit` | number | 20 | Adjust the messages/second rate limit |
 | `debug` | boolean | false | Set to true to enable extra logging |
+| `verifyClient` | function | - | Optional callback to verify connections before WebSocket upgrade |
+
+#### verifyClient callback
+
+The `verifyClient` option allows you to implement custom connection verification logic, such as rate limiting, before the WebSocket handshake completes.
+
+```javascript
+const server = new PlaySocketServer({
+    server: httpServer,
+    path: '/socket',
+    verifyClient: (info, callback) => {
+        // info.req - the HTTP request object, info.origin - the Origin header value
+        const ip = info.req.headers['x-forwarded-for'] || info.req.socket.remoteAddress;
+        if (isRateLimited(ip)) return callback(false, 429, 'Too Many Requests');
+        callback(true);
+    }
+});
+```
+
+The callback signature is `callback(verified, code?, message?)` where `code` and `message` are the optional HTTP response status for rejected connections.
 
 ### Methods
 

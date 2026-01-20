@@ -41,9 +41,10 @@ export default class PlaySocketServer {
      * @param {string} [options.path='/'] - WebSocket endpoint path
      * @param {boolean} [options.debug=false] - Enable debug logging
      * @param {number} [options.rateLimit=20] - Maximum number of operations per second per client
+     * @param {Function} [options.verifyClient] - Optional callback to verify client connections before upgrade. Receives (info, callback) where info contains { req, origin } and callback is (verified, code?, message?) => void
      */
     constructor(options = {}) {
-        const { server, port = 3000, path = '/', debug = false, rateLimit = 20 } = options;
+        const { server, port = 3000, path = '/', debug = false, rateLimit = 20, verifyClient } = options;
 
         if (debug) this.#debug = true; // Enable extra logging
 
@@ -63,7 +64,8 @@ export default class PlaySocketServer {
         // Create WebSocket server
         this.#wss = new WebSocketServer({
             server: this.#server,
-            path
+            path,
+            ...(verifyClient && { verifyClient })
         });
 
         // Set up ws event handlers
