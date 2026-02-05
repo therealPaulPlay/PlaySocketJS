@@ -2,6 +2,7 @@
  * Simple PlaySocket server for the chat example (ESM version). 
  * Ensure the dependencies are installed (see readme).
  */
+
 // Import the PlaySocketServer
 import PlaySocketServer from '../dist/playsocket-server.js';
 

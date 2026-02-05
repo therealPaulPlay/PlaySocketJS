@@ -1,9 +1,10 @@
-// Custom conflict-free replicated data type system with vector clocks
+import { HEARTBEAT_INTERVAL } from './constants.js';
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
 /**
  * CRDT Manager
+ * Custom conflict-free replicated data type system with vector clocks
  */
 export default class CRDTManager {
     // Storage
@@ -154,7 +155,6 @@ export default class CRDTManager {
      */
     #checkGarbageCollection() {
         const MIN_GC_DELAY = 1000; // Minimum 1s delay between garbage collection runs
-        const MIN_AGE_FOR_GC = 5000; // Garbage collect ops that are older than 5s
 
         try {
             if (Date.now() - this.#lastGCCheck < MIN_GC_DELAY) return;
@@ -166,7 +166,7 @@ export default class CRDTManager {
                 let retainCount = operations.length;
                 operations.forEach((op, index) => {
                     // Count how many ops, from last to latest, are older than the min-age in a row
-                    if (op.uuid && this.#opUuidTimestamp.has(op.uuid) && (Date.now() - this.#opUuidTimestamp.get(op.uuid)) > MIN_AGE_FOR_GC) {
+                    if (op.uuid && this.#opUuidTimestamp.has(op.uuid) && (Date.now() - this.#opUuidTimestamp.get(op.uuid)) > HEARTBEAT_INTERVAL) {
                         const removeCount = index + 1;
                         retainCount = operations.length - removeCount;
                         this.#opUuidTimestamp.delete(op.uuid); // Remove from timestamps if set to be deleted

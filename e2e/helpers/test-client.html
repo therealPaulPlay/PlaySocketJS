@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PlaySocket test client</title>
+</head>
+
+<body>
+    <script type="module">
+        import PlaySocket from '/dist/playsocket-client.js';
+
+        const clients = {};
+        const events = {};
+        const capturedSockets = {};
+        
+        let networkDown = false;
+
+        // Optionally intercept WebSocket for reconnection tests (?intercept-ws)
+        if (new URLSearchParams(location.search).has('intercept-ws')) {
+            const OriginalWebSocket = window.WebSocket;
+            window.WebSocket = class extends OriginalWebSocket {
+                constructor(...args) {
+                    if (networkDown) throw new Error('Network unreachable');
+                    super(...args);
+                    window.__latestSocket = this;
+                }
+            };
+        }
+
+        function trackEvents(id, client) {
+            events[id] = { status: [], error: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientConnected: [], clientDisconnected: [] };
+            client.onEvent('status', msg => events[id].status.push(msg));
+            client.onEvent('error', msg => events[id].error.push(msg));
+            client.onEvent('instanceDestroyed', () => events[id].instanceDestroyed.push(Date.now()));
+            client.onEvent('storageUpdated', storage => events[id].storageUpdated.push(storage));
+            client.onEvent('hostMigrated', newHost => events[id].hostMigrated.push(newHost));
+            client.onEvent('clientConnected', cid => events[id].clientConnected.push(cid));
+            client.onEvent('clientDisconnected', cid => events[id].clientDisconnected.push(cid));
+        }
+
+        window.initClient = async (id, wsUrl, customData) => {
+            const client = new PlaySocket(id || undefined, { endpoint: wsUrl, customData, debug: true });
+            const tempId = id || crypto.randomUUID(); // Track events with temp ID if using server-assigned one
+            trackEvents(tempId, client);
+
+            const assignedId = await client.init();
+            clients[assignedId] = client;
+            
+            // Move events from tempID to server-assigned ID if provided
+            if (tempId !== assignedId) { events[assignedId] = events[tempId]; delete events[tempId]; }
+            
+            capturedSockets[assignedId] = window.__latestSocket;
+            return assignedId;
+        };
+
+        // PlaySocket Client API passthrough
+        window.createRoom = async (id, ...args) => await clients[id].createRoom(args[0] || {}, args[1]);
+        window.joinRoom = async (id, ...args) => await clients[id].joinRoom(...args);
+        window.updateStorage = (id, ...args) => clients[id].updateStorage(...args);
+        window.sendRequest = (id, ...args) => clients[id].sendRequest(...args);
+        window.destroy = (id) => { clients[id]?.destroy(); delete clients[id]; };
+        window.getStorage = (id) => clients[id].getStorage;
+        window.isHost = (id) => clients[id].isHost;
+        window.getId = (id) => clients[id].id;
+        window.connectionCount = (id) => clients[id].connectionCount;
+        window.getEvents = (id) => events[id];
+        window.clearEvents = (id) => { for (const k of Object.keys(events[id])) events[id][k] = []; };
+        window.onEvent = (id, event, callback) => clients[id].onEvent(event, callback);
+
+        // Network simulation (only functional when ?intercept-ws is set)
+        window.simulateDisconnect = (id) => { if (capturedSockets[id]) capturedSockets[id].close(); };
+        window.blockNetwork = () => { networkDown = true; };
+        window.unblockNetwork = () => { networkDown = false; };
+
+        window.__ready = true;
+    </script>
+</body>
+
+</html>

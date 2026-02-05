@@ -2,10 +2,12 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { encode, decode } from '@msgpack/msgpack';
 import CRDTManager from '../universal/crdtManager';
+import { HEARTBEAT_INTERVAL } from '../universal/constants.js';
 
 /* eslint-disable jsdoc/require-returns */
 
 const MAX_ROOM_SIZE = 500;
+export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
 
 /**
  * @typedef {import('node:http').Server} HttpServer
@@ -92,7 +94,7 @@ export default class PlaySocketServer {
                 ws.isAlive = false;
                 ws.ping();
             });
-        }, 15000);
+        }, HEARTBEAT_INTERVAL);
     }
 
     /**
@@ -445,7 +447,7 @@ export default class PlaySocketServer {
                 this.#pendingDisconnects.set(ws.clientId, {
                     timeout: setTimeout(() => {
                         this.#disconnectClient(ws);
-                    }, 5000)
+                    }, RECONNECT_GRACE_PERIOD)
                 });
             }
         }

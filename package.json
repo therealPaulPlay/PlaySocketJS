@@ -17,7 +17,8 @@
   ],
   "scripts": {
     "start": "node example/example-server.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run build && npx playwright test --config e2e/playwright.config.js",
+    "test:headed": "npm run build && npx playwright test --config e2e/playwright.config.js --headed",
     "build": "rollup -c rollup.config.js",
     "lint": "eslint ./src"
   },
@@ -39,11 +40,12 @@
   },
   "homepage": "https://github.com/therealPaulPlay/PlaySocketJS#readme",
   "devDependencies": {
+    "@playwright/test": "^1.58.1",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "eslint": "^9.35.0",
     "eslint-plugin-jsdoc": "^54.4.0",
-    "rollup": "^4.31.0",
-    "globals": "^16.3.0"
+    "globals": "^16.3.0",
+    "rollup": "^4.31.0"
   },
   "peerDependencies": {
     "ws": "^8.18.1"
