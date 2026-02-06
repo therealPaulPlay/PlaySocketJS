@@ -86,7 +86,7 @@ test.describe('Server events', () => {
         await page.evaluate(({ wsUrl }) => window.initClient('rcc1', wsUrl), { wsUrl: ts.wsUrl });
 
         // Start room creation (will block in async callback) and immediately destroy
-        page.evaluate(() => window.createRoom('rcc1', {})).catch(() => {});
+        page.evaluate(() => window.createRoom('rcc1', {})).catch(() => { });
         await sleep(50);
         await page.evaluate(() => window.destroy('rcc1'));
 
@@ -239,16 +239,6 @@ test.describe('Server events', () => {
         ts.close();
     });
 
-    test('throwing inside server event handler is caught and does not crash server', async ({ page }) => {
-        const ts = await createTestServer({
-            eventHandlers: { clientRegistered: () => { throw new Error('Intentional test error'); } }
-        });
-        await openPage(page, ts.httpUrl, 'test-client.html');
-        const id = await page.evaluate(({ wsUrl }) => window.initClient('te1', wsUrl), { wsUrl: ts.wsUrl });
-        expect(id).toBe('te1');
-        ts.close();
-    });
-
     test('roomDestroyed fires when room auto-destroys and via destroyRoom', async ({ context }) => {
         const log = [];
         const ts = await createTestServer({
@@ -273,6 +263,16 @@ test.describe('Server events', () => {
         expect(ts.server.getRooms[room2.id]).toBeUndefined();
 
         await page.close();
+        ts.close();
+    });
+
+    test('throwing inside server event handler is caught and does not crash server', async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { clientRegistered: () => { throw new Error('Test error!'); } }
+        });
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        const id = await page.evaluate(({ wsUrl }) => window.initClient('te1', wsUrl), { wsUrl: ts.wsUrl });
+        expect(id).toBe('te1');
         ts.close();
     });
 });

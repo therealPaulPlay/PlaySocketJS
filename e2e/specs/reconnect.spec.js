@@ -177,4 +177,100 @@ test.describe('Reconnection', () => {
             return ev.instanceDestroyed.length > 0 && ev.error.some(e => e.includes('Disconnected from server'));
         }, null, { timeout: 20_000 });
     });
+
+    test('room version mismatch forces reconnect', async ({ context }) => {
+        // This tests that the client detects skipped updates via version tracking
+        // We need to observe the behavior when versions don't match
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, 'test-client.html?intercept-ws');
+        await openPage(p2, ts.httpUrl, 'test-client.html?intercept-ws');
+
+        await p1.evaluate(({ wsUrl }) => window.initClient('vm1', wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await p1.evaluate(() => window.createRoom('vm1', { counter: 0 }));
+        await p2.evaluate(({ wsUrl }) => window.initClient('vm2', wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ roomId }) => window.joinRoom('vm2', roomId), { roomId });
+        await p1.waitForFunction(() => window.connectionCount('vm1') === 1, null, { timeout: 2_000 });
+
+        // Rapid updates that might cause version issues
+        // Client 1 blocks network then client 2 makes updates
+        await p1.evaluate(() => window.simulateDisconnect('vm1'));
+
+        // While vm1 is disconnected, vm2 makes updates
+        for (let i = 0; i < 5; i++) {
+            await p2.evaluate(({ i }) => window.updateStorage('vm2', 'counter', 'set', i), { i });
+        }
+
+        // vm1 should reconnect and get the correct state
+        await p1.waitForFunction(() => {
+            const ev = window.getEvents('vm1');
+            return ev.status.some(s => s.includes('Reconnected'));
+        }, null, { timeout: 10_000 });
+
+        await p1.waitForFunction(() => window.getStorage('vm1')?.counter != null, null, { timeout: 2_000 });
+        const s1 = await p1.evaluate(() => window.getStorage('vm1'));
+        const s2 = await p2.evaluate(() => window.getStorage('vm2'));
+
+        // Both should have the same state after resync
+        expect(s1.counter).toBe(s2.counter);
+
+        await p1.close(); await p2.close();
+    });
+
+    // Host migration during reconnection --------------
+
+    test('client joins while host is reconnecting - new client becomes host, host reconnects, both should accept new client as host', async ({ context }) => {
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, 'test-client.html?intercept-ws');
+        await openPage(p2, ts.httpUrl, 'test-client.html');
+
+        // p1 creates room (becomes host), then disconnects non-willfully
+        await p1.evaluate(({ wsUrl }) => window.initClient('hmr1', wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await p1.evaluate(() => window.createRoom('hmr1', { data: 1 }));
+
+        // Block p1's network so it can't auto-reconnect before p2 joins
+        await p1.evaluate(() => {
+            window.blockNetwork();
+            window.simulateDisconnect('hmr1');
+        });
+        await sleep(200);
+
+        // p2 joins while p1 is in reconnect grace period — should become host
+        await p2.evaluate(({ wsUrl }) => window.initClient('hmr2', wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ roomId }) => window.joinRoom('hmr2', roomId), { roomId });
+        await p2.waitForFunction(() => window.isHost('hmr2') === true, null, { timeout: 2_000 });
+
+        // Unblock p1's network so it can reconnect
+        await p1.evaluate(() => window.unblockNetwork());
+
+        // Wait for p1 to reconnect
+        await p1.waitForFunction(() => {
+            const ev = window.getEvents('hmr1');
+            return ev.status.some(s => s.includes('Reconnected'));
+        }, null, { timeout: 10_000 });
+
+        // Both should agree that p2 is the host
+        expect(await p1.evaluate(() => window.isHost('hmr1'))).toBe(false);
+        expect(await p2.evaluate(() => window.isHost('hmr2'))).toBe(true);
+
+        await p1.close(); await p2.close();
+    });
+
+    test('host disconnects and reconnects as sole member - becomes host again', async ({ page }) => {
+        await openPage(page, ts.httpUrl, 'test-client.html?intercept-ws');
+        await page.evaluate(({ wsUrl }) => window.initClient('rch', wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom('rch', { val: 1 }));
+
+        expect(await page.evaluate(() => window.isHost('rch'))).toBe(true);
+
+        // Simulate disconnect (non-willful)
+        await page.evaluate(() => window.simulateDisconnect('rch'));
+
+        // Wait for reconnect
+        await page.waitForFunction(() => {
+            const ev = window.getEvents('rch');
+            return ev.status.some(s => s.includes('Reconnected'));
+        }, null, { timeout: 10_000 });
+
+        await page.waitForFunction(() => window.isHost('rch') === true, null, { timeout: 2_000 });
+    });
 });

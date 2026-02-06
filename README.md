@@ -92,20 +92,20 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `endpoint` | string | `none - set this!` | WebSocket server endpoint (e.g., 'wss://example.com/socket') |
-| `customData` | object | `{}` | Arbitrary data to pass to the "clientRegistered" server event (optional) |
+| `endpoint` | string | `undefined` | WebSocket server endpoint (e.g., 'wss://example.com/socket') (required) |
+| `customData` | object | `{}` | Arbitrary data to pass to the "clientRegistered" server event |
 | `debug` | boolean | `false` | Set to true to enable extra logging |
 
 ### Methods
 
 | Method | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
-| `init()` | - | `Promise<string>` | Initialize the WebSocket connection – Returns Promise which resolves with the client's ID |
-| `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room and become host – Returns Promise which resolves with the room ID. The room participant maximum is 100 |
+| `init()` | - | `Promise<string>` | Initialize the WebSocket connection – Returns a promise which resolves with the client's ID |
+| `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room and become host – Returns a promise which resolves with the room ID. The room participant maximum is 100 |
 | `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room |
 | `destroy()` | - | `void` | Use this to leave a room and close the connection |
 | `updateStorage()` | `key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement |
-| `sendRequest()` | `name: string, data?: any` | `void` | Send requests to the server with optional custom data (handle these in the `requestReceived` server event) |
+| `sendRequest()` | `name: string, data?: any` | `void` | Send requests to the server with optional custom data (handle them in the `requestReceived` server event) |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback |
 
 ### Event types
@@ -160,7 +160,7 @@ function shutdown() {
     process.exit(0);
 }
 
-// Handle both SIGINT (Ctrl+C) and SIGTERM (Docker stop)
+// Handle both SIGINT and SIGTERM
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
@@ -192,7 +192,7 @@ function shutdown() {
     process.exit(0);
 }
 
-// Handle both SIGINT (Ctrl+C) and SIGTERM (Docker stop)
+// Handle both SIGINT and SIGTERM
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```

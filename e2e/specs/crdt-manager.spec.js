@@ -4,7 +4,7 @@ import { HEARTBEAT_INTERVAL } from '../../src/universal/constants.js';
 
 test.describe('CRDTManager', () => {
 
-    test('updateProperty with set stores correct value', () => {
+    test('updateProperty with set operation', () => {
         const crdt = new CRDTManager();
         crdt.updateProperty('score', 'set', 42);
         expect(crdt.getPropertyStore.score).toBe(42);

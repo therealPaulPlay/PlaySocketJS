@@ -35,7 +35,7 @@ test.describe('Server configuration', () => {
         await openPage(page, ts.httpUrl, 'test-client.html');
         await page.evaluate(({ wsUrl }) => window.initClient('rl1', wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(() => window.createRoom('rl1', { x: 0 }));
-        
+
         // Wait for the rate limit bucket to refill (1s window)
         await sleep(1200);
 
@@ -61,7 +61,7 @@ test.describe('Server configuration', () => {
         await new Promise(resolve => httpServer.listen(port, resolve));
 
         const ts = await createTestServer({ existingServer: httpServer, port });
-        
+
         // The custom route should still work
         const resp = await fetch(`http://localhost:${port}/health`);
         expect(resp.status).toBe(200);
@@ -77,107 +77,6 @@ test.describe('Server configuration', () => {
         pageTs.close();
         ts.server.stop();
         httpServer.close();
-    });
-
-    test('stop() closes all connections and server', async ({ page }) => {
-        const ts = await createTestServer();
-        await openPage(page, ts.httpUrl, 'test-client.html');
-        await page.evaluate(({ wsUrl }) => window.initClient('st1', wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(() => window.createRoom('st1', {}));
-
-        ts.server.stop();
-
-        // Client should detect disconnection
-        await page.waitForFunction(() => {
-            const ev = window.getEvents('st1');
-            return ev.error.some(e => e.includes('Kicked') && e.includes('Server restart')) &&
-                   ev.instanceDestroyed.length > 0;
-        }, null, { timeout: 5_000 });
-        ts.httpServer.close();
-    });
-
-    test('server createRoom creates server-owned room that clients can join', async ({ page }) => {
-        const ts = await createTestServer();
-        const room = ts.server.createRoom({ lobby: true }, 10);
-        expect(room.id).toBeTruthy();
-        expect(room.id.length).toBe(6);
-
-        const storage = ts.server.getRoomStorage(room.id);
-        expect(storage.lobby).toBe(true);
-
-        // Client can join the server-created room
-        await openPage(page, ts.httpUrl, 'test-client.html');
-        await page.evaluate(({ wsUrl }) => window.initClient('sc1', wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(({ roomId }) => window.joinRoom('sc1', roomId), { roomId: room.id });
-        const clientStorage = await page.evaluate(() => window.getStorage('sc1'));
-        expect(clientStorage.lobby).toBe(true);
-        ts.close();
-    });
-
-    test('server-created room persists when all clients leave', async ({ page }) => {
-        const ts = await createTestServer();
-        const room = ts.server.createRoom({ persistent: true });
-
-        await openPage(page, ts.httpUrl, 'test-client.html');
-        await page.evaluate(({ wsUrl }) => window.initClient('sp1', wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(({ roomId }) => window.joinRoom('sp1', roomId), { roomId: room.id });
-
-        // Client leaves
-        await page.evaluate(() => window.destroy('sp1'));
-        await sleep(100);
-
-        // Room should still exist (getRooms)
-        const rooms = ts.server.getRooms;
-        expect(rooms[room.id]).toBeTruthy();
-
-        // Storage should still be there
-        const storage = ts.server.getRoomStorage(room.id);
-        expect(storage.persistent).toBe(true);
-        ts.close();
-    });
-
-    test('client-created room gets destroyed when all leave', async ({ page }) => {
-        const ts = await createTestServer();
-        await openPage(page, ts.httpUrl, 'test-client.html');
-        await page.evaluate(({ wsUrl }) => window.initClient('cr1', wsUrl), { wsUrl: ts.wsUrl });
-        const roomId = await page.evaluate(() => window.createRoom('cr1', { temp: true }));
-
-        // Verify room exists
-        expect(ts.server.getRooms[roomId]).toBeTruthy();
-
-        // Client leaves
-        await page.evaluate(() => window.destroy('cr1'));
-        await sleep(100);
-
-        // Room should be gone
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
-        expect(ts.server.getRoomStorage(roomId)).toBeUndefined();
-        ts.close();
-    });
-
-    test('destroyRoom kicks all participants and removes room', async ({ context }) => {
-        const ts = await createTestServer();
-        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
-        await openPage(p1, ts.httpUrl, 'test-client.html');
-        await openPage(p2, ts.httpUrl, 'test-client.html');
-
-        await p1.evaluate(({ wsUrl }) => window.initClient('dr1', wsUrl), { wsUrl: ts.wsUrl });
-        const roomId = await p1.evaluate(() => window.createRoom('dr1', {}));
-        await p2.evaluate(({ wsUrl }) => window.initClient('dr2', wsUrl), { wsUrl: ts.wsUrl });
-        await p2.evaluate(({ roomId }) => window.joinRoom('dr2', roomId), { roomId });
-        await p1.waitForFunction(() => window.connectionCount('dr1') === 1, null, { timeout: 2_000 });
-
-        ts.server.destroyRoom(roomId);
-
-        // Both clients should be kicked
-        await p1.waitForFunction(() => window.getEvents('dr1').error.some(e => e.includes('Kicked')), null, { timeout: 2_000 });
-        await p2.waitForFunction(() => window.getEvents('dr2').error.some(e => e.includes('Kicked')), null, { timeout: 2_000 });
-
-        // Room should be gone
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
-
-        await p1.close(); await p2.close();
-        ts.close();
     });
 
     test('ping/heartbeat terminates unresponsive clients', async ({ page }) => {

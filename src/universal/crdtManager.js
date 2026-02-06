@@ -12,7 +12,7 @@ export default class CRDTManager {
     #keyOperations = new Map();
     #vectorClock = new Map();
 
-    #propertyStore = {}; // Current local values per key, as object
+    #propertyStore = {}; // Current local values as key/value store object
     #lastPropertyStore = {}; // Last property store to compare against
 
     // Local Garbage Collection
