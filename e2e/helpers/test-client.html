@@ -28,9 +28,10 @@
         }
 
         function trackEvents(id, client) {
-            events[id] = { status: [], error: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientJoined: [], clientLeft: [] };
+            events[id] = { status: [], error: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientJoined: [], clientLeft: [], moved: [] };
             client.onEvent('status', msg => events[id].status.push(msg));
             client.onEvent('error', msg => events[id].error.push(msg));
+            client.onEvent('moved', roomId => events[id].moved.push(roomId));
             client.onEvent('instanceDestroyed', () => events[id].instanceDestroyed.push(Date.now()));
             client.onEvent('storageUpdated', storage => events[id].storageUpdated.push(storage));
             client.onEvent('hostMigrated', newHost => events[id].hostMigrated.push(newHost));
@@ -62,7 +63,7 @@
         window.storage = (id) => clients[id].storage;
         window.isHost = (id) => clients[id].isHost;
         window.getId = (id) => clients[id].id;
-        window.connectionCount = (id) => clients[id].connectionCount;
+        window.participantCount = (id) => clients[id].participantCount;
         window.getEvents = (id) => events[id];
         window.clearEvents = (id) => { for (const k of Object.keys(events[id])) events[id][k] = []; };
         window.onEvent = (id, event, callback) => clients[id].onEvent(event, callback);

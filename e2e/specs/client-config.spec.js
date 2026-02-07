@@ -5,7 +5,7 @@ import { openPage } from '../helpers/playwright-helpers.js';
 let ts;
 
 test.beforeAll(async () => { ts = await createTestServer(); });
-test.afterAll(async () => { ts.close(); });
+test.afterAll(() => { ts.close(); });
 
 test.describe('Client configuration', () => {
 

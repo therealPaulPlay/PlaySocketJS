@@ -360,7 +360,7 @@ export default class CRDTManager {
      * Get property store
      * @returns {Record<string, any>} - Object with key value pairs
      */
-    get getPropertyStore() {
+    get propertyStore() {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
@@ -389,7 +389,7 @@ export default class CRDTManager {
      * Export state (can be imported using importState, converts the maps to arrays for serialization)
      * @returns {object} - State
      */
-    get getState() {
+    get state() {
         return {
             keyOperations: [...this.#keyOperations.entries()],
             vectorClock: [...this.#vectorClock.entries()]

@@ -114,6 +114,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 |-------|-------------------|-------------|
 | `status` | `status: string` | Connection status updates |
 | `error` | `error: string` | Error events |
+| `moved` | `roomId: string` | Moved to different room |
 | `instanceDestroyed` | - | Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects |
 | `storageUpdated` | `storage: object` | Storage state changes |
 | `hostMigrated` | `roomId: string` | Host changes |
@@ -126,7 +127,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 |----------|------|-------------|
 | `id` | string | Client's unique identifier on the WebSocket server |
 | `isHost` | boolean | If this user is currently assigned the host role |
-| `connectionCount` | number | Number of active client connections in room (without yourself) |
+| `participantCount` | number | Number of active client connections in room (with yourself) |
 | `storage` | object | Retrieve storage object |
 
 &nbsp;
@@ -243,6 +244,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` and
 |--------|------------|-------------|-------------|
 | `stop()` | - | `void` | Closes all active client connections, the websocket server and the underlying http server if it's standalone |
 | `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their clientID – this will close their connection and set an error message |
+| `move()` | `clientId: string, roomId: string` | `void` | Move a client, that is already in a room, to a different room |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
 | `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared room storage from the server |

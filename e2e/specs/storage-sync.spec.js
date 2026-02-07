@@ -5,7 +5,7 @@ import { openPage } from '../helpers/playwright-helpers.js';
 let ts;
 
 test.beforeAll(async () => { ts = await createTestServer({ rateLimit: 50 }); });
-test.afterAll(async () => { ts.close(); });
+test.afterAll(() => { ts.close(); });
 
 test.describe('Storage sync', () => {
     let page1, page2, roomId;
@@ -27,7 +27,7 @@ test.describe('Storage sync', () => {
         // Store IDs for use in tests
         page1.__cid = id1;
         page2.__cid = id2;
-        await page1.waitForFunction(({ id }) => window.connectionCount(id) === 1, { id: id1 }, { timeout: 2_000 });
+        await page1.waitForFunction(({ id }) => window.participantCount(id) === 2, { id: id1 }, { timeout: 2_000 });
     });
 
     test.afterEach(async () => {
@@ -117,7 +117,7 @@ test.describe('Storage sync', () => {
         const newRoomId = await pages[0].evaluate(({ id }) => window.createRoom(id, { items: [] }), { id: ids[0] });
         await pages[1].evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: ids[1], roomId: newRoomId });
         await pages[2].evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: ids[2], roomId: newRoomId });
-        await pages[0].waitForFunction(({ id }) => window.connectionCount(id) === 2, { id: ids[0] }, { timeout: 2_000 });
+        await pages[0].waitForFunction(({ id }) => window.participantCount(id) === 3, { id: ids[0] }, { timeout: 2_000 });
 
         await pages[0].evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'fromA'), { id: ids[0] });
         await pages[1].evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'fromB'), { id: ids[1] });
@@ -150,7 +150,7 @@ test.describe('Storage sync', () => {
         const newRoomId = await p1.evaluate(() => window.createRoom('ra1', { nums: [] }));
         await p2.evaluate(({ wsUrl }) => window.initClient('ra2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('ra2', roomId), { roomId: newRoomId });
-        await p1.waitForFunction(() => window.connectionCount('ra1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('ra1') === 2, null, { timeout: 2_000 });
 
         // Both clients rapidly add items concurrently
         await Promise.all([
@@ -189,7 +189,7 @@ test.describe('Storage sync', () => {
         const newRoomId = await p1.evaluate(({ players }) => window.createRoom('au1', { players }), { players });
         await p2.evaluate(({ wsUrl }) => window.initClient('au2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('au2', roomId), { roomId: newRoomId });
-        await p1.waitForFunction(() => window.connectionCount('au1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('au1') === 2, null, { timeout: 2_000 });
 
         // Each client updates their own player score simultaneously
         await Promise.all([
@@ -227,7 +227,7 @@ test.describe('Storage sync', () => {
         const newRoomId = await p1.evaluate(() => window.createRoom('uu1', { tags: [] }));
         await p2.evaluate(({ wsUrl }) => window.initClient('uu2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('uu2', roomId), { roomId: newRoomId });
-        await p1.waitForFunction(() => window.connectionCount('uu1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('uu1') === 2, null, { timeout: 2_000 });
 
         // Both add same unique value + different ones
         await Promise.all([
@@ -271,7 +271,7 @@ test.describe('Storage sync', () => {
         const newRoomId = await p1.evaluate(({ s }) => window.createRoom('rp1', s), { s: initialStorage });
         await p2.evaluate(({ wsUrl }) => window.initClient('rp2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('rp2', roomId), { roomId: newRoomId });
-        await p1.waitForFunction(() => window.connectionCount('rp1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('rp1') === 2, null, { timeout: 2_000 });
 
         // Register reactive handlers: each client writes their score once when showResult becomes true
         await p1.evaluate(() => {
@@ -338,7 +338,7 @@ test.describe('Storage sync', () => {
         const newRoomId = await p1.evaluate(({ s }) => window.createRoom('mr1', s), { s: initialStorage });
         await p2.evaluate(({ wsUrl }) => window.initClient('mr2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('mr2', roomId), { roomId: newRoomId });
-        await p1.waitForFunction(() => window.connectionCount('mr1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('mr1') === 2, null, { timeout: 2_000 });
 
         // Both clients fire a mix of all operation types concurrently
         await Promise.all([

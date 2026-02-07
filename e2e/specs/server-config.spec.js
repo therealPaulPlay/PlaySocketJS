@@ -74,7 +74,7 @@ test.describe('Server configuration', () => {
         const id = await page.evaluate(({ wsUrl }) => window.initClient('es1', wsUrl), { wsUrl: ts.wsUrl });
         expect(id).toBe('es1');
 
-        pageTs.close();
+        await pageTs.close();
         ts.server.stop();
         httpServer.close();
     });
@@ -118,7 +118,7 @@ test.describe('Server configuration', () => {
             await pages[i].evaluate(({ wsUrl, id }) => window.initClient(id, wsUrl), { wsUrl: ts.wsUrl, id: 'ms' + i });
             await pages[i].evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: 'ms' + i, roomId });
         }
-        await pages[0].waitForFunction(() => window.connectionCount('ms0') === 3, null, { timeout: 2_000 });
+        await pages[0].waitForFunction(() => window.participantCount('ms0') === 4, null, { timeout: 2_000 });
 
         // 5th client should be rejected
         await pages[4].evaluate(({ wsUrl }) => window.initClient('ms4', wsUrl), { wsUrl: ts.wsUrl });

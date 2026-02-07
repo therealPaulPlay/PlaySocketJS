@@ -9,9 +9,9 @@ const PROJECT_ROOT = join(__dirname, '..', '..');
 
 const CONTENT_TYPES = { '.html': 'text/html', '.js': 'application/javascript' };
 
-let nextPort = 4000;
+let nextPort = 9000;
 
-/** @returns {number} Auto-incrementing port starting at 4000 */
+/** @returns {number} Auto-incrementing port */
 export function getNextPort() { return nextPort++; }
 
 /**

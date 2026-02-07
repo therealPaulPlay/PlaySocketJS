@@ -6,7 +6,7 @@ import { RECONNECT_GRACE_PERIOD } from '../../src/server/server.js';
 let ts;
 
 test.beforeAll(async () => { ts = await createTestServer(); });
-test.afterAll(async () => { ts.close(); });
+test.afterAll(() => { ts.close(); });
 
 test.describe('Reconnection', () => {
 
@@ -52,7 +52,7 @@ test.describe('Reconnection', () => {
         const roomId = await p1.evaluate(() => window.createRoom('rs1', { items: [] }));
         await p2.evaluate(({ wsUrl }) => window.initClient('rs2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('rs2', roomId), { roomId });
-        await p1.waitForFunction(() => window.connectionCount('rs1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('rs1') === 2, null, { timeout: 2_000 });
 
         // Client 1 disconnects
         await p1.evaluate(() => window.simulateDisconnect('rs1'));
@@ -164,7 +164,7 @@ test.describe('Reconnection', () => {
         });
 
         // Wait for grace period to expire
-        await sleep(RECONNECT_GRACE_PERIOD + 1000);
+        await sleep(RECONNECT_GRACE_PERIOD + 500);
 
         // Room should be destroyed on the server after grace period
         expect(ts.server.rooms[roomId]).toBeUndefined();
@@ -189,7 +189,7 @@ test.describe('Reconnection', () => {
         const roomId = await p1.evaluate(() => window.createRoom('vm1', { counter: 0 }));
         await p2.evaluate(({ wsUrl }) => window.initClient('vm2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('vm2', roomId), { roomId });
-        await p1.waitForFunction(() => window.connectionCount('vm1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('vm1') === 2, null, { timeout: 2_000 });
 
         // Rapid updates that might cause version issues
         // Client 1 blocks network then client 2 makes updates

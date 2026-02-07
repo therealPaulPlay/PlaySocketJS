@@ -5,7 +5,7 @@ import { openPage, sleep } from '../helpers/playwright-helpers.js';
 let ts;
 
 test.beforeAll(async () => { ts = await createTestServer(); });
-test.afterAll(async () => { ts.close(); });
+test.afterAll(() => { ts.close(); });
 
 test.describe('Client API', () => {
 
@@ -65,7 +65,7 @@ test.describe('Client API', () => {
         await page2.close();
     });
 
-    test('joinRoom receives initial storage and updates connection count', async ({ page, context }) => {
+    test('joinRoom receives initial storage and updates participant count', async ({ page, context }) => {
         await openPage(page, ts.httpUrl, 'test-client.html');
         const page2 = await context.newPage();
         await openPage(page2, ts.httpUrl, 'test-client.html');
@@ -79,8 +79,8 @@ test.describe('Client API', () => {
         const storage = await page2.evaluate(() => window.storage('j2'));
         expect(storage.msg).toBe('hello');
 
-        await page.waitForFunction(() => window.connectionCount('h2') === 1, null, { timeout: 2_000 });
-        expect(await page2.evaluate(() => window.connectionCount('j2'))).toBe(1);
+        await page.waitForFunction(() => window.participantCount('h2') === 2, null, { timeout: 2_000 });
+        expect(await page2.evaluate(() => window.participantCount('j2'))).toBe(2);
         await page2.close();
     });
 
@@ -109,19 +109,19 @@ test.describe('Client API', () => {
         // Check host getters
         expect(await page.evaluate(() => window.getId('get1'))).toBe('get1');
         expect(await page.evaluate(() => window.isHost('get1'))).toBe(true);
-        expect(await page.evaluate(() => window.connectionCount('get1'))).toBe(0);
+        expect(await page.evaluate(() => window.participantCount('get1'))).toBe(1);
         expect(await page.evaluate(() => window.storage('get1'))).toEqual({ val: 5 });
 
         // Join and check joiner getters
         await page2.evaluate(({ wsUrl }) => window.initClient('get2', wsUrl), { wsUrl: ts.wsUrl });
         await page2.evaluate(({ roomId }) => window.joinRoom('get2', roomId), { roomId });
-        await page.waitForFunction(() => window.connectionCount('get1') === 1, null, { timeout: 2_000 });
+        await page.waitForFunction(() => window.participantCount('get1') === 2, null, { timeout: 2_000 });
 
         expect(await page2.evaluate(() => window.getId('get2'))).toBe('get2');
         expect(await page2.evaluate(() => window.isHost('get2'))).toBe(false);
-        expect(await page2.evaluate(() => window.connectionCount('get2'))).toBe(1);
+        expect(await page2.evaluate(() => window.participantCount('get2'))).toBe(2);
         expect(await page2.evaluate(() => window.storage('get2'))).toEqual({ val: 5 });
-        expect(await page.evaluate(() => window.connectionCount('get1'))).toBe(1);
+        expect(await page.evaluate(() => window.participantCount('get1'))).toBe(2);
 
         await page2.close();
     });
@@ -138,7 +138,7 @@ test.describe('Client API', () => {
         const roomId = await page.evaluate(({ id }) => window.createRoom(id, { score: 0 }), { id: id1 });
         await page2.evaluate(({ id, wsUrl }) => window.initClient(id, wsUrl), { id: id2, wsUrl: ts.wsUrl });
         await page2.evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: id2, roomId });
-        await page.waitForFunction(({ id }) => window.connectionCount(id) === 1, { id: id1 }, { timeout: 2_000 });
+        await page.waitForFunction(({ id }) => window.participantCount(id) === 2, { id: id1 }, { timeout: 2_000 });
 
         await page.evaluate(({ id }) => window.updateStorage(id, 'score', 'set', 42), { id: id1 });
         await page2.waitForFunction(({ id }) => window.storage(id)?.score === 42, { id: id2 });
@@ -146,33 +146,6 @@ test.describe('Client API', () => {
         expect(s.score).toBe(42);
 
         await page2.close();
-    });
-
-    test('sendRequest delivers data to server', async ({ page }) => {
-        const requestLog = [];
-        const localTs = await createTestServer({
-            eventHandlers: {
-                requestReceived: ({ roomId, clientId, name, data }) => {
-                    requestLog.push({ roomId, clientId, name, data });
-                }
-            }
-        });
-
-        await openPage(page, localTs.httpUrl, 'test-client.html');
-        await page.evaluate(({ wsUrl }) => window.initClient('sr1', wsUrl), { wsUrl: localTs.wsUrl });
-        const roomId = await page.evaluate(() => window.createRoom('sr1', {}));
-
-        await page.evaluate(() => window.sendRequest('sr1', 'testAction', { foo: 'bar' }));
-        await sleep(100);
-
-        expect(requestLog.length).toBeGreaterThan(0);
-        const req = requestLog[requestLog.length - 1];
-        expect(req.name).toBe('testAction');
-        expect(req.data).toEqual({ foo: 'bar' });
-        expect(req.clientId).toBe('sr1');
-        expect(req.roomId).toBe(roomId);
-
-        localTs.close();
     });
 
     // Error cases ---------------------

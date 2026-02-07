@@ -189,6 +189,45 @@ test.describe('Server events', () => {
         ts.close();
     });
 
+    test('clientDisconnected fires when client disconnects', async ({ page }) => {
+        const log = [];
+        const ts = await createTestServer({
+            eventHandlers: { clientDisconnected: (clientId, roomId) => { log.push({ clientId, roomId }); } }
+        });
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        await page.evaluate(({ wsUrl }) => window.initClient('cd1', wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom('cd1', {}));
+        await page.evaluate(() => window.destroy('cd1'));
+        await sleep(100);
+        expect(log.some(e => e.clientId === 'cd1')).toBe(true);
+        ts.close();
+    });
+
+    test('requestReceived fires with correct data', async ({ page }) => {
+        const log = [];
+        const ts = await createTestServer({
+            eventHandlers: {
+                requestReceived: ({ roomId, clientId, name, data }) => {
+                    log.push({ roomId, clientId, name, data });
+                }
+            }
+        });
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        await page.evaluate(({ wsUrl }) => window.initClient('rr1', wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await page.evaluate(() => window.createRoom('rr1', {}));
+
+        await page.evaluate(() => window.sendRequest('rr1', 'testAction', { foo: 'bar' }));
+        await sleep(100);
+
+        expect(log.length).toBeGreaterThan(0);
+        const req = log[log.length - 1];
+        expect(req.name).toBe('testAction');
+        expect(req.data).toEqual({ foo: 'bar' });
+        expect(req.clientId).toBe('rr1');
+        expect(req.roomId).toBe(roomId);
+        ts.close();
+    });
+
     test('storageUpdateRequested returns false - update rejected and state re-synced', async ({ page }) => {
         const ts = await createTestServer({
             eventHandlers: { storageUpdateRequested: () => false }
@@ -222,20 +261,6 @@ test.describe('Server events', () => {
         const relevant = log.find(e => e.roomId === roomId && e.clientId === 'su1');
         expect(relevant).toBeTruthy();
         expect(relevant.storage.x).toBe(5);
-        ts.close();
-    });
-
-    test('clientDisconnected fires when client disconnects', async ({ page }) => {
-        const log = [];
-        const ts = await createTestServer({
-            eventHandlers: { clientDisconnected: (clientId, roomId) => { log.push({ clientId, roomId }); } }
-        });
-        await openPage(page, ts.httpUrl, 'test-client.html');
-        await page.evaluate(({ wsUrl }) => window.initClient('cd1', wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(() => window.createRoom('cd1', {}));
-        await page.evaluate(() => window.destroy('cd1'));
-        await sleep(100);
-        expect(log.some(e => e.clientId === 'cd1')).toBe(true);
         ts.close();
     });
 

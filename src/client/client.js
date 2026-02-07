@@ -21,7 +21,7 @@ export default class PlaySocket {
     // Room properties
     #roomHost;
     #inRoom; // If the client is currently in  a room or not
-    #connectionCount = 0;
+    #participantCount = 0;
     #crdtManager;
     #roomVersion = 0; // Update version (used to compare local vs. remote state to detect package loss)
 
@@ -77,7 +77,7 @@ export default class PlaySocket {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientJoined", "clientLeft"];
+        const validEvents = ["status", "error", "moved", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientJoined", "clientLeft"];
         if (!validEvents.includes(event)) {
             console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
             return;
@@ -169,64 +169,59 @@ export default class PlaySocket {
 
                 switch (message.type) {
                     case 'registration_failed':
-                        if (this.#pendingRegistration) {
-                            this.#pendingRegistration.reject(new Error("Failed to register: " + message.reason));
-                            this.#triggerEvent("error", "Failed to register: " + message.reason);
-                        }
+                        this.#triggerEvent("error", "Failed to register: " + message.reason);
+                        if (this.#pendingRegistration) this.#pendingRegistration.reject(new Error("Failed to register: " + message.reason));
                         break;
 
                     case 'registered':
-                        if (this.#pendingRegistration) {
-                            this.#sessionToken = message.sessionToken;
-                            this.#initialized = true;
-                            this.#pendingRegistration.resolve(message.id);
-                            this.#triggerEvent("status", "Connected to server.");
-                        }
+                        this.#sessionToken = message.sessionToken;
+                        this.#initialized = true;
+                        if (this.#pendingRegistration) this.#pendingRegistration.resolve(message.id);
+                        this.#triggerEvent("status", "Connected to server.");
                         break;
 
                     case 'join_accepted':
                         // Connected to room
+                        if (this.#debug) console.log(LOG_PREFIX + "State received for join:", message.state);
+                        this.#inRoom = true;
+                        this.#crdtManager.importState(message.state);
+                        this.#participantCount = message.participantCount;
+                        this.#roomHost = message.host;
+                        this.#roomVersion = message.version;
+                        this.#triggerEvent("storageUpdated", this.storage);
                         if (this.#pendingJoin) {
-                            if (this.#debug) console.log(LOG_PREFIX + "State received for join:", message.state);
-                            this.#inRoom = true;
-                            this.#crdtManager.importState(message.state);
-                            this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-                            this.#roomHost = message.host;
-                            this.#roomVersion = message.version;
-                            this.#triggerEvent("storageUpdated", this.storage);
-                            this.#triggerEvent("status", `Connected to room.`);
+                            this.#triggerEvent("status", "Connected to room.");
                             this.#pendingJoin.resolve();
+                        } else {
+                            this.#triggerEvent("status", "Moved to room.");
+                            this.#triggerEvent("moved", message.roomId);
                         }
                         break;
 
                     case 'join_rejected':
                         // Connection to room failed
-                        if (this.#pendingJoin) {
-                            this.#triggerEvent("status", "Failed to join room: " + message.reason);
-                            this.#pendingJoin.reject(new Error("Failed to join room: " + message.reason));
-                        }
+                        this.#triggerEvent("status", "Failed to join room: " + message.reason);
+                        if (this.#pendingJoin) this.#pendingJoin.reject(new Error("Failed to join room: " + message.reason));
                         break;
 
                     case 'reconnected':
                         // Successfully reconnected
-                        if (this.#pendingReconnect) {
-                            this.#isReconnecting = false;
-                            this.#reconnectCount = 0;
-                            if (message.roomData) {
-                                if (this.#debug) console.log(LOG_PREFIX + "State received for reconnect:", message.roomData.state);
-                                this.#crdtManager.importState(message.roomData.state);
-                                this.#roomVersion = message.roomData.version;
-                                this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
-                                this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
-                                this.#triggerEvent("storageUpdated", this.storage);
-                            } else if (this.#inRoom) {
-                                // If no room data received, but client thinks they were in a room...
-                                this.#triggerEvent("error", "Reconnected, but room no longer exists.");
-                                return this.destroy();
-                            }
-                            this.#triggerEvent("status", "Reconnected.");
-                            this.#pendingReconnect.resolve();
+                        this.#isReconnecting = false;
+                        this.#reconnectCount = 0;
+                        if (message.roomData) {
+                            if (this.#debug) console.log(LOG_PREFIX + "State received for reconnect:", message.roomData.state);
+                            this.#crdtManager.importState(message.roomData.state);
+                            this.#roomVersion = message.roomData.version;
+                            this.#participantCount = message.roomData.participantCount;
+                            this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
+                            this.#triggerEvent("storageUpdated", this.storage);
+                        } else if (this.#inRoom) {
+                            // If no room data received, but client thinks they were in a room...
+                            this.#triggerEvent("error", "Reconnected, but room no longer exists.");
+                            return this.destroy();
                         }
+                        this.#triggerEvent("status", "Reconnected.");
+                        if (this.#pendingReconnect) this.#pendingReconnect.resolve();
                         break;
 
                     case 'reconnection_failed':
@@ -234,20 +229,17 @@ export default class PlaySocket {
                         break;
 
                     case 'room_created':
-                        if (this.#pendingCreate) {
-                            this.#inRoom = true;
-                            this.#triggerEvent("status", `Room created.`);
-                            this.#crdtManager.importState(message.state);
-                            this.#triggerEvent("storageUpdated", this.storage);
-                            this.#pendingCreate.resolve(message.roomId);
-                        }
+                        this.#inRoom = true;
+                        this.#participantCount = message.participantCount;
+                        this.#triggerEvent("status", `Room created.`);
+                        this.#crdtManager.importState(message.state);
+                        this.#triggerEvent("storageUpdated", this.storage);
+                        if (this.#pendingCreate) this.#pendingCreate.resolve(message.roomId);
                         break;
 
                     case 'room_creation_failed':
-                        if (this.#pendingCreate) {
-                            this.#triggerEvent("error", "Failed to create room: " + message.reason);
-                            this.#pendingCreate.reject(new Error("Failed to create room: " + message.reason));
-                        }
+                        this.#triggerEvent("error", "Failed to create room: " + message.reason);
+                        if (this.#pendingCreate) this.#pendingCreate.reject(new Error("Failed to create room: " + message.reason));
                         break;
 
                     case 'property_updated':
@@ -277,13 +269,13 @@ export default class PlaySocket {
                         break;
 
                     case 'client_left':
-                        this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
+                        this.#participantCount = message.participantCount;
                         this.#triggerEvent("clientLeft", message.client);
                         this.#triggerEvent("status", `Client ${message.client} disconnected.`);
                         break;
 
                     case 'client_joined':
-                        this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
+                        this.#participantCount = message.participantCount;
                         this.#triggerEvent("clientJoined", message.client);
                         this.#triggerEvent("status", `Client ${message.client} connected.`);
                         break;
@@ -488,7 +480,7 @@ export default class PlaySocket {
         clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
         this.#inRoom = false;
-        this.#connectionCount = 0;
+        this.#participantCount = 0;
         this.#isReconnecting = false;
         this.#reconnectCount = 0;
         this.#roomVersion = 0;
@@ -502,8 +494,8 @@ export default class PlaySocket {
     }
 
     // Public getters
-    get connectionCount() { return this.#connectionCount; }
-    get storage() { return this.#crdtManager.getPropertyStore; }
+    get participantCount() { return this.#participantCount; }
+    get storage() { return this.#crdtManager.propertyStore; }
     get isHost() { return this.#id == this.#roomHost; }
     get id() { return this.#id; }
 }

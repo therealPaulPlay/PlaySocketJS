@@ -7,7 +7,7 @@ import { encode, decode } from '@msgpack/msgpack';
 let ts;
 
 test.beforeAll(async () => { ts = await createTestServer(); });
-test.afterAll(async () => { ts.close(); });
+test.afterAll(() => { ts.close(); });
 
 test.describe('Security', () => {
 
@@ -20,7 +20,7 @@ test.describe('Security', () => {
         const roomId = await p1.evaluate(() => window.createRoom('xss1', { msg: '' }));
         await p2.evaluate(({ wsUrl }) => window.initClient('xss2', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('xss2', roomId), { roomId });
-        await p1.waitForFunction(() => window.connectionCount('xss1') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('xss1') === 2, null, { timeout: 2_000 });
 
         await p1.evaluate(() => window.updateStorage('xss1', 'msg', 'set', '<script>alert("xss")</script>'));
         await p2.waitForFunction(() => window.storage('xss2')?.msg?.length > 0, null, { timeout: 2_000 });

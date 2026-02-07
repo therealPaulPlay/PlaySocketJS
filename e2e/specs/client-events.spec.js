@@ -5,7 +5,7 @@ import { openPage } from '../helpers/playwright-helpers.js';
 let ts;
 
 test.beforeAll(async () => { ts = await createTestServer(); });
-test.afterAll(async () => { ts.close(); });
+test.afterAll(() => { ts.close(); });
 
 test.describe('Client events', () => {
 
@@ -118,7 +118,7 @@ test.describe('Client events', () => {
         const roomId = await page.evaluate(({ id }) => window.createRoom(id, { score: 0 }), { id: id1 });
         await page2.evaluate(({ id, wsUrl }) => window.initClient(id, wsUrl), { id: id2, wsUrl: ts.wsUrl });
         await page2.evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: id2, roomId });
-        await page.waitForFunction(({ id }) => window.connectionCount(id) === 1, { id: id1 }, { timeout: 2_000 });
+        await page.waitForFunction(({ id }) => window.participantCount(id) === 2, { id: id1 }, { timeout: 2_000 });
 
         // Set a value, wait for sync, clear events, then set the same value again
         await page.evaluate(({ id }) => window.updateStorage(id, 'score', 'set', 42), { id: id1 });
@@ -152,7 +152,7 @@ test.describe('Client events', () => {
         const roomId = await page.evaluate(({ id }) => window.createRoom(id, { score: 0 }), { id: id1 });
         await page2.evaluate(({ id, wsUrl }) => window.initClient(id, wsUrl), { id: id2, wsUrl: ts.wsUrl });
         await page2.evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: id2, roomId });
-        await page.waitForFunction(({ id }) => window.connectionCount(id) === 1, { id: id1 }, { timeout: 2_000 });
+        await page.waitForFunction(({ id }) => window.participantCount(id) === 2, { id: id1 }, { timeout: 2_000 });
 
         await page.evaluate(({ id }) => window.updateStorage(id, 'score', 'set', 99), { id: id1 });
         await page2.waitForFunction(({ id }) => window.storage(id)?.score === 99, { id: id2 }, { timeout: 2_000 });
@@ -168,7 +168,7 @@ test.describe('Client events', () => {
         await page2.close();
     });
 
-    // Host migration events
+    // Host migration events ----------------
 
     test('host disconnects - next participant becomes host', async ({ context }) => {
         const [p1, p2, p3] = await Promise.all([context.newPage(), context.newPage(), context.newPage()]);
@@ -182,7 +182,7 @@ test.describe('Client events', () => {
         await p2.evaluate(({ roomId }) => window.joinRoom('hm2', roomId), { roomId });
         await p3.evaluate(({ wsUrl }) => window.initClient('hm3', wsUrl), { wsUrl: ts.wsUrl });
         await p3.evaluate(({ roomId }) => window.joinRoom('hm3', roomId), { roomId });
-        await p1.waitForFunction(() => window.connectionCount('hm1') === 2, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('hm1') === 3, null, { timeout: 2_000 });
 
         // Host leaves
         await p1.evaluate(() => window.destroy('hm1'));
@@ -210,7 +210,7 @@ test.describe('Client events', () => {
         const roomId = await p1.evaluate(() => window.createRoom('h2a', {}));
         await p2.evaluate(({ wsUrl }) => window.initClient('h2b', wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom('h2b', roomId), { roomId });
-        await p1.waitForFunction(() => window.connectionCount('h2a') === 1, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.participantCount('h2a') === 2, null, { timeout: 2_000 });
 
         await p1.evaluate(() => window.destroy('h2a'));
 
@@ -259,5 +259,59 @@ test.describe('Client events', () => {
         // If the client didn't crash, this should work
         const storage = await page.evaluate(() => window.storage('te1'));
         expect(storage.x).toBe(0);
+    });
+
+    // Moved event tests ----------------
+
+    test('moved event fires with correct roomId when server moves client', async ({ page }) => {
+        const room1 = ts.server.createRoom({ level: 1 });
+        const room2 = ts.server.createRoom({ level: 5 });
+
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        await page.evaluate(({ wsUrl }) => window.initClient('mov1', wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(({ roomId }) => window.joinRoom('mov1', roomId), { roomId: room1.id });
+        await page.waitForFunction(() => window.storage('mov1')?.level === 1, null, { timeout: 2_000 });
+
+        ts.server.move('mov1', room2.id);
+
+        // Should receive moved event with new room ID
+        await page.waitForFunction(({ room2Id }) => {
+            const ev = window.getEvents('mov1');
+            return ev.moved.includes(room2Id);
+        }, { room2Id: room2.id }, { timeout: 2_000 });
+
+        // Storage should be updated to new room's storage
+        await page.waitForFunction(() => window.storage('mov1')?.level === 5, null, { timeout: 2_000 });
+
+        const events = await page.evaluate(() => window.getEvents('mov1'));
+        expect(events.moved.length).toBe(1);
+        expect(events.moved[0]).toBe(room2.id);
+    });
+
+    test('moved event fires after storageUpdated when moved', async ({ page }) => {
+        const room1 = ts.server.createRoom({ data: 'a' });
+        const room2 = ts.server.createRoom({ data: 'b' });
+
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        await page.evaluate(() => { window.__eventOrder = []; });
+        await page.evaluate(({ wsUrl }) => window.initClient('mov2', wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => {
+            window.onEvent('mov2', 'moved', () => window.__eventOrder.push('moved'));
+            window.onEvent('mov2', 'storageUpdated', () => window.__eventOrder.push('storageUpdated'));
+        });
+        await page.evaluate(({ roomId }) => window.joinRoom('mov2', roomId), { roomId: room1.id });
+
+        // Clear the order to only track move-related events
+        await page.waitForFunction(() => window.storage('mov2')?.data === 'a', null, { timeout: 2_000 });
+        await page.evaluate(() => { window.__eventOrder = []; });
+
+        ts.server.move('mov2', room2.id);
+
+        await page.waitForFunction(() => window.__eventOrder.length >= 2, null, { timeout: 2_000 });
+        const order = await page.evaluate(() => window.__eventOrder);
+
+        // storageUpdated fires first (from importState), then moved fires
+        expect(order[0]).toBe('storageUpdated');
+        expect(order[1]).toBe('moved');
     });
 });
