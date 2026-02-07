@@ -77,7 +77,7 @@ export default class PlaySocket {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientConnected", "clientDisconnected"];
+        const validEvents = ["status", "error", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientJoined", "clientLeft"];
         if (!validEvents.includes(event)) {
             console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
             return;
@@ -276,15 +276,15 @@ export default class PlaySocket {
                         this.#setHost(message.newHost);
                         break;
 
-                    case 'client_disconnected':
+                    case 'client_left':
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-                        this.#triggerEvent("clientDisconnected", message.client);
+                        this.#triggerEvent("clientLeft", message.client);
                         this.#triggerEvent("status", `Client ${message.client} disconnected.`);
                         break;
 
-                    case 'client_connected':
+                    case 'client_joined':
                         this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
-                        this.#triggerEvent("clientConnected", message.client);
+                        this.#triggerEvent("clientJoined", message.client);
                         this.#triggerEvent("status", `Client ${message.client} connected.`);
                         break;
                 }

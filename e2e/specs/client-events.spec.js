@@ -20,7 +20,7 @@ test.describe('Client events', () => {
         expect(events.status).toContain('Room created.');
     });
 
-    test('clientConnected fires on host when another client joins', async ({ page, context }) => {
+    test('clientJoined fires on host when another client joins', async ({ page, context }) => {
         await openPage(page, ts.httpUrl, 'test-client.html');
         const page2 = await context.newPage();
         await openPage(page2, ts.httpUrl, 'test-client.html');
@@ -31,11 +31,11 @@ test.describe('Client events', () => {
         await page2.evaluate(({ wsUrl }) => window.initClient('cc2', wsUrl), { wsUrl: ts.wsUrl });
         await page2.evaluate(({ roomId }) => window.joinRoom('cc2', roomId), { roomId });
 
-        await page.waitForFunction(() => window.getEvents('cc1').clientConnected.includes('cc2'), null, { timeout: 5_000 });
+        await page.waitForFunction(() => window.getEvents('cc1').clientJoined.includes('cc2'), null, { timeout: 5_000 });
         await page2.close();
     });
 
-    test('clientDisconnected fires when a client leaves', async ({ page, context }) => {
+    test('clientLeft fires when a client leaves', async ({ page, context }) => {
         await openPage(page, ts.httpUrl, 'test-client.html');
         const page2 = await context.newPage();
         await openPage(page2, ts.httpUrl, 'test-client.html');
@@ -45,10 +45,10 @@ test.describe('Client events', () => {
 
         await page2.evaluate(({ wsUrl }) => window.initClient('cd2', wsUrl), { wsUrl: ts.wsUrl });
         await page2.evaluate(({ roomId }) => window.joinRoom('cd2', roomId), { roomId });
-        await page.waitForFunction(() => window.getEvents('cd1').clientConnected.includes('cd2'), null, { timeout: 2_000 });
+        await page.waitForFunction(() => window.getEvents('cd1').clientJoined.includes('cd2'), null, { timeout: 2_000 });
         await page2.evaluate(() => window.destroy('cd2'));
 
-        await page.waitForFunction(() => window.getEvents('cd1').clientDisconnected.includes('cd2'), null, { timeout: 5_000 });
+        await page.waitForFunction(() => window.getEvents('cd1').clientLeft.includes('cd2'), null, { timeout: 5_000 });
         await page2.close();
     });
 
@@ -64,20 +64,20 @@ test.describe('Client events', () => {
 
         await page2.evaluate(({ wsUrl }) => window.initClient('n2', wsUrl), { wsUrl: ts.wsUrl });
         await page2.evaluate(({ roomId }) => window.joinRoom('n2', roomId), { roomId });
-        await page.waitForFunction(() => window.getEvents('n1').clientConnected.includes('n2'), null, { timeout: 2_000 });
+        await page.waitForFunction(() => window.getEvents('n1').clientJoined.includes('n2'), null, { timeout: 2_000 });
 
         await page3.evaluate(({ wsUrl }) => window.initClient('n3', wsUrl), { wsUrl: ts.wsUrl });
         await page3.evaluate(({ roomId }) => window.joinRoom('n3', roomId), { roomId });
 
         // Both p1 and p2 should know about n3 joining
-        await page.waitForFunction(() => window.getEvents('n1').clientConnected.includes('n3'), null, { timeout: 5_000 });
-        await page2.waitForFunction(() => window.getEvents('n2').clientConnected.includes('n3'), null, { timeout: 5_000 });
+        await page.waitForFunction(() => window.getEvents('n1').clientJoined.includes('n3'), null, { timeout: 5_000 });
+        await page2.waitForFunction(() => window.getEvents('n2').clientJoined.includes('n3'), null, { timeout: 5_000 });
 
         // Now n2 leaves - p1 and p3 should be notified
         await page2.evaluate(() => window.destroy('n2'));
 
-        await page.waitForFunction(() => window.getEvents('n1').clientDisconnected.includes('n2'), null, { timeout: 5_000 });
-        await page3.waitForFunction(() => window.getEvents('n3').clientDisconnected.includes('n2'), null, { timeout: 5_000 });
+        await page.waitForFunction(() => window.getEvents('n1').clientLeft.includes('n2'), null, { timeout: 5_000 });
+        await page3.waitForFunction(() => window.getEvents('n3').clientLeft.includes('n2'), null, { timeout: 5_000 });
 
         await page2.close();
         await page3.close();

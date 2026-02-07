@@ -28,14 +28,14 @@
         }
 
         function trackEvents(id, client) {
-            events[id] = { status: [], error: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientConnected: [], clientDisconnected: [] };
+            events[id] = { status: [], error: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientJoined: [], clientLeft: [] };
             client.onEvent('status', msg => events[id].status.push(msg));
             client.onEvent('error', msg => events[id].error.push(msg));
             client.onEvent('instanceDestroyed', () => events[id].instanceDestroyed.push(Date.now()));
             client.onEvent('storageUpdated', storage => events[id].storageUpdated.push(storage));
             client.onEvent('hostMigrated', newHost => events[id].hostMigrated.push(newHost));
-            client.onEvent('clientConnected', cid => events[id].clientConnected.push(cid));
-            client.onEvent('clientDisconnected', cid => events[id].clientDisconnected.push(cid));
+            client.onEvent('clientJoined', cid => events[id].clientJoined.push(cid));
+            client.onEvent('clientLeft', cid => events[id].clientLeft.push(cid));
         }
 
         window.initClient = async (id, wsUrl, customData) => {

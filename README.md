@@ -117,8 +117,8 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `instanceDestroyed` | - | Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects |
 | `storageUpdated` | `storage: object` | Storage state changes |
 | `hostMigrated` | `roomId: string` | Host changes |
-| `clientConnected` | `clientId: string` | New client connected to the room |
-| `clientDisconnected` | `clientId: string, roomId?: string` | Client disconnected from the room |
+| `clientJoined` | `clientId: string` | New client joined the room |
+| `clientLeft` | `clientId: string, roomId?: string` | Client left the room |
 
 ### Properties (Read-only)
 
@@ -255,7 +255,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` and
 |-------|-------------------|-------------|--------------|
 | `clientRegistered` | `clientId: string, customData: object` | Client registered with the server | - |
 | `clientRegistrationRequested` | `clientId: string, customData: object` | Client requests to register | Return `false` or rejection reason `string` to block |
-| `clientDisconnected` | `clientId: string` | Client disconnected from the server | - |
+| `clientLeft` | `clientId: string` | Client disconnected from the server | - |
 | `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room (clients can only leave by disconnecting) | - |
 | `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room | Return `false` or rejection reason `string` to block |
 | `roomCreated` | `roomId: string` | Client created a room | - |

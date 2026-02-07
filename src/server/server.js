@@ -285,7 +285,7 @@ export default class PlaySocketServer {
                         const client = this.#clients.get(p);
                         if (client) {
                             client.send(encode({
-                                type: 'client_connected',
+                                type: 'client_joined',
                                 client: ws.clientId,
                                 participantCount: room.participants.length
                             }), { binary: true });
@@ -476,7 +476,7 @@ export default class PlaySocketServer {
                 room.participants.forEach(p => {
                     const client = this.#clients.get(p);
                     if (client) client.send(encode({
-                        type: 'client_disconnected',
+                        type: 'client_left',
                         client: ws.clientId,
                         participantCount: room.participants.length
                     }), { binary: true });
