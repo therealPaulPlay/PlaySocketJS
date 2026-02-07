@@ -59,7 +59,7 @@
         window.updateStorage = (id, ...args) => clients[id].updateStorage(...args);
         window.sendRequest = (id, ...args) => clients[id].sendRequest(...args);
         window.destroy = (id) => { clients[id]?.destroy(); delete clients[id]; };
-        window.getStorage = (id) => clients[id].getStorage;
+        window.storage = (id) => clients[id].storage;
         window.isHost = (id) => clients[id].isHost;
         window.getId = (id) => clients[id].id;
         window.connectionCount = (id) => clients[id].connectionCount;

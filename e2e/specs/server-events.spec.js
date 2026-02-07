@@ -65,7 +65,7 @@ test.describe('Server events', () => {
         await openPage(page, ts.httpUrl, 'test-client.html');
         await page.evaluate(({ wsUrl }) => window.initClient('rco1', wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(() => window.createRoom('rco1', { score: 0 }));
-        const storage = await page.evaluate(() => window.getStorage('rco1'));
+        const storage = await page.evaluate(() => window.storage('rco1'));
         expect(storage.serverAdded).toBe(true);
         expect(storage.score).toBe(0);
         ts.close();
@@ -95,7 +95,7 @@ test.describe('Server events', () => {
         await sleep(50);
 
         // Room should NOT have been created
-        expect(Object.keys(ts.server.getRooms).length).toBe(0);
+        expect(Object.keys(ts.server.rooms).length).toBe(0);
         ts.close();
     });
 
@@ -203,7 +203,7 @@ test.describe('Server events', () => {
         // Client should be re-synced to original value
         const events = await page.evaluate(() => window.getEvents('sur1'));
         expect(events.error.some(e => e.includes('rejected'))).toBe(true);
-        const storage = await page.evaluate(() => window.getStorage('sur1'));
+        const storage = await page.evaluate(() => window.storage('sur1'));
         expect(storage.val).toBe('original');
         ts.close();
     });
@@ -253,14 +253,14 @@ test.describe('Server events', () => {
         await page.evaluate(() => window.destroy('rd1'));
         await sleep(100);
         expect(log).toContain(roomId);
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
+        expect(ts.server.rooms[roomId]).toBeUndefined();
 
         // Server-side destroy
         const room2 = ts.server.createRoom({ test: true });
-        expect(ts.server.getRooms[room2.id]).toBeDefined();
+        expect(ts.server.rooms[room2.id]).toBeDefined();
         ts.server.destroyRoom(room2.id);
         expect(log).toContain(room2.id);
-        expect(ts.server.getRooms[room2.id]).toBeUndefined();
+        expect(ts.server.rooms[room2.id]).toBeUndefined();
 
         await page.close();
         ts.close();

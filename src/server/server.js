@@ -652,5 +652,5 @@ export default class PlaySocketServer {
         });
     }
 
-    get getRooms() { return { ...this.#rooms } }
+    get rooms() { return { ...this.#rooms } }
 }

@@ -122,7 +122,7 @@ test.describe('Client events', () => {
 
         // Set a value, wait for sync, clear events, then set the same value again
         await page.evaluate(({ id }) => window.updateStorage(id, 'score', 'set', 42), { id: id1 });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.score === 42, { id: id2 }, { timeout: 2_000 });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.score === 42, { id: id2 }, { timeout: 2_000 });
 
         // Clear events on page2 to get a clean baseline
         await page2.evaluate(({ id }) => window.clearEvents(id), { id: id2 });
@@ -155,7 +155,7 @@ test.describe('Client events', () => {
         await page.waitForFunction(({ id }) => window.connectionCount(id) === 1, { id: id1 }, { timeout: 2_000 });
 
         await page.evaluate(({ id }) => window.updateStorage(id, 'score', 'set', 99), { id: id1 });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.score === 99, { id: id2 }, { timeout: 2_000 });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.score === 99, { id: id2 }, { timeout: 2_000 });
         const ev1 = await page.evaluate(({ id }) => window.getEvents(id), { id: id1 });
         const ev2 = await page2.evaluate(({ id }) => window.getEvents(id), { id: id2 });
         // Sender should have storageUpdated from local update
@@ -257,7 +257,7 @@ test.describe('Client events', () => {
         await page.evaluate(() => window.onEvent('te1', 'storageUpdated', () => { throw new Error('Test error!'); }));
         await page.evaluate(() => window.createRoom('te1', { x: 0 }));
         // If the client didn't crash, this should work
-        const storage = await page.evaluate(() => window.getStorage('te1'));
+        const storage = await page.evaluate(() => window.storage('te1'));
         expect(storage.x).toBe(0);
     });
 });

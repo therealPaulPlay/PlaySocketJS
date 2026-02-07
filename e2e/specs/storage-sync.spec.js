@@ -41,26 +41,26 @@ test.describe('Storage sync', () => {
 
     test('set with object value', async () => {
         await page1.evaluate(({ id }) => window.updateStorage(id, 'config', 'set', { difficulty: 'hard', rounds: 5 }), { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.config?.difficulty === 'hard', { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: page2.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.config?.difficulty === 'hard', { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.config).toEqual({ difficulty: 'hard', rounds: 5 });
     });
 
     test('array-add appends items', async () => {
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'apple'), { id: page1.__cid });
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'banana'), { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.items?.length === 2, { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: page2.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.items).toEqual(['apple', 'banana']);
     });
 
     test('array-add-unique prevents duplicates', async () => {
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'apple'), { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.items?.length === 1, { id: page2.__cid }, { timeout: 2_000 });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 1, { id: page2.__cid }, { timeout: 2_000 });
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add-unique', 'apple'), { id: page1.__cid });
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add-unique', 'banana'), { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.items?.length === 2, { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: page2.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.items).toContain('apple');
         expect(s.items).toContain('banana');
     });
@@ -68,13 +68,13 @@ test.describe('Storage sync', () => {
     test('array-remove-matching removes matching items with deep compare', async () => {
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', { name: 'apple', qty: 1 }), { id: page1.__cid });
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', { name: 'banana', qty: 2 }), { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.items?.length === 2, { id: page2.__cid }, { timeout: 2_000 });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid }, { timeout: 2_000 });
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-remove-matching', { name: 'apple', qty: 1 }), { id: page1.__cid });
         await page2.waitForFunction(({ id }) => {
-            const s = window.getStorage(id);
+            const s = window.storage(id);
             return s?.items?.length === 1 && s.items[0]?.name === 'banana';
         }, { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.items).toEqual([{ name: 'banana', qty: 2 }]);
     });
 
@@ -82,13 +82,13 @@ test.describe('Storage sync', () => {
         const player = { id: 'p1', score: 0 };
         const updatedPlayer = { id: 'p1', score: 100 };
         await page1.evaluate(({ id, player }) => window.updateStorage(id, 'items', 'set', [player]), { id: page1.__cid, player });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.items?.[0]?.score === 0, { id: page2.__cid }, { timeout: 2_000 });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.[0]?.score === 0, { id: page2.__cid }, { timeout: 2_000 });
         await page1.evaluate(({ id, player, updatedPlayer }) =>
             window.updateStorage(id, 'items', 'array-update-matching', player, updatedPlayer),
             { id: page1.__cid, player, updatedPlayer }
         );
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.items?.[0]?.score === 100, { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: page2.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.[0]?.score === 100, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.items[0]).toEqual(updatedPlayer);
     });
 
@@ -98,8 +98,8 @@ test.describe('Storage sync', () => {
             window.updateStorage(id, 'score', 'set', 2);
             window.updateStorage(id, 'score', 'set', 3);
         }, { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.score === 3, { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: page2.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.score === 3, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.score).toBe(3);
     });
 
@@ -124,11 +124,11 @@ test.describe('Storage sync', () => {
         await pages[2].evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'fromC'), { id: ids[2] });
 
         for (const [i, p] of pages.entries()) {
-            await p.waitForFunction(({ id }) => window.getStorage(id)?.items?.length === 3, { id: ids[i] });
+            await p.waitForFunction(({ id }) => window.storage(id)?.items?.length === 3, { id: ids[i] });
         }
 
         const storages = await Promise.all(pages.map((p, i) =>
-            p.evaluate(({ id }) => window.getStorage(id), { id: ids[i] })
+            p.evaluate(({ id }) => window.storage(id), { id: ids[i] })
         ));
 
         // All must contain all 3 items
@@ -159,11 +159,11 @@ test.describe('Storage sync', () => {
         ]);
 
         // Wait for convergence
-        await p1.waitForFunction(() => window.getStorage('ra1')?.nums?.length >= 20, null, { timeout: 5_000 });
-        await p2.waitForFunction(() => window.getStorage('ra2')?.nums?.length >= 20, null, { timeout: 5_000 });
+        await p1.waitForFunction(() => window.storage('ra1')?.nums?.length >= 20, null, { timeout: 5_000 });
+        await p2.waitForFunction(() => window.storage('ra2')?.nums?.length >= 20, null, { timeout: 5_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('ra1'));
-        const s2 = await p2.evaluate(() => window.getStorage('ra2'));
+        const s1 = await p1.evaluate(() => window.storage('ra1'));
+        const s2 = await p2.evaluate(() => window.storage('ra2'));
         expect(s1.nums.length).toBe(20);
         expect(s2.nums.length).toBe(20);
 
@@ -201,16 +201,16 @@ test.describe('Storage sync', () => {
 
         // Wait for both clients to see both players updated
         await p1.waitForFunction(() => {
-            const s = window.getStorage('au1');
+            const s = window.storage('au1');
             return s?.players?.some(p => p.score === 50) && s?.players?.some(p => p.score === 75);
         }, null, { timeout: 5_000 });
         await p2.waitForFunction(() => {
-            const s = window.getStorage('au2');
+            const s = window.storage('au2');
             return s?.players?.some(p => p.score === 50) && s?.players?.some(p => p.score === 75);
         }, null, { timeout: 5_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('au1'));
-        const s2 = await p2.evaluate(() => window.getStorage('au2'));
+        const s1 = await p1.evaluate(() => window.storage('au1'));
+        const s2 = await p2.evaluate(() => window.storage('au2'));
 
         // Both should converge to the same state
         expect(JSON.stringify(s1.players)).toBe(JSON.stringify(s2.players));
@@ -242,11 +242,11 @@ test.describe('Storage sync', () => {
         ]);
 
         // Wait for convergence — both should have all 3 unique tags
-        await p1.waitForFunction(() => window.getStorage('uu1')?.tags?.length >= 3, null, { timeout: 5_000 });
-        await p2.waitForFunction(() => window.getStorage('uu2')?.tags?.length >= 3, null, { timeout: 5_000 });
+        await p1.waitForFunction(() => window.storage('uu1')?.tags?.length >= 3, null, { timeout: 5_000 });
+        await p2.waitForFunction(() => window.storage('uu2')?.tags?.length >= 3, null, { timeout: 5_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('uu1'));
-        const s2 = await p2.evaluate(() => window.getStorage('uu2'));
+        const s1 = await p1.evaluate(() => window.storage('uu1'));
+        const s2 = await p2.evaluate(() => window.storage('uu2'));
 
         expect(s1.tags).toContain('shared');
         expect(s1.tags).toContain('onlyA');
@@ -300,16 +300,16 @@ test.describe('Storage sync', () => {
 
         // Wait for both clients to see both scores updated (non-zero)
         await p1.waitForFunction(() => {
-            const s = window.getStorage('rp1');
+            const s = window.storage('rp1');
             return s?.players?.every(p => p.score >= 100);
         }, null, { timeout: 5_000 });
         await p2.waitForFunction(() => {
-            const s = window.getStorage('rp2');
+            const s = window.storage('rp2');
             return s?.players?.every(p => p.score >= 100);
         }, null, { timeout: 5_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('rp1'));
-        const s2 = await p2.evaluate(() => window.getStorage('rp2'));
+        const s1 = await p1.evaluate(() => window.storage('rp1'));
+        const s2 = await p2.evaluate(() => window.storage('rp2'));
 
         // Both must have converged to identical state
         expect(JSON.stringify(s1)).toBe(JSON.stringify(s2));
@@ -362,16 +362,16 @@ test.describe('Storage sync', () => {
 
         // Wait for convergence: both clients see both player updates
         await p1.waitForFunction(() => {
-            const s = window.getStorage('mr1');
+            const s = window.storage('mr1');
             return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200);
         }, null, { timeout: 5_000 });
         await p2.waitForFunction(() => {
-            const s = window.getStorage('mr2');
+            const s = window.storage('mr2');
             return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200);
         }, null, { timeout: 5_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('mr1'));
-        const s2 = await p2.evaluate(() => window.getStorage('mr2'));
+        const s1 = await p1.evaluate(() => window.storage('mr1'));
+        const s2 = await p2.evaluate(() => window.storage('mr2'));
 
         // Both clients must have converged to identical state
         expect(JSON.stringify(s1)).toBe(JSON.stringify(s2));

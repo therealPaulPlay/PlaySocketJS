@@ -44,11 +44,11 @@ test.describe('Server API', () => {
 
         ts.server.updateRoomStorage(roomId, 'msg', 'set', 'from-server');
 
-        await p1.waitForFunction(() => window.getStorage('sb1')?.msg === 'from-server', null, { timeout: 5_000 });
-        await p2.waitForFunction(() => window.getStorage('sb2')?.msg === 'from-server', null, { timeout: 5_000 });
+        await p1.waitForFunction(() => window.storage('sb1')?.msg === 'from-server', null, { timeout: 5_000 });
+        await p2.waitForFunction(() => window.storage('sb2')?.msg === 'from-server', null, { timeout: 5_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('sb1'));
-        const s2 = await p2.evaluate(() => window.getStorage('sb2'));
+        const s1 = await p1.evaluate(() => window.storage('sb1'));
+        const s2 = await p2.evaluate(() => window.storage('sb2'));
         expect(s1.msg).toBe('from-server');
         expect(s2.msg).toBe('from-server');
 
@@ -71,9 +71,9 @@ test.describe('Server API', () => {
         await page.evaluate(() => window.createRoom('sr2', { score: 0 }));
 
         await page.evaluate(() => window.sendRequest('sr2', 'addScore'));
-        await page.waitForFunction(() => window.getStorage('sr2')?.score === 100, null, { timeout: 5_000 });
+        await page.waitForFunction(() => window.storage('sr2')?.score === 100, null, { timeout: 5_000 });
 
-        const storage = await page.evaluate(() => window.getStorage('sr2'));
+        const storage = await page.evaluate(() => window.storage('sr2'));
         expect(storage.score).toBe(100);
         ts.close();
     });
@@ -108,7 +108,7 @@ test.describe('Server API', () => {
         await openPage(page, ts.httpUrl, 'test-client.html');
         await page.evaluate(({ wsUrl }) => window.initClient('sc1', wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(({ roomId }) => window.joinRoom('sc1', roomId), { roomId: room.id });
-        const clientStorage = await page.evaluate(() => window.getStorage('sc1'));
+        const clientStorage = await page.evaluate(() => window.storage('sc1'));
         expect(clientStorage.lobby).toBe(true);
         ts.close();
     });
@@ -125,8 +125,8 @@ test.describe('Server API', () => {
         await page.evaluate(() => window.destroy('sp1'));
         await sleep(100);
 
-        // Room should still exist (getRooms)
-        const rooms = ts.server.getRooms;
+        // Room should still exist
+        const rooms = ts.server.rooms;
         expect(rooms[room.id]).toBeTruthy();
 
         // Storage should still be there
@@ -154,7 +154,7 @@ test.describe('Server API', () => {
         await p2.waitForFunction(() => window.getEvents('dr2').error.some(e => e.includes('Kicked')), null, { timeout: 2_000 });
 
         // Room should be gone
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
+        expect(ts.server.rooms[roomId]).toBeUndefined();
 
         await p1.close(); await p2.close();
         ts.close();

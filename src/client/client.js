@@ -193,7 +193,7 @@ export default class PlaySocket {
                             this.#connectionCount = message.participantCount - 1; // Counted without the user themselves
                             this.#roomHost = message.host;
                             this.#roomVersion = message.version;
-                            this.#triggerEvent("storageUpdated", this.getStorage);
+                            this.#triggerEvent("storageUpdated", this.storage);
                             this.#triggerEvent("status", `Connected to room.`);
                             this.#pendingJoin.resolve();
                         }
@@ -218,7 +218,7 @@ export default class PlaySocket {
                                 this.#roomVersion = message.roomData.version;
                                 this.#connectionCount = message.roomData.participantCount - 1; // Counted without the user themselves
                                 this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
-                                this.#triggerEvent("storageUpdated", this.getStorage);
+                                this.#triggerEvent("storageUpdated", this.storage);
                             } else if (this.#inRoom) {
                                 // If no room data received, but client thinks they were in a room...
                                 this.#triggerEvent("error", "Reconnected, but room no longer exists.");
@@ -238,7 +238,7 @@ export default class PlaySocket {
                             this.#inRoom = true;
                             this.#triggerEvent("status", `Room created.`);
                             this.#crdtManager.importState(message.state);
-                            this.#triggerEvent("storageUpdated", this.getStorage);
+                            this.#triggerEvent("storageUpdated", this.storage);
                             this.#pendingCreate.resolve(message.roomId);
                         }
                         break;
@@ -254,7 +254,7 @@ export default class PlaySocket {
                         this.#roomVersion++; // Increment room version
                         if (this.#debug) console.log(LOG_PREFIX + "Property update received:", message.update);
                         this.#crdtManager.importPropertyUpdate(message.update);
-                        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+                        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
                         if (this.#roomVersion != message.version && this.#initialized && this.#socket?.readyState === WebSocket.OPEN) {
                             this.#triggerEvent("error", "Detected skipped update – forcing reconnect.");
                             this.#socket?.close();
@@ -264,7 +264,7 @@ export default class PlaySocket {
                     case 'property_update_rejected':
                         this.#triggerEvent("error", "Property update rejected. Re-syncing state.");
                         this.#crdtManager.importState(message.state);
-                        this.#triggerEvent("storageUpdated", this.getStorage);
+                        this.#triggerEvent("storageUpdated", this.storage);
                         break;
 
                     case 'kicked':
@@ -448,7 +448,7 @@ export default class PlaySocket {
             type: 'update_property',
             update: propUpdate
         });
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage); // Always trigger callback AFTER send in case msgs are sent in the callback (which would break the order)
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage); // Always trigger callback AFTER send in case msgs are sent in the callback (which would break the order)
     }
 
     /**
@@ -503,7 +503,7 @@ export default class PlaySocket {
 
     // Public getters
     get connectionCount() { return this.#connectionCount; }
-    get getStorage() { return this.#crdtManager.getPropertyStore; }
+    get storage() { return this.#crdtManager.getPropertyStore; }
     get isHost() { return this.#id == this.#roomHost; }
     get id() { return this.#id; }
 }

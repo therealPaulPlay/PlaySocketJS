@@ -67,7 +67,7 @@ socket.onEvent('storageUpdated', storage => (reactiveVariable = storage)); // As
 
 Interfacing with the synchronized storage (examples):
 ```javascript
-const currentState = socket.getStorage; // Synchronous, local access
+const currentState = socket.storage; // Synchronous, local access
 socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 }); // Special method to enable conflict-free additions for arrays
 socket.updateStorage('latestPlayer', 'set', 'Player4'); // Regular synced storage update
 ```
@@ -127,7 +127,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `id` | string | Client's unique identifier on the WebSocket server |
 | `isHost` | boolean | If this user is currently assigned the host role |
 | `connectionCount` | number | Number of active client connections in room (without yourself) |
-| `getStorage` | object | Retrieve storage object |
+| `storage` | object | Retrieve storage object |
 
 &nbsp;
 
@@ -269,7 +269,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` and
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `getRooms` | object | Retrieve the rooms object |
+| `rooms` | object | Retrieve the rooms object |
 
 # License
 

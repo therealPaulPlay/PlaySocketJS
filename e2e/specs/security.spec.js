@@ -23,10 +23,10 @@ test.describe('Security', () => {
         await p1.waitForFunction(() => window.connectionCount('xss1') === 1, null, { timeout: 2_000 });
 
         await p1.evaluate(() => window.updateStorage('xss1', 'msg', 'set', '<script>alert("xss")</script>'));
-        await p2.waitForFunction(() => window.getStorage('xss2')?.msg?.length > 0, null, { timeout: 2_000 });
+        await p2.waitForFunction(() => window.storage('xss2')?.msg?.length > 0, null, { timeout: 2_000 });
 
-        const s1 = await p1.evaluate(() => window.getStorage('xss1'));
-        const s2 = await p2.evaluate(() => window.getStorage('xss2'));
+        const s1 = await p1.evaluate(() => window.storage('xss1'));
+        const s2 = await p2.evaluate(() => window.storage('xss2'));
         expect(s1.msg).not.toContain('<');
         expect(s1.msg).not.toContain('>');
         expect(s2.msg).not.toContain('<');
@@ -46,7 +46,7 @@ test.describe('Security', () => {
         });
         await sleep(100);
 
-        const storage = await page.evaluate(() => window.getStorage('lv1'));
+        const storage = await page.evaluate(() => window.storage('lv1'));
         expect(storage.big).toBeUndefined();
     });
 
@@ -60,8 +60,8 @@ test.describe('Security', () => {
             const value = 'a'.repeat(49000);
             window.updateStorage('lk1', 'largeKey', 'set', value);
         });
-        await page.waitForFunction(() => window.getStorage('lk1')?.largeKey?.length === 49000, null, { timeout: 2_000 });
-        const storage = await page.evaluate(() => window.getStorage('lk1'));
+        await page.waitForFunction(() => window.storage('lk1')?.largeKey?.length === 49000, null, { timeout: 2_000 });
+        const storage = await page.evaluate(() => window.storage('lk1'));
         expect(storage.largeKey?.length).toBe(49000);
 
         // Now try one just over the limit
@@ -70,7 +70,7 @@ test.describe('Security', () => {
             window.updateStorage('lk1', 'tooBig', 'set', tooBig);
         });
         await sleep(100);
-        const storage2 = await page.evaluate(() => window.getStorage('lk1'));
+        const storage2 = await page.evaluate(() => window.storage('lk1'));
         expect(storage2.tooBig).toBeUndefined();
     });
 
@@ -117,9 +117,9 @@ test.describe('Security', () => {
                 arr: ['<div>test</div>', { inner: '<b>bold</b>' }]
             });
         });
-        await page.waitForFunction(() => window.getStorage('ns1')?.data?.text != null, null, { timeout: 2_000 });
+        await page.waitForFunction(() => window.storage('ns1')?.data?.text != null, null, { timeout: 2_000 });
 
-        const storage = await page.evaluate(() => window.getStorage('ns1'));
+        const storage = await page.evaluate(() => window.storage('ns1'));
         expect(storage.data.text).not.toContain('<');
         expect(storage.data.text).not.toContain('>');
         expect(storage.data.arr[0]).not.toContain('<');

@@ -24,7 +24,7 @@ test.describe('Reconnection', () => {
             return ev.status.some(s => s.includes('Reconnected'));
         }, null, { timeout: 10_000 });
 
-        const storage = await page.evaluate(() => window.getStorage('rc1'));
+        const storage = await page.evaluate(() => window.storage('rc1'));
         expect(storage.score).toBe(42);
     });
 
@@ -40,7 +40,7 @@ test.describe('Reconnection', () => {
         }, null, { timeout: 10_000 });
 
         await page.evaluate(() => window.updateStorage('rc2', 'val', 'set', 'after-reconnect'));
-        await page.waitForFunction(() => window.getStorage('rc2')?.val === 'after-reconnect', null, { timeout: 2_000 });
+        await page.waitForFunction(() => window.storage('rc2')?.val === 'after-reconnect', null, { timeout: 2_000 });
     });
 
     test('two clients: one reconnects, other stays, both sync after', async ({ context }) => {
@@ -67,12 +67,12 @@ test.describe('Reconnection', () => {
         }, null, { timeout: 10_000 });
 
         // Client 1 should get the updated state
-        await p1.waitForFunction(() => window.getStorage('rs1')?.items?.includes('while-offline'), null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.storage('rs1')?.items?.includes('while-offline'), null, { timeout: 2_000 });
 
         // Both can still sync
         await p1.evaluate(() => window.updateStorage('rs1', 'items', 'array-add', 'after-reconnect'));
-        await p2.waitForFunction(() => window.getStorage('rs2')?.items?.length >= 2, null, { timeout: 5_000 });
-        const s2 = await p2.evaluate(() => window.getStorage('rs2'));
+        await p2.waitForFunction(() => window.storage('rs2')?.items?.length >= 2, null, { timeout: 5_000 });
+        const s2 = await p2.evaluate(() => window.storage('rs2'));
         expect(s2.items).toContain('after-reconnect');
 
         await p1.close(); await p2.close();
@@ -97,7 +97,7 @@ test.describe('Reconnection', () => {
             return ev.status.some(s => s.includes('Reconnected'));
         }, null, { timeout: 10_000 });
 
-        const storage = await page.evaluate(() => window.getStorage('lo1'));
+        const storage = await page.evaluate(() => window.storage('lo1'));
         expect(storage.counter).toBe(0);
     });
 
@@ -126,7 +126,7 @@ test.describe('Reconnection', () => {
         await page.evaluate(({ wsUrl }) => window.initClient('rd1', wsUrl), { wsUrl: ts.wsUrl });
         const roomId = await page.evaluate(() => window.createRoom('rd1', { data: 1 }));
 
-        expect(ts.server.getRooms[roomId]).toBeDefined();
+        expect(ts.server.rooms[roomId]).toBeDefined();
 
         // Block network and disconnect (client is still known to server within grace period)
         await page.evaluate(() => {
@@ -155,7 +155,7 @@ test.describe('Reconnection', () => {
         const roomId = await page.evaluate(() => window.createRoom('gp1', {}));
 
         // Room should exist on the server before disconnect
-        expect(ts.server.getRooms[roomId]).toBeDefined();
+        expect(ts.server.rooms[roomId]).toBeDefined();
 
         // Block network and disconnect
         await page.evaluate(() => {
@@ -167,7 +167,7 @@ test.describe('Reconnection', () => {
         await sleep(RECONNECT_GRACE_PERIOD + 1000);
 
         // Room should be destroyed on the server after grace period
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
+        expect(ts.server.rooms[roomId]).toBeUndefined();
 
         // Unblock - client tries to reconnect but server no longer knows it
         await page.evaluate(() => window.unblockNetwork());
@@ -206,9 +206,9 @@ test.describe('Reconnection', () => {
             return ev.status.some(s => s.includes('Reconnected'));
         }, null, { timeout: 10_000 });
 
-        await p1.waitForFunction(() => window.getStorage('vm1')?.counter != null, null, { timeout: 2_000 });
-        const s1 = await p1.evaluate(() => window.getStorage('vm1'));
-        const s2 = await p2.evaluate(() => window.getStorage('vm2'));
+        await p1.waitForFunction(() => window.storage('vm1')?.counter != null, null, { timeout: 2_000 });
+        const s1 = await p1.evaluate(() => window.storage('vm1'));
+        const s2 = await p2.evaluate(() => window.storage('vm2'));
 
         // Both should have the same state after resync
         expect(s1.counter).toBe(s2.counter);

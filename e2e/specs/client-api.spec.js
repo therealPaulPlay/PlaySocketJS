@@ -29,7 +29,7 @@ test.describe('Client API', () => {
         expect(roomId).toBeTruthy();
         expect(roomId.length).toBe(6);
 
-        const storage = await page.evaluate(() => window.getStorage('host1'));
+        const storage = await page.evaluate(() => window.storage('host1'));
         expect(storage).toEqual({ score: 0, items: [] });
 
         const isHost = await page.evaluate(() => window.isHost('host1'));
@@ -42,7 +42,7 @@ test.describe('Client API', () => {
         const roomId = await page.evaluate(() => window.createRoom('noStorage'));
         expect(roomId).toBeTruthy();
 
-        const storage = await page.evaluate(() => window.getStorage('noStorage'));
+        const storage = await page.evaluate(() => window.storage('noStorage'));
         expect(storage).toEqual({});
 
         const isHost = await page.evaluate(() => window.isHost('noStorage'));
@@ -76,7 +76,7 @@ test.describe('Client API', () => {
         await page2.evaluate(({ wsUrl }) => window.initClient('j2', wsUrl), { wsUrl: ts.wsUrl });
         await page2.evaluate(({ roomId }) => window.joinRoom('j2', roomId), { roomId });
 
-        const storage = await page2.evaluate(() => window.getStorage('j2'));
+        const storage = await page2.evaluate(() => window.storage('j2'));
         expect(storage.msg).toBe('hello');
 
         await page.waitForFunction(() => window.connectionCount('h2') === 1, null, { timeout: 2_000 });
@@ -95,7 +95,7 @@ test.describe('Client API', () => {
 
         // Server should have cleaned up: room destroyed (was single-client)
         await sleep(100);
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
+        expect(ts.server.rooms[roomId]).toBeUndefined();
     });
 
     test('all public getters return correct values', async ({ page, context }) => {
@@ -110,7 +110,7 @@ test.describe('Client API', () => {
         expect(await page.evaluate(() => window.getId('get1'))).toBe('get1');
         expect(await page.evaluate(() => window.isHost('get1'))).toBe(true);
         expect(await page.evaluate(() => window.connectionCount('get1'))).toBe(0);
-        expect(await page.evaluate(() => window.getStorage('get1'))).toEqual({ val: 5 });
+        expect(await page.evaluate(() => window.storage('get1'))).toEqual({ val: 5 });
 
         // Join and check joiner getters
         await page2.evaluate(({ wsUrl }) => window.initClient('get2', wsUrl), { wsUrl: ts.wsUrl });
@@ -120,7 +120,7 @@ test.describe('Client API', () => {
         expect(await page2.evaluate(() => window.getId('get2'))).toBe('get2');
         expect(await page2.evaluate(() => window.isHost('get2'))).toBe(false);
         expect(await page2.evaluate(() => window.connectionCount('get2'))).toBe(1);
-        expect(await page2.evaluate(() => window.getStorage('get2'))).toEqual({ val: 5 });
+        expect(await page2.evaluate(() => window.storage('get2'))).toEqual({ val: 5 });
         expect(await page.evaluate(() => window.connectionCount('get1'))).toBe(1);
 
         await page2.close();
@@ -141,8 +141,8 @@ test.describe('Client API', () => {
         await page.waitForFunction(({ id }) => window.connectionCount(id) === 1, { id: id1 }, { timeout: 2_000 });
 
         await page.evaluate(({ id }) => window.updateStorage(id, 'score', 'set', 42), { id: id1 });
-        await page2.waitForFunction(({ id }) => window.getStorage(id)?.score === 42, { id: id2 });
-        const s = await page2.evaluate(({ id }) => window.getStorage(id), { id: id2 });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.score === 42, { id: id2 });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: id2 });
         expect(s.score).toBe(42);
 
         await page2.close();
@@ -312,14 +312,14 @@ test.describe('Client API', () => {
         const roomId = await page.evaluate(() => window.createRoom('cr1', { temp: true }));
 
         // Verify room exists
-        expect(ts.server.getRooms[roomId]).toBeTruthy();
+        expect(ts.server.rooms[roomId]).toBeTruthy();
 
         // Client leaves
         await page.evaluate(() => window.destroy('cr1'));
         await sleep(100);
 
         // Room should be gone
-        expect(ts.server.getRooms[roomId]).toBeUndefined();
+        expect(ts.server.rooms[roomId]).toBeUndefined();
         expect(ts.server.getRoomStorage(roomId)).toBeUndefined();
     });
 });
