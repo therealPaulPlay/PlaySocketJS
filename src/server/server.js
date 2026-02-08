@@ -425,7 +425,7 @@ export default class PlaySocketServer {
         this.#clientTokens.delete(ws.clientId);
         const roomId = this.#clientRooms.get(ws.clientId);
         if (roomId && this.#rooms[roomId]) this.#leaveRoom(ws.clientId, roomId);
-        this.#triggerEvent("clientDisconnected", ws.clientId, roomId);
+        this.#triggerEvent("clientDisconnected", ws.clientId);
     }
 
     /**
@@ -434,7 +434,7 @@ export default class PlaySocketServer {
      * @param {Function} callback - Callback function
      */
     onEvent(event, callback) {
-        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "clientJoinRequested", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
+        const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "clientLeftRoom", "clientJoinRequested", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) {
             console.warn(`Invalid PlaySocket event type "${event}"`);
             return;
@@ -636,6 +636,7 @@ export default class PlaySocketServer {
 
         room.participants = room.participants.filter(p => p !== clientId); // Remove client from room
         this.#clientRooms.delete(clientId);
+        this.#triggerEvent("clientLeftRoom", clientId, roomId); // Before potential room destruction to allow for accessing its data in callback
 
         if (room.participants.length === 0 && room.host !== "server") {
             this.destroyRoom(roomId); // Destroy room if now empty & not by server

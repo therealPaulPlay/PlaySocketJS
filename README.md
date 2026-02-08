@@ -257,9 +257,10 @@ The callback signature is `callback(verified, code?, message?)` where `code` and
 |-------|-------------------|-------------|--------------|
 | `clientRegistered` | `clientId: string, customData: object` | Client registered with the server | - |
 | `clientRegistrationRequested` | `clientId: string, customData: object` | Client requests to register | Return `false` or rejection reason `string` to block |
-| `clientLeft` | `clientId: string` | Client disconnected from the server | - |
-| `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room (clients can only leave by disconnecting) | - |
+| `clientDisconnected` | `clientId: string` | Client disconnected from the server | - |
+| `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room | - |
 | `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room | Return `false` or rejection reason `string` to block |
+| `clientLeftRoom` | `clientId: string, roomId: string` | Client left a room | - |
 | `roomCreated` | `roomId: string` | Client created a room | - |
 | `roomDestroyed` | `roomId: string` | Room was destroyed (happens when all participants leave, unless room host is "server") | - |
 | `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Room creation requested by client | Return `object` to override initial storage, `false` to deny |

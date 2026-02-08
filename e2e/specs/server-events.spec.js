@@ -192,7 +192,7 @@ test.describe('Server events', () => {
     test('clientDisconnected fires when client disconnects', async ({ page }) => {
         const log = [];
         const ts = await createTestServer({
-            eventHandlers: { clientDisconnected: (clientId, roomId) => { log.push({ clientId, roomId }); } }
+            eventHandlers: { clientDisconnected: (clientId) => { log.push({ clientId }); } }
         });
         await openPage(page, ts.httpUrl, 'test-client.html');
         await page.evaluate(({ wsUrl }) => window.initClient('cd1', wsUrl), { wsUrl: ts.wsUrl });
@@ -200,6 +200,54 @@ test.describe('Server events', () => {
         await page.evaluate(() => window.destroy('cd1'));
         await sleep(100);
         expect(log.some(e => e.clientId === 'cd1')).toBe(true);
+        ts.close();
+    });
+
+    test('clientLeftRoom fires before clientDisconnected when client disconnects', async ({ page }) => {
+        const eventOrder = [];
+        let resolveDisconnected;
+        const disconnectedFired = new Promise(r => { resolveDisconnected = r; });
+        const ts = await createTestServer({
+            eventHandlers: {
+                clientLeftRoom: (clientId, roomId) => { eventOrder.push({ event: 'clientLeftRoom', clientId, roomId }); },
+                clientDisconnected: (clientId) => {
+                    eventOrder.push({ event: 'clientDisconnected', clientId });
+                    resolveDisconnected();
+                }
+            }
+        });
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        await page.evaluate(({ wsUrl }) => window.initClient('clr1', wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await page.evaluate(() => window.createRoom('clr1', {}));
+        await page.evaluate(() => window.destroy('clr1'));
+        await disconnectedFired;
+        expect(eventOrder.length).toBe(2);
+        expect(eventOrder[0].event).toBe('clientLeftRoom');
+        expect(eventOrder[0].clientId).toBe('clr1');
+        expect(eventOrder[0].roomId).toBe(roomId);
+        expect(eventOrder[1].event).toBe('clientDisconnected');
+        expect(eventOrder[1].clientId).toBe('clr1');
+        ts.close();
+    });
+
+    test('clientLeftRoom fires when client is moved to another room', async ({ page }) => {
+        let resolve;
+        const eventFired = new Promise(r => { resolve = r; });
+        const ts = await createTestServer({
+            eventHandlers: { clientLeftRoom: (clientId, roomId) => { resolve({ clientId, roomId }); } }
+        });
+        await openPage(page, ts.httpUrl, 'test-client.html');
+
+        const room1 = ts.server.createRoom({ name: 'room1' });
+        const room2 = ts.server.createRoom({ name: 'room2' });
+
+        await page.evaluate(({ wsUrl }) => window.initClient('clr2', wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(({ roomId }) => window.joinRoom('clr2', roomId), { roomId: room1.id });
+
+        ts.server.move('clr2', room2.id);
+        const event = await eventFired;
+        expect(event.clientId).toBe('clr2');
+        expect(event.roomId).toBe(room1.id);
         ts.close();
     });
 
