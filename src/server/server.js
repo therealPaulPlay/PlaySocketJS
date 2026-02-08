@@ -221,7 +221,7 @@ export default class PlaySocketServer {
 
                         const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
 
-                        // Check if client/creator is still connected - abort if not
+                        // Check if client/creator is still connected and abort if not
                         if (!this.#clients.has(ws.clientId)) {
                             this.destroyRoom(newRoom.id);
                             if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);

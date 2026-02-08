@@ -67,7 +67,7 @@ export default class PlaySocket {
      */
     #createTimeout(name) {
         return new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${name} timed out`)), TIMEOUT_MS)
+            setTimeout(() => reject(new Error(`${name} timed out.`)), TIMEOUT_MS)
         );
     }
 
@@ -108,8 +108,8 @@ export default class PlaySocket {
      * @returns {Promise} Resolves when connection is established
      */
     async init() {
-        if (this.#initialized) return Promise.reject(new Error("Already initialized"));
-        if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided"));
+        if (this.#initialized) return Promise.reject(new Error("Already initialized!"));
+        if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided!"));
         this.#triggerEvent("status", "Initializing...");
 
         // Connect to WS server
@@ -288,7 +288,7 @@ export default class PlaySocket {
         // Handle socket errors
         this.#socket.onerror = () => {
             this.#triggerEvent("error", "WebSocket error.");
-            if (this.#pendingConnect) this.#pendingConnect.reject(new Error("WebSocket error"));
+            if (this.#pendingConnect) this.#pendingConnect.reject(new Error("WebSocket error!"));
         }
 
         // Handle socket close & attempt reconnect
@@ -355,7 +355,7 @@ export default class PlaySocket {
      */
     #sendToServer(data) {
         if (!this.#socket || this.#socket?.readyState !== WebSocket.OPEN) {
-            console.warn(WARNING_PREFIX + "Cannot send message - not connected.");
+            console.warn(WARNING_PREFIX + "Failed to send message - not connected.");
             return;
         }
         try {
@@ -374,8 +374,8 @@ export default class PlaySocket {
      */
     async createRoom(initialStorage = {}, size) {
         if (!this.#initialized) {
-            this.#triggerEvent("error", "Cannot create room - not initialized");
-            return Promise.reject(new Error("Not initialized"));
+            this.#triggerEvent("error", "Failed to create room - not initialized");
+            return Promise.reject(new Error("Not initialized!"));
         }
 
         return Promise.race([
@@ -401,8 +401,8 @@ export default class PlaySocket {
      */
     async joinRoom(roomId) {
         if (!this.#initialized) {
-            this.#triggerEvent("error", "Cannot join room - not initialized");
-            return Promise.reject(new Error("Not initialized"));
+            this.#triggerEvent("error", "Failed to join room - not initialized");
+            return Promise.reject(new Error("Not initialized!"));
         }
 
         return Promise.race([
@@ -431,7 +431,7 @@ export default class PlaySocket {
      */
     updateStorage(key, type, value, updateValue) {
         if (!this.#inRoom) {
-            this.#triggerEvent("error", "Cannot update storage when not in a room.");
+            this.#triggerEvent("error", "Failed to update storage - not in a room.");
             return;
         };
         if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
