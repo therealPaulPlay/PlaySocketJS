@@ -314,4 +314,38 @@ test.describe('Client events', () => {
         expect(order[0]).toBe('storageUpdated');
         expect(order[1]).toBe('moved');
     });
+
+    test('moved to room with existing host does not trigger hostMigrated', async ({ context }) => {
+        const room1 = ts.server.createRoom({ data: 'a' });
+        const room2 = ts.server.createRoom({ data: 'b' });
+
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, 'test-client.html');
+        await openPage(p2, ts.httpUrl, 'test-client.html');
+
+        // p1 joins room1, p2 joins room2 (p2 becomes host of room2)
+        await p1.evaluate(({ wsUrl }) => window.initClient('mh1', wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ wsUrl }) => window.initClient('mh2', wsUrl), { wsUrl: ts.wsUrl });
+        await p1.evaluate(({ roomId }) => window.joinRoom('mh1', roomId), { roomId: room1.id });
+        await p2.evaluate(({ roomId }) => window.joinRoom('mh2', roomId), { roomId: room2.id });
+        await p1.waitForFunction(() => window.storage('mh1')?.data === 'a', null, { timeout: 2_000 });
+        await p2.waitForFunction(() => window.storage('mh2')?.data === 'b', null, { timeout: 2_000 });
+
+        // Clear events before the move
+        await p1.evaluate(() => window.getEvents('mh1').hostMigrated.length = 0);
+
+        // Move p1 to room2 (which already has p2 as host)
+        ts.server.move('mh1', room2.id);
+
+        // Wait for moved event
+        await p1.waitForFunction(() => window.getEvents('mh1').moved.length > 0, null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.storage('mh1')?.data === 'b', null, { timeout: 2_000 });
+
+        // hostMigrated should NOT have fired (room2 already had a host)
+        const events = await p1.evaluate(() => window.getEvents('mh1'));
+        expect(events.hostMigrated.length).toBe(0);
+        expect(await p1.evaluate(() => window.isHost('mh1'))).toBe(false);
+
+        await p1.close(); await p2.close();
+    });
 });

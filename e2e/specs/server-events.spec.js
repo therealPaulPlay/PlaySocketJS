@@ -169,6 +169,43 @@ test.describe('Server events', () => {
         ts.close();
     });
 
+    test('clientJoinRequested - client disconnects during async callback cancels join', async ({ context }) => {
+        let resolveCallback;
+        const callbackPromise = new Promise(r => { resolveCallback = r; });
+        const ts = await createTestServer({
+            eventHandlers: {
+                clientJoinRequested: async () => {
+                    await callbackPromise;
+                    return true;
+                }
+            }
+        });
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, 'test-client.html');
+        await openPage(p2, ts.httpUrl, 'test-client.html');
+
+        await p1.evaluate(({ wsUrl }) => window.initClient('jrc1', wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await p1.evaluate(() => window.createRoom('jrc1', {}));
+
+        await p2.evaluate(({ wsUrl }) => window.initClient('jrc2', wsUrl), { wsUrl: ts.wsUrl });
+
+        // Start join (will block in async callback) and immediately destroy
+        p2.evaluate(({ roomId }) => window.joinRoom('jrc2', roomId), { roomId }).catch(() => { });
+        await sleep(50);
+        await p2.evaluate(() => window.destroy('jrc2'));
+
+        // Let the callback complete
+        resolveCallback();
+        await sleep(50);
+
+        // Client should NOT have joined the room
+        expect(ts.server.rooms[roomId].participants).not.toContain('jrc2');
+        expect(ts.server.rooms[roomId].participants.length).toBe(1);
+
+        await p1.close(); await p2.close();
+        ts.close();
+    });
+
     test('clientJoinedRoom fires after successful join', async ({ context }) => {
         const log = [];
         const ts = await createTestServer({
@@ -190,16 +227,17 @@ test.describe('Server events', () => {
     });
 
     test('clientDisconnected fires when client disconnects', async ({ page }) => {
-        const log = [];
+        let resolveDisconnected;
+        const disconnectedPromise = new Promise(r => { resolveDisconnected = r; });
         const ts = await createTestServer({
-            eventHandlers: { clientDisconnected: (clientId) => { log.push({ clientId }); } }
+            eventHandlers: { clientDisconnected: (clientId) => resolveDisconnected(clientId) }
         });
         await openPage(page, ts.httpUrl, 'test-client.html');
         await page.evaluate(({ wsUrl }) => window.initClient('cd1', wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(() => window.createRoom('cd1', {}));
         await page.evaluate(() => window.destroy('cd1'));
-        await sleep(100);
-        expect(log.some(e => e.clientId === 'cd1')).toBe(true);
+        const clientId = await Promise.race([disconnectedPromise, sleep(3000).then(() => { throw new Error('Timeout!'); })]);
+        expect(clientId).toBe('cd1');
         ts.close();
     });
 
@@ -252,12 +290,11 @@ test.describe('Server events', () => {
     });
 
     test('requestReceived fires with correct data', async ({ page }) => {
-        const log = [];
+        let resolveRequest;
+        const requestPromise = new Promise(r => { resolveRequest = r; });
         const ts = await createTestServer({
             eventHandlers: {
-                requestReceived: ({ roomId, clientId, name, data }) => {
-                    log.push({ roomId, clientId, name, data });
-                }
+                requestReceived: (data) => resolveRequest(data)
             }
         });
         await openPage(page, ts.httpUrl, 'test-client.html');
@@ -265,10 +302,8 @@ test.describe('Server events', () => {
         const roomId = await page.evaluate(() => window.createRoom('rr1', {}));
 
         await page.evaluate(() => window.sendRequest('rr1', 'testAction', { foo: 'bar' }));
-        await sleep(100);
+        const req = await Promise.race([requestPromise, sleep(3000).then(() => { throw new Error('Timeout!'); })]);
 
-        expect(log.length).toBeGreaterThan(0);
-        const req = log[log.length - 1];
         expect(req.name).toBe('testAction');
         expect(req.data).toEqual({ foo: 'bar' });
         expect(req.clientId).toBe('rr1');
@@ -296,26 +331,29 @@ test.describe('Server events', () => {
     });
 
     test('storageUpdated fires on server with correct data', async ({ page }) => {
-        const log = [];
+        let resolveUpdated;
+        const updatedPromise = new Promise(r => { resolveUpdated = r; });
         const ts = await createTestServer({
-            eventHandlers: { storageUpdated: (data) => { log.push(data); } }
+            eventHandlers: { storageUpdated: (data) => resolveUpdated(data) }
         });
         await openPage(page, ts.httpUrl, 'test-client.html');
         await page.evaluate(({ wsUrl }) => window.initClient('su1', wsUrl), { wsUrl: ts.wsUrl });
         const roomId = await page.evaluate(() => window.createRoom('su1', { x: 0 }));
         await page.evaluate(() => window.updateStorage('su1', 'x', 'set', 5));
-        await sleep(100);
+        const data = await Promise.race([updatedPromise, sleep(3000).then(() => { throw new Error('Timeout!'); })]);
 
-        const relevant = log.find(e => e.roomId === roomId && e.clientId === 'su1');
-        expect(relevant).toBeTruthy();
-        expect(relevant.storage.x).toBe(5);
+        expect(data.roomId).toBe(roomId);
+        expect(data.clientId).toBe('su1');
+        expect(data.storage.x).toBe(5);
         ts.close();
     });
 
     test('roomDestroyed fires when room auto-destroys and via destroyRoom', async ({ context }) => {
+        let resolveDestroyed;
+        let destroyedPromise = new Promise(r => { resolveDestroyed = r; });
         const log = [];
         const ts = await createTestServer({
-            eventHandlers: { roomDestroyed: (roomId) => { log.push(roomId); } }
+            eventHandlers: { roomDestroyed: (roomId) => { log.push(roomId); resolveDestroyed(roomId); } }
         });
         const page = await context.newPage();
         await openPage(page, ts.httpUrl, 'test-client.html');
@@ -324,11 +362,11 @@ test.describe('Server events', () => {
 
         // Auto-destroy: last client leaves
         await page.evaluate(() => window.destroy('rd1'));
-        await sleep(100);
+        await Promise.race([destroyedPromise, sleep(3000).then(() => { throw new Error('Timeout!'); })]);
         expect(log).toContain(roomId);
         expect(ts.server.rooms[roomId]).toBeUndefined();
 
-        // Server-side destroy
+        // Server-side destroy (synchronous, no wait needed)
         const room2 = ts.server.createRoom({ test: true });
         expect(ts.server.rooms[room2.id]).toBeDefined();
         ts.server.destroyRoom(room2.id);

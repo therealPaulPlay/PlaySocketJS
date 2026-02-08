@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createTestServer } from '../helpers/test-server.js';
-import { openPage, sleep } from '../helpers/playwright-helpers.js';
+import { openPage } from '../helpers/playwright-helpers.js';
 
 let ts;
 
@@ -94,7 +94,6 @@ test.describe('Client API', () => {
         expect(events.instanceDestroyed.length).toBeGreaterThan(0);
 
         // Server should have cleaned up: room destroyed (was single-client)
-        await sleep(100);
         expect(ts.server.rooms[roomId]).toBeUndefined();
     });
 
@@ -289,10 +288,9 @@ test.describe('Client API', () => {
 
         // Client leaves
         await page.evaluate(() => window.destroy('cr1'));
-        await sleep(100);
 
-        // Room should be gone
-        expect(ts.server.rooms[roomId]).toBeUndefined();
+        // Room should be gone (poll until server processes the disconnect)
+        await expect.poll(() => ts.server.rooms[roomId], { timeout: 3000 }).toBeUndefined();
         expect(ts.server.getRoomStorage(roomId)).toBeUndefined();
     });
 });

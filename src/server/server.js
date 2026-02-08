@@ -185,7 +185,6 @@ export default class PlaySocketServer {
                         if (formerRoom) {
                             // If the room has no host (they were the only one and disconnected), restore them as host
                             if (formerRoom.host === null) formerRoom.host = data.id;
-
                             if (this.#debug) console.log(`State sent for reconnection for room ${formerRoomId}:`, formerRoom.crdtManager.state);
                             roomData = {
                                 state: formerRoom.crdtManager.state,
@@ -221,7 +220,7 @@ export default class PlaySocketServer {
 
                         const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
 
-                        // Check if client/creator is still connected and abort if not
+                        // Verify client is still connected and abort if not
                         if (!this.#clients.has(ws.clientId)) {
                             this.destroyRoom(newRoom.id);
                             if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);
@@ -249,6 +248,12 @@ export default class PlaySocketServer {
                     // Event callback
                     const joinAllowed = await this.#triggerEvent("clientJoinRequested", ws.clientId, roomId);
                     if (joinAllowed === false || typeof joinAllowed === 'string') return rejectJoin(typeof joinAllowed === 'string' ? joinAllowed : 'Denied.');
+
+                    // Verify client is still connected and abort if not
+                    if (!this.#clients.has(ws.clientId)) {
+                        if (this.#debug) console.log(`Room join cancelled - client ${ws.clientId} disconnected during event callback.`);
+                        return;
+                    }
 
                     try {
                         this.#joinRoom(ws.clientId, roomId);
@@ -466,7 +471,7 @@ export default class PlaySocketServer {
         const oldRoomId = this.#clientRooms.get(clientId);
         const oldRoom = this.#rooms[oldRoomId];
         const targetRoom = this.#rooms[roomId];
-        if (!client) throw new Error("Client not found.");
+        if (!client && !this.#pendingDisconnects.has(clientId)) throw new Error("Client not found.");
         if (!oldRoomId) throw new Error("Client is not in a room.");
         if (!oldRoom) throw new Error("Client room not found.");
         if (oldRoomId === roomId) throw new Error("Client is already in target room.");
@@ -586,33 +591,37 @@ export default class PlaySocketServer {
         const room = this.#rooms[roomId];
         const client = this.#clients.get(clientId);
         if (!room) throw new Error("Room not found.");
-        if (!client) throw new Error("Client not found.");
+        if (!client && !this.#pendingDisconnects.has(clientId)) throw new Error("Client not found.");
         if (this.#clientRooms.get(clientId)) throw new Error("Already in a room.");
         if (room.participants.length >= room.size) throw new Error("Room full.");
 
         room.participants.push(clientId);
         this.#clientRooms.set(clientId, roomId);
 
-        // Notify joiner with initial storage
-        if (this.#debug) console.log("Room state sent for join:", room.crdtManager.state);
-        client.send(encode({
-            type: 'join_accepted',
-            roomId,
-            state: room.crdtManager.state,
-            participantCount: room.participants.length,
-            host: room.host,
-            version: this.#roomVersions.get(roomId)
-        }), { binary: true });
+        // Notify joiner with initial storage (only if connected - pending disconnect clients get state on reconnect)
+        if (client) {
+            if (this.#debug) console.log("Room state sent for join:", room.crdtManager.state);
+            client.send(encode({
+                type: 'join_accepted',
+                roomId,
+                state: room.crdtManager.state,
+                participantCount: room.participants.length,
+                host: room.host,
+                version: this.#roomVersions.get(roomId)
+            }), { binary: true });
+        }
 
         // If the room has no host (previous host disconnected and was the only participant), make joiner the host
-        // Since the room had to be empty, only the joiner needs to be notified
+        // Set new host after join_accepted so hostMigrated event fires correctly on client
         const becameHost = room.host === null;
         if (becameHost) {
-            room.host = clientId;
-            client.send(encode({
-                type: 'host_migrated',
-                newHost: room.host,
-            }), { binary: true });
+            room.host = clientId; // Change host
+            if (client) {
+                client.send(encode({
+                    type: 'host_migrated',
+                    newHost: room.host,
+                }), { binary: true });
+            }
         }
 
         // Notify existing participants

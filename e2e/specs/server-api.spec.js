@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createTestServer } from '../helpers/test-server.js';
 import { openPage, sleep } from '../helpers/playwright-helpers.js';
-import { RECONNECT_GRACE_PERIOD } from '../../src/server/server.js';
 
 test.describe('Server API', () => {
 
@@ -124,7 +123,6 @@ test.describe('Server API', () => {
 
         // Client leaves
         await page.evaluate(() => window.destroy('sp1'));
-        await sleep(100);
 
         // Room should still exist
         const rooms = ts.server.rooms;
@@ -401,7 +399,6 @@ test.describe('Server API', () => {
         ts.server.move('sole1', room2.id);
 
         // Old room should be destroyed
-        await sleep(100);
         expect(ts.server.rooms[roomId]).toBeUndefined();
 
         // Client should be in new room with correct storage
@@ -410,7 +407,7 @@ test.describe('Server API', () => {
         ts.close();
     });
 
-    test('move() throws for pending disconnect client, room cleanup happens after grace period', async ({ page }) => {
+    test('move() works for pending disconnect client, they receive new room on reconnect', async ({ page }) => {
         const ts = await createTestServer();
         await openPage(page, ts.httpUrl, 'test-client.html?intercept-ws');
 
@@ -431,19 +428,20 @@ test.describe('Server API', () => {
         });
         await sleep(200);
 
-        // Client is now pending disconnect - move should fail since client is not in #clients map
-        expect(() => ts.server.move('pdc1', room2.id)).toThrow('Client not found');
+        // Client is now pending disconnect - move should work and transfer them to room2
+        ts.server.move('pdc1', room2.id);
 
-        // Room should still exist (client is in pending reconnect, still counted as participant)
-        expect(ts.server.rooms[roomId]).toBeDefined();
-
-        // Wait for grace period to expire
-        await sleep(RECONNECT_GRACE_PERIOD + 500);
-
-        // After grace period, room should be destroyed (sole participant left)
+        // Old room should be destroyed (sole participant left), client should be in room2
         expect(ts.server.rooms[roomId]).toBeUndefined();
+        expect(ts.server.rooms[room2.id].participants).toContain('pdc1');
 
+        // Client reconnects and should receive room2's storage
         await page.evaluate(() => window.unblockNetwork());
+        await page.waitForFunction(() => window.getEvents('pdc1').status.some(s => s.includes('Reconnected')));
+
+        const storage = await page.evaluate(() => window.storage('pdc1'));
+        expect(storage.data).toBe(2);
+
         ts.close();
     });
 });
