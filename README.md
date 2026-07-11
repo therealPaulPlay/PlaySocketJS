@@ -1,15 +1,22 @@
-# PlaySocket Client
+# PlaySocket
 
-A reactive, optimistic WebSocket library that simplifies game & app development by abstracting away complex sync logic.
+An optimistic-first WebSocket synchronization library. Built for creating multiplayer games & collaborative experiences with reactive web frameworks.
 
 ## Why use PlaySocket?
 
-PlaySocket eliminates the traditional complexity of collaborative experiences:
+PlaySocket makes developing shared experiences a breeze:
 
-- **Streamlined architecture**: No additional backend code is required, but server-authoritative behavior supported
-- **State synchronization**: Built-in storage system keeps the full state synchronized across all clients, always conflict-free and in order
-- **Resilient & secure connections**: Automatic reconnection handling & strict rate-limiting
-- **Lightweight**: Uses WebSockets for efficient, predictable, reliable communication and has little dependencies
+- **Optimistic-first**: Updates apply locally right away and merge conflict-free across clients. Calling `.updateStorage` triggers the `storageUpdated` event instantly, without waiting for a server roundtrip.
+- **Fast prototyping**: No backend code beyond init is required, though server-authoritative validation and behavior are supported for production apps.
+- **Built for reactivity**: Assign the synced storage to a reactive variable via a callback, ideal for React, Svelte & co.
+- **Resilient & secure**: Automatic reconnection handling & strict rate-limiting.
+- **Lightweight**: Uses WebSockets, has few dependencies, and utilizes `MessagePack` for maximum efficiency.
+
+&nbsp;
+
+# PlaySocket Client
+
+The client-side part of PlaySocket.
 
 ## Installation
 
@@ -32,7 +39,7 @@ const socket = new PlaySocket('unique-client-id', { // You can pass no ID to let
 
 // Set up event handlers (optional)
 socket.onEvent('status', status => console.log('Status:', status));
-socket.onEvent('error', status => console.log('Error:', status));
+socket.onEvent('error', error => console.log('Error:', error));
 
 const clientId = await socket.init(); // Initialize the socket
 ```
@@ -134,11 +141,11 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 
 # PlaySocket Server
 
-PlaySocket includes a server implementation that can be set up in seconds.
+The server-side part of PlaySocket.
 
 ## Installation
 
-To use the server component, you'll need to install playsocketjs and the ws package:
+To use PlaySocket on your server, you'll need to install playsocketjs and the ws package:
 
 ```bash
 npm install playsocketjs ws
@@ -189,7 +196,7 @@ httpServer.listen(3000, () => {
 
 // Gracefully disconnect all clients and close the server (recommended)
 function shutdown() {
-    server.stop();
+    playSocketServer.stop();
     process.exit(0);
 }
 
@@ -205,10 +212,10 @@ process.on('SIGTERM', shutdown);
 Creates a new PlaySocket Server instance with configuration options.
 
 ```javascript
-new PlaySocket(options: PlaySocketServerOptions)
+new PlaySocketServer(options: PlaySocketServerOptions)
 ```
 
-### Configuration options
+#### Configuration options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -244,7 +251,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` and
 |--------|------------|-------------|-------------|
 | `stop()` | - | `void` | Closes all active client connections, the websocket server and the underlying http server if it's standalone |
 | `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their clientID – this will close their connection and set an error message |
-| `move()` | `clientId: string, roomId: string` | `void` | Move a client, that is already in a room, to a different room |
+| `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
 | `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared room storage from the server |
