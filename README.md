@@ -6,7 +6,7 @@ An optimistic-first WebSocket synchronization library. Built for creating multip
 
 PlaySocket makes developing shared experiences a breeze:
 
-- **Optimistic-first**: Updates apply locally right away and merge conflict-free across clients. Calling `.updateStorage` triggers the `storageUpdated` event instantly, without waiting for a server roundtrip.
+- **Optimistic-first**: Updates apply locally right away and merge conflict-free across clients. Calling `updateStorage()` triggers the `storageUpdated` event instantly, without waiting for a server roundtrip.
 - **Fast prototyping**: No backend code beyond init is required, though server-authoritative validation and behavior are supported for production apps.
 - **Built for reactivity**: Assign the synced storage to a reactive variable via a callback, ideal for React, Svelte & co.
 - **Resilient & secure**: Automatic reconnection handling & strict rate-limiting.
