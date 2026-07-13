@@ -1,35 +1,61 @@
-import { WebSocketServer } from 'ws';
-import { createServer } from 'node:http';
-import { encode, decode } from '@msgpack/msgpack';
-import CRDTManager, { getUpdateDetails } from '../universal/crdtManager';
-import { HEARTBEAT_INTERVAL } from '../universal/constants.js';
-
-/* eslint-disable jsdoc/require-returns */
+import { WebSocketServer } from "ws";
+import { createServer } from "node:http";
+import { encode, decode } from "@msgpack/msgpack";
+import CRDTManager, { getUpdateDetails } from "../universal/crdtManager.js";
+import { HEARTBEAT_INTERVAL } from "../universal/constants.js";
 
 const MAX_ROOM_SIZE = 500;
 export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
 
 /**
- * @typedef {import('node:http').Server} HttpServer
- * @typedef {import('ws').WebSocket} WebSocket
+ * @typedef {import("node:http").Server} HttpServer
+ * @typedef {import("../universal/crdtManager.js").PropertyUpdateType} PropertyUpdateType
+ * @typedef {import("../universal/crdtManager.js").PropertyUpdate} PropertyUpdate
+ * @typedef {import("../universal/crdtManager.js").CRDTState} CRDTState
+ */
+
+/** @typedef {import("ws").WebSocket} WebSocket */ // Includes custom properties from ws-extensions.d.ts
+
+/**
+ * @typedef {object} ClientMessage
+ * @property {string} type - Message type
+ */
+
+/** @typedef {{ points: number, lastReset: number }} RateLimit */
+
+/**
+ * @typedef {object} Room
+ * @property {string[]} participants - Client IDs of the room participants
+ * @property {string | null} host - Client ID of the room host ("server" for server-owned rooms, null if the room currently has no host)
+ * @property {number} size - Max. number of participants
+ * @property {CRDTManager} crdtManager - CRDT manager holding the room storage
  */
 
 /**
  * PlaySocket Server
  */
 export default class PlaySocketServer {
+    /** @type {HttpServer} */
     #server;
     #ownsServer = false;
     #rateLimitMaxPoints;
     #wss;
+    /** @type {Map<string, WebSocket>} */
     #clients = new Map(); // ClientId -> WebSocket instance
+    /** @type {Record<string, Room>} */
     #rooms = {};
+    /** @type {Map<string, string>} */
     #clientRooms = new Map(); // ClientId -> RoomId
+    /** @type {Map<string, RateLimit>} */
     #rateLimits = new Map(); // Rate limiting storage
+    /** @type {Map<string, Function[]>} */
     #callbacks = new Map(); // Event -> [callback functions]
     #heartbeatInterval;
-    #pendingDisconnects = new Map(); // ClientId -> {timeout, roomId}
+    /** @type {Map<string, { timeout: ReturnType<typeof setTimeout> }>} */
+    #pendingDisconnects = new Map(); // ClientId -> {timeout}
+    /** @type {Map<string, string>} */
     #clientTokens = new Map(); // ClientId -> Token
+    /** @type {Map<string, number>} */
     #roomVersions = new Map(); // RoomId -> Version
 
     // Debug
@@ -43,10 +69,10 @@ export default class PlaySocketServer {
      * @param {string} [options.path='/'] - WebSocket endpoint path
      * @param {boolean} [options.debug=false] - Enable debug logging
      * @param {number} [options.rateLimit=20] - Maximum number of operations per second per client
-     * @param {Function} [options.verifyClient] - Optional callback to verify client connections before upgrade. Receives (info, callback) where info contains { req, origin } and callback is (verified, code?, message?) => void
+     * @param {import("ws").ServerOptions["verifyClient"]} [options.verifyClient] - Optional callback to verify client connections before upgrade. Receives (info, callback) where info contains { req, origin } and callback is (verified, code?, message?) => void
      */
     constructor(options = {}) {
-        const { server, port = 3000, path = '/', debug = false, rateLimit = 20, verifyClient } = options;
+        const { server, port = 3000, path = "/", debug = false, rateLimit = 20, verifyClient } = options;
 
         if (debug) this.#debug = true; // Enable extra logging
 
@@ -71,20 +97,20 @@ export default class PlaySocketServer {
         });
 
         // Set up ws event handlers
-        this.#wss.on('connection', ws => {
+        this.#wss.on("connection", ws => {
             ws.connectionId = crypto.randomUUID();
             ws.isAlive = true;
-            ws.on('pong', () => { ws.isAlive = true; });
-            ws.on('message', msg => this.#handleMessage(ws, msg));
-            ws.on('close', () => this.#handleDisconnection(ws));
-            ws.on('error', (error) => {
-                console.error(`PlaySocket WebSocket connection error for client ${ws.clientId || 'unknown'}:`, error); // Catch conn errors
+            ws.on("pong", () => { ws.isAlive = true; });
+            ws.on("message", msg => this.#handleMessage(ws, msg));
+            ws.on("close", () => this.#handleDisconnection(ws));
+            ws.on("error", (error) => {
+                console.error(`PlaySocket WebSocket connection error for client ${ws.clientId || "unknown"}:`, error); // Catch conn errors
             });
         });
 
         // Log & catch server-level errors
-        this.#wss.on('error', (error) => {
-            console.error('PlaySocket WebSocket server error:', error);
+        this.#wss.on("error", (error) => {
+            console.error("PlaySocket WebSocket server error:", error);
         });
 
         // Start heartbeat
@@ -100,13 +126,12 @@ export default class PlaySocketServer {
     /**
      * Handle WebSocket message
      * @param {WebSocket} ws - WebSocket client
-     * @param {Buffer} message - Message encoded with messagepack
-     * @private
+     * @param {import("ws").RawData} message - Message encoded with messagepack
      */
     async #handleMessage(ws, message) {
         if (ws.isTerminating) return;
         try {
-            const data = decode(message);
+            const data = /** @type {ClientMessage & Record<string, any>} */ (decode(/** @type {Uint8Array} */(message)));
 
             // Apply rate limiting to all connections (including unregistered)
             if (!this.#checkRateLimit(ws.connectionId, data.type)) {
@@ -119,10 +144,10 @@ export default class PlaySocketServer {
             }
 
             switch (data.type) {
-                case 'register': {
+                case "register": {
                     // Register client ID if provided & check for a duplicate
                     if (data.id && (this.#clients.get(data.id) || data.id === "server")) {
-                        ws.send(encode({ type: 'registration_failed', reason: 'ID is taken.' }), { binary: true });
+                        ws.send(encode({ type: "registration_failed", reason: "ID is taken." }), { binary: true });
                         return;
                     }
 
@@ -136,17 +161,17 @@ export default class PlaySocketServer {
                             }
                         }
                         if (!data.id) {
-                            ws.send(encode({ type: 'registration_failed', reason: 'No available ID found.' }), { binary: true });
-                            throw new Error('Failed to generate unique ID!');
+                            ws.send(encode({ type: "registration_failed", reason: "No available ID found." }), { binary: true });
+                            throw new Error("Failed to generate unique ID!");
                         }
                     }
 
                     // Event callback
                     const registrationAllowed = await this.#triggerEvent("clientRegistrationRequested", data.id, data.customData);
-                    if (registrationAllowed === false || typeof registrationAllowed === 'string') {
+                    if (registrationAllowed === false || typeof registrationAllowed === "string") {
                         ws.send(encode({
-                            type: 'registration_failed',
-                            reason: typeof registrationAllowed === 'string' ? registrationAllowed : 'Denied.'
+                            type: "registration_failed",
+                            reason: typeof registrationAllowed === "string" ? registrationAllowed : "Denied."
                         }), { binary: true });
                         return;
                     }
@@ -155,18 +180,18 @@ export default class PlaySocketServer {
                     this.#clients.set(data.id, ws);
                     const sessionToken = this.#generateSessionToken();
                     this.#clientTokens.set(data.id, sessionToken); // Token is used when reconnecting to prevent impersonation attacks
-                    ws.send(encode({ type: 'registered', id: data.id, sessionToken }), { binary: true });
+                    ws.send(encode({ type: "registered", id: data.id, sessionToken }), { binary: true });
                     this.#triggerEvent("clientRegistered", data.id, data.customData);
                     break;
                 }
 
-                case 'reconnect': {
+                case "reconnect": {
                     // If user is pending disconnect, respond (otherwise it's too late)
                     const pd = this.#pendingDisconnects.get(data.id);
                     if (pd && data.sessionToken) {
                         if (data.sessionToken !== this.#clientTokens.get(data.id)) {
                             ws.send(encode({
-                                type: 'reconnection_failed',
+                                type: "reconnection_failed",
                                 reason: "Session token does not match."
                             }), { binary: true });
                             return;
@@ -194,20 +219,20 @@ export default class PlaySocketServer {
                             }
                         }
 
-                        ws.send(encode({ type: 'reconnected', roomData }), { binary: true });
+                        ws.send(encode({ type: "reconnected", roomData }), { binary: true });
                     } else {
-                        ws.send(encode({ type: 'reconnection_failed', reason: "Client unknown to server." }), { binary: true });
+                        ws.send(encode({ type: "reconnection_failed", reason: "Client unknown to server." }), { binary: true });
                     }
                     break;
                 }
 
-                case 'create_room': {
+                case "create_room": {
                     if (!ws.clientId) return;
 
                     if (this.#clientRooms.get(ws.clientId)) {
                         ws.send(encode({
-                            type: 'room_creation_failed',
-                            reason: 'Already in a room.'
+                            type: "room_creation_failed",
+                            reason: "Already in a room."
                         }), { binary: true });
                         return;
                     }
@@ -215,7 +240,7 @@ export default class PlaySocketServer {
                     try {
                         // Event callback with potential initial storage modifications
                         const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
-                        if (typeof reviewedStorage === 'object') data.initialStorage = reviewedStorage;
+                        if (typeof reviewedStorage === "object") data.initialStorage = reviewedStorage;
                         if (reviewedStorage === false) throw new Error("Room creation request denied.");
 
                         const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
@@ -229,25 +254,26 @@ export default class PlaySocketServer {
 
                         this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
                         this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
-                        ws.send(encode({ type: 'room_created', state: newRoom.state, roomId: newRoom.id, participantCount: this.#rooms[newRoom.id].participants.length }), { binary: true });
+                        ws.send(encode({ type: "room_created", state: newRoom.state, roomId: newRoom.id, participantCount: this.#rooms[newRoom.id].participants.length }), { binary: true });
                     } catch (error) {
                         console.error("PlaySocket error creating room:", error);
-                        ws.send(encode({ type: 'room_creation_failed', reason: error.message }), { binary: true });
+                        ws.send(encode({ type: "room_creation_failed", reason: error.message }), { binary: true });
                     }
                     break;
                 }
 
-                case 'join_room': {
+                case "join_room": {
                     if (!data.roomId || !ws.clientId) return;
                     const roomId = data.roomId;
 
+                    /** @param {string} reason */
                     const rejectJoin = (reason) => {
-                        ws.send(encode({ type: 'join_rejected', reason }), { binary: true });
+                        ws.send(encode({ type: "join_rejected", reason }), { binary: true });
                     };
 
                     // Event callback
                     const joinAllowed = await this.#triggerEvent("clientJoinRequested", ws.clientId, roomId);
-                    if (joinAllowed === false || typeof joinAllowed === 'string') return rejectJoin(typeof joinAllowed === 'string' ? joinAllowed : 'Denied.');
+                    if (joinAllowed === false || typeof joinAllowed === "string") return rejectJoin(typeof joinAllowed === "string" ? joinAllowed : "Denied.");
 
                     // Verify client is still connected and abort if not
                     if (!this.#clients.has(ws.clientId)) {
@@ -264,7 +290,7 @@ export default class PlaySocketServer {
                     break;
                 }
 
-                case 'update_property': {
+                case "update_property": {
                     const roomId = this.#clientRooms.get(ws.clientId);
                     const room = roomId ? this.#rooms[roomId] : null;
 
@@ -273,7 +299,7 @@ export default class PlaySocketServer {
                         const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId) });
                         if (updateAllowed === false) {
                             ws.send(encode({
-                                type: 'property_update_rejected',
+                                type: "property_update_rejected",
                                 state: room.crdtManager.state
                             }), { binary: true });
                             return;
@@ -289,7 +315,7 @@ export default class PlaySocketServer {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(encode({
-                                    type: 'property_updated',
+                                    type: "property_updated",
                                     update: data.update,
                                     version: currentVersion
                                 }), { binary: true });
@@ -302,20 +328,20 @@ export default class PlaySocketServer {
                     break;
                 }
 
-                case 'request': {
+                case "request": {
                     if (!ws.clientId) return;
                     const roomId = this.#clientRooms.get(ws.clientId) || null;
                     this.#triggerEvent("requestReceived", { roomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
                     break;
                 }
 
-                case 'disconnect':
+                case "disconnect":
                     // Client signals to server that it will will willfully disconnect soon
                     ws.willfulDisconnect = true;
                     break;
             }
         } catch (error) {
-            console.error('PlaySocket error in message handler:', error);
+            console.error("PlaySocket error in message handler:", error);
         }
     }
 
@@ -324,8 +350,8 @@ export default class PlaySocketServer {
      * @returns {string} - Id
      */
     #generateId() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789';
-        return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
+        return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
     }
 
     /**
@@ -346,7 +372,7 @@ export default class PlaySocketServer {
             remainingParticipants.forEach(p => {
                 const client = this.#clients.get(p);
                 if (client) client.send(encode({
-                    type: 'host_migrated',
+                    type: "host_migrated",
                     newHost: room.host,
                 }), { binary: true });
             });
@@ -358,7 +384,7 @@ export default class PlaySocketServer {
      * @returns {string} - Token
      */
     #generateSessionToken() {
-        let token = '';
+        let token = "";
         for (let i = 0; i < 16; i++) token += Math.floor(Math.random() * 16).toString(16);
         return token;
     }
@@ -368,7 +394,6 @@ export default class PlaySocketServer {
      * @param {string} connectionId - Random connection UUID which is different from the client ID
      * @param {string} actionType - A string describing the action
      * @returns {boolean} - Whether or not the action can be allowed, true means allowed, false means limited
-     * @private
      */
     #checkRateLimit(connectionId, actionType) {
         const now = Date.now();
@@ -396,7 +421,6 @@ export default class PlaySocketServer {
     /**
      * Handle client disconnection
      * @param {WebSocket} ws - WebSocket client
-     * @private
      */
     #handleDisconnection(ws) {
         this.#rateLimits.delete(ws.connectionId);
@@ -422,7 +446,6 @@ export default class PlaySocketServer {
 
     /**
      * Disconnect a client
-     * @private
      * @param {WebSocket} ws - WebSocket client
      */
     #disconnectClient(ws) {
@@ -457,7 +480,7 @@ export default class PlaySocketServer {
         const client = this.#clients.get(clientId);
         if (!client) return; // Client not connected, skip
         client.willfulDisconnect = true;
-        client.send(encode({ type: 'kicked', reason }), { binary: true });
+        client.send(encode({ type: "kicked", reason }), { binary: true });
         client.close();
     }
 
@@ -486,8 +509,7 @@ export default class PlaySocketServer {
      * Trigger an event to registered callbacks
      * @param {string} event - Event name
      * @param {...*} args - Arguments
-     * @returns {any} - Undefined if no callbacks, true if all callbacks ran, what the first callback with a return statement returns if present
-     * @private
+     * @returns {Promise<any>} - Undefined if no callbacks, true if all callbacks ran, what the first callback with a return statement returns if present
      */
     async #triggerEvent(event, ...args) {
         const callbacks = this.#callbacks.get(event);
@@ -507,7 +529,7 @@ export default class PlaySocketServer {
     /**
      * Get snapshot of a room's storage
      * @param {string} roomId - ID of the room to get the storage from
-     * @returns {object|undefined} - Storage object or undefined if the room doesn't exist
+     * @returns {Record<string, any> | undefined} - Storage object or undefined if the room doesn't exist
      */
     getRoomStorage(roomId) {
         const room = this.#rooms[roomId];
@@ -516,8 +538,8 @@ export default class PlaySocketServer {
 
     /**
      * Get the operation details from a storage update (e.g. in the "storageUpdateRequested" event)
-     * @param {object} update - Property update
-     * @returns {{type: string, value: *, secondValue: *}} - Operation details
+     * @param {PropertyUpdate} update - Property update
+     * @returns {{type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
      */
     getUpdateDetails(update) {
         return getUpdateDetails(update);
@@ -527,9 +549,9 @@ export default class PlaySocketServer {
      * Update a value in a room's storage
      * @param {string} roomId - Room ID
      * @param {string} key - Storage key
-     * @param {'set' | 'number-increment' | 'array-add' | 'array-prepend' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching' | 'object-set-key' | 'object-remove-key'} type - Operation type
+     * @param {PropertyUpdateType} type - Operation type
      * @param {*} value - Value
-     * @param {*} secondValue - Second value (needed for some operations)
+     * @param {*} [secondValue] - Second value (needed for some operations)
      */
     updateRoomStorage(roomId, key, type, value, secondValue) {
         if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${key}, operation ${type}, value ${value} and secondValue ${secondValue}.`);
@@ -543,7 +565,7 @@ export default class PlaySocketServer {
                 const client = this.#clients.get(p);
                 if (client) {
                     client.send(encode({
-                        type: 'property_updated',
+                        type: "property_updated",
                         update: propertyUpdate,
                         version: currentVersion
                     }), { binary: true });
@@ -558,7 +580,7 @@ export default class PlaySocketServer {
      * @param {object} [initialStorage] - Optional initial storage object
      * @param {number} [size] - Max. room size, up to 500
      * @param {string} [host] - Host ID, defaults to "server" (when set to "server", room will not be deleted if all clients leave)
-     * @returns {object} Object containing room state and room ID
+     * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
      */
     createRoom(initialStorage, size, host = "server") {
         let newRoomId;
@@ -611,7 +633,7 @@ export default class PlaySocketServer {
         if (client) {
             if (this.#debug) console.log("Room state sent for join:", room.crdtManager.state);
             client.send(encode({
-                type: 'join_accepted',
+                type: "join_accepted",
                 roomId,
                 state: room.crdtManager.state,
                 participantCount: room.participants.length,
@@ -627,7 +649,7 @@ export default class PlaySocketServer {
             room.host = clientId; // Change host
             if (client) {
                 client.send(encode({
-                    type: 'host_migrated',
+                    type: "host_migrated",
                     newHost: room.host,
                 }), { binary: true });
             }
@@ -639,7 +661,7 @@ export default class PlaySocketServer {
             const client = this.#clients.get(p);
             if (client) {
                 client.send(encode({
-                    type: 'client_joined',
+                    type: "client_joined",
                     client: clientId,
                     participantCount: room.participants.length
                 }), { binary: true });
@@ -648,6 +670,11 @@ export default class PlaySocketServer {
         this.#triggerEvent("clientJoinedRoom", clientId, roomId);
     }
 
+    /**
+     * Make a client leave a room
+     * @param {string} clientId - Client ID
+     * @param {string} roomId - Room ID
+     */
     #leaveRoom(clientId, roomId) {
         const room = this.#rooms[roomId];
         if (!room) throw new Error("Room not found.");
@@ -663,7 +690,7 @@ export default class PlaySocketServer {
             room.participants.forEach(p => {
                 const client = this.#clients.get(p);
                 if (client) client.send(encode({
-                    type: 'client_left',
+                    type: "client_left",
                     client: clientId,
                     participantCount: room.participants.length
                 }), { binary: true });
@@ -701,7 +728,7 @@ export default class PlaySocketServer {
             this.#clients.forEach((client, clientId) => this.kick(clientId, "Server restart."));
             this.#wss.close();
         }
-        if (this.#server && this.#ownsServer) this.#server.close(() => { console.log('PlaySocket server stopped.'); });
+        if (this.#server && this.#ownsServer) this.#server.close(() => { console.log("PlaySocket server stopped."); });
         this.#pendingDisconnects.forEach((data) => {
             clearTimeout(data.timeout);
         });

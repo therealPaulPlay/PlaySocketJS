@@ -1,6 +1,38 @@
-import { HEARTBEAT_INTERVAL } from './constants.js';
+import { HEARTBEAT_INTERVAL } from "./constants.js";
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
+
+/** @typedef {"set" | "number-increment" | "array-add" | "array-prepend" | "array-add-unique" | "array-remove-matching" | "array-update-matching" | "object-set-key" | "object-remove-key"} PropertyUpdateType */
+
+/** @typedef {[string, number][]} VectorClockEntries */
+
+/**
+ * @typedef {object} OperationData
+ * @property {PropertyUpdateType} type - Operation type
+ * @property {*} value - Value
+ * @property {*} [secondValue] - Second value (needed for some operations)
+ */
+
+/**
+ * @typedef {object} Operation
+ * @property {OperationData} data - Operation data
+ * @property {VectorClockEntries} vectorClock - Vector clock entries at creation time
+ * @property {string} source - ID of the replica that created the operation
+ * @property {string} uuid - Unique operation ID
+ */
+
+/**
+ * @typedef {object} PropertyUpdate
+ * @property {string} key - Storage key
+ * @property {Operation} operation - New operation
+ * @property {VectorClockEntries} vectorClock - Vector clock entries of the replica
+ */
+
+/**
+ * @typedef {object} CRDTState
+ * @property {[string, Operation[]][]} keyOperations - Operations per storage key
+ * @property {VectorClockEntries} vectorClock - Vector clock entries
+ */
 
 /**
  * CRDT Manager
@@ -8,15 +40,21 @@ const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
  */
 export default class CRDTManager {
     // Storage
+    /** @type {string} */
     #replicaId;
+    /** @type {Map<string, Operation[]>} */
     #keyOperations = new Map();
+    /** @type {Map<string, number>} */
     #vectorClock = new Map();
 
+    /** @type {Record<string, any>} */
     #propertyStore = {}; // Current local values as key/value store object
+    /** @type {Record<string, any>} */
     #lastPropertyStore = {}; // Last property store to compare against
 
     // Local Garbage Collection
     #lastGCCheck = 0;
+    /** @type {Map<string, number>} */
     #opUuidTimestamp = new Map(); // Map every operation to a timestamp for garbage collection
 
     // Debug
@@ -34,7 +72,7 @@ export default class CRDTManager {
 
     /**
      * Import the entire state of the CRDT manager (this overwrites the old state)
-     * @param {object} state - Full state of the CRDT manager
+     * @param {CRDTState} state - Full state of the CRDT manager
      */
     importState(state) {
         try {
@@ -52,8 +90,8 @@ export default class CRDTManager {
 
             // Map all operation uuids to current timestamp
             this.#keyOperations.forEach((value, _key) => {
-                value?.forEach((operation) => {
-                    this.#opUuidTimestamp.set(operation?.uuid, Date.now());
+                value.forEach((operation) => {
+                    this.#opUuidTimestamp.set(operation.uuid, Date.now());
                 })
             });
 
@@ -67,16 +105,16 @@ export default class CRDTManager {
 
     /**
      * Import property update
-     * @param {object} data - Property update data
+     * @param {PropertyUpdate} data - Property update data
      */
     importPropertyUpdate(data) {
         try {
             const { key, operation: rawOperation, vectorClock } = data;
-            const operation = this.#sanitizeValue(rawOperation);
+            const operation = /** @type {Operation} */ (this.#sanitizeValue(rawOperation));
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
 
             // Check key limit to afeguard against too many keys
-            if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error('Key limit exceeded!');
+            if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error("Key limit exceeded!");
 
             // Get COPY of current ops (or empty array if none yet)
             const currentOps = [...(this.#keyOperations.get(key) || [])];
@@ -110,10 +148,10 @@ export default class CRDTManager {
     /**
      * Update a property
      * @param {string} key - Storage key
-     * @param {string} type - Operation type
+     * @param {PropertyUpdateType} type - Operation type
      * @param {*} value - Value
-     * @param {*} secondValue - Second value
-     * @returns {object | undefined} - Returns the property update
+     * @param {*} [secondValue] - Second value (needed for some operations)
+     * @returns {PropertyUpdate | undefined} - Returns the property update
      */
     updateProperty(key, type, value, secondValue) {
         try {
@@ -208,9 +246,9 @@ export default class CRDTManager {
 
     /**
      * Create an operation object
-     * @param {object} data - Operation data, consists of type, value and secondValue
-     * @param {Array} vectorClock - Vector clock of the replica/client
-     * @returns {object} - Operation object
+     * @param {OperationData} data - Operation data, consists of type, value and secondValue
+     * @param {VectorClockEntries} vectorClock - Vector clock of the replica/client
+     * @returns {Operation} - Operation object
      */
     #createOperation(data, vectorClock) {
         const newOperation = {
@@ -253,8 +291,8 @@ export default class CRDTManager {
 
     /**
      * Sort operations by vector clock (causal order)
-     * @param {Array} operations - Full operations that include vector clocks, data and a source
-     * @returns {Array} - Sorted operations
+     * @param {Operation[]} operations - Full operations that include vector clocks, data and a source
+     * @returns {Operation[]} - Sorted operations
      */
     #sortByVectorClock(operations) {
         return [...operations].sort((a, b) => {
@@ -290,7 +328,7 @@ export default class CRDTManager {
     /**
      * Handle an operation
      * @param {*} curValue - Current value of the storage key
-     * @param {string} type - Operation type
+     * @param {PropertyUpdateType} type - Operation type
      * @param {*} value - Value
      * @param {*} [secondValue] - Second value (needed for some operations)
      * @returns {*} - Value after the operation
@@ -315,6 +353,7 @@ export default class CRDTManager {
 
                 // Comparison function
                 const isObject = typeof value === "object" && value !== null;
+                /** @param {*} item */
                 const compare = (item) => {
                     if (isObject && typeof item === "object" && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     return item === value; // Value comparison
@@ -331,7 +370,7 @@ export default class CRDTManager {
                         if (!curValue.some(compare)) curValue.push(value);
                         break;
                     case "array-remove-matching":
-                        curValue = curValue.filter(item => !compare(item));
+                        curValue = curValue.filter((/** @type {*} */ item) => !compare(item));
                         break;
                     case "array-update-matching": {
                         const index = curValue.findIndex(compare);
@@ -373,7 +412,7 @@ export default class CRDTManager {
         const jsonString = JSON.stringify(value);
         if (jsonString?.length > 50000) throw new Error("Value too large!"); // 50KB limit
 
-        if (typeof value === "string") return (value.includes("<") || value.includes(">")) ? value.replace(/[<>]/g, '') : value;
+        if (typeof value === "string") return (value.includes("<") || value.includes(">")) ? value.replace(/[<>]/g, "") : value;
         if (Array.isArray(value)) return value.map(item => this.#sanitizeValue(item));
         if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
         return value;
@@ -410,7 +449,7 @@ export default class CRDTManager {
 
     /**
      * Export state (can be imported using importState, converts the maps to arrays for serialization)
-     * @returns {object} - State
+     * @returns {CRDTState} - State
      */
     get state() {
         return {
@@ -422,10 +461,10 @@ export default class CRDTManager {
 
 /**
  * Get the operation details from a property update
- * @param {object} update - Property update
- * @returns {{type: string, value: *, secondValue: *}} - Operation details
+ * @param {PropertyUpdate} update - Property update
+ * @returns {{type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
  */
 export function getUpdateDetails(update) {
-    const { type, value, secondValue } = update?.operation?.data || {};
-    return { type, value, secondValue };
+    const data = update?.operation?.data;
+    return { type: data?.type, value: data?.value, secondValue: data?.secondValue };
 }

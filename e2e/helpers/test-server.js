@@ -1,13 +1,13 @@
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { join, extname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import PlaySocketServer from '../../dist/playsocket-server.js';
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { join, extname } from "node:path";
+import { fileURLToPath } from "node:url";
+import PlaySocketServer from "../../dist/playsocket-server.js";
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..');
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const PROJECT_ROOT = join(__dirname, "..", "..");
 
-const CONTENT_TYPES = { '.html': 'text/html', '.js': 'application/javascript' };
+const CONTENT_TYPES = { ".html": "text/html", ".js": "application/javascript" };
 
 let nextPort = 9000;
 
@@ -33,16 +33,16 @@ export async function createTestServer(options = {}) {
 
     // Serve e2e/helpers/*.html and dist/*.js for the test browser
     if (!existing) {
-        httpServer.on('request', async (req, res) => {
-            const pathname = req.url?.split('?')[0];
+        httpServer.on("request", async (req, res) => {
+            const pathname = req.url?.split("?")[0];
             let filePath;
-            if (pathname?.startsWith('/dist/')) filePath = join(PROJECT_ROOT, pathname);
-            else if (pathname?.endsWith('.html')) filePath = join(__dirname, pathname.split('/').pop());
+            if (pathname?.startsWith("/dist/")) filePath = join(PROJECT_ROOT, pathname);
+            else if (pathname?.endsWith(".html")) filePath = join(__dirname, pathname.split("/").pop());
             else return res.writeHead(404).end();
 
             try {
                 const content = await readFile(filePath);
-                res.writeHead(200, { 'Content-Type': CONTENT_TYPES[extname(filePath)] || 'application/octet-stream' }).end(content);
+                res.writeHead(200, { "Content-Type": CONTENT_TYPES[extname(filePath)] || "application/octet-stream" }).end(content);
             } catch { res.writeHead(404).end(); }
         });
 
@@ -50,7 +50,7 @@ export async function createTestServer(options = {}) {
     }
 
     // Build PlaySocketServer options, only including optional fields when provided
-    const serverOpts = { server: httpServer, path: '/ws', debug };
+    const serverOpts = { server: httpServer, path: "/ws", debug };
     if (rateLimit != null) serverOpts.rateLimit = rateLimit;
     if (verifyClient) serverOpts.verifyClient = verifyClient;
 

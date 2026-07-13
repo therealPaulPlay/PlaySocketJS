@@ -1,30 +1,29 @@
-import js from '@eslint/js';
-import jsdoc from 'eslint-plugin-jsdoc';
-import globals from 'globals';
+import js from "@eslint/js";
+import stylistic from "@stylistic/eslint-plugin";
+import unusedImports from "eslint-plugin-unused-imports";
+import globals from "globals";
 
 export default [
+  { ignores: ["dist"] },
   js.configs.recommended,
-  jsdoc.configs['flat/recommended'],
   {
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
+      ecmaVersion: "latest",
+      sourceType: "module",
       globals: {
         ...globals.node,
         ...globals.browser
       }
     },
     plugins: {
-      jsdoc
+      "@stylistic": stylistic,
+      "unused-imports": unusedImports
     },
     rules: {
-      'jsdoc/require-param-type': 'error',
-      'jsdoc/require-returns-type': 'error',
-      'jsdoc/no-undefined-types': 'error',
-      'jsdoc/valid-types': 'error',
-      'jsdoc/check-types': 'error',
-      'jsdoc/no-defaults': 'off',
-      "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
+      "@stylistic/quotes": ["error", "double"],
+      "no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "error",
+      "unused-imports/no-unused-vars": ["error", { argsIgnorePattern: "^_" }]
     }
   }
 ];
