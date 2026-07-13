@@ -2,12 +2,12 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import PlaySocketServer from "../../dist/playsocket-server.js";
+import PlaySocketServer from "../../src/server/server.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..", "..");
 
-const CONTENT_TYPES = { ".html": "text/html", ".js": "application/javascript" };
+const CONTENT_TYPES = { ".html": "text/html", ".js": "application/javascript", ".mjs": "application/javascript" };
 
 let nextPort = 9000;
 
@@ -31,12 +31,12 @@ export async function createTestServer(options = {}) {
     const existing = options.existingServer;
     const httpServer = existing || createServer();
 
-    // Serve e2e/helpers/*.html and dist/*.js for the test browser
+    // Serve e2e/helpers/*.html and the client source & its deps for the test browser
     if (!existing) {
         httpServer.on("request", async (req, res) => {
             const pathname = req.url?.split("?")[0];
             let filePath;
-            if (pathname?.startsWith("/dist/")) filePath = join(PROJECT_ROOT, pathname);
+            if (pathname?.startsWith("/src/") || pathname?.startsWith("/node_modules/")) filePath = join(PROJECT_ROOT, pathname);
             else if (pathname?.endsWith(".html")) filePath = join(__dirname, pathname.split("/").pop());
             else return res.writeHead(404).end();
 

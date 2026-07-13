@@ -145,10 +145,10 @@ The server-side part of PlaySocket.
 
 ## Installation
 
-To use PlaySocket on your server, you'll need to install playsocketjs and the ws package:
+To use PlaySocket on your server, you'll need to install playsocketjs:
 
 ```bash
-npm install playsocketjs ws
+npm install playsocketjs
 ```
 
 ## Usage examples

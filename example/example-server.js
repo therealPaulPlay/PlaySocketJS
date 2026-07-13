@@ -4,7 +4,7 @@
  */
 
 // Import the PlaySocketServer
-import PlaySocketServer from "../dist/playsocket-server.js";
+import PlaySocketServer from "../src/server/server.js";
 
 // Create and start the server
 const server = new PlaySocketServer({ debug: true });

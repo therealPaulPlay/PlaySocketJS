@@ -3,25 +3,26 @@
   "version": "4.0.0",
   "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
   "type": "module",
-  "module": "dist/playsocket-client.js",
+  "module": "./src/client/client.js",
   "exports": {
     ".": {
-      "types": "./dist/types/client/client.d.ts",
-      "import": "./dist/playsocket-client.js"
+      "types": "./types/client/client.d.ts",
+      "import": "./src/client/client.js"
     },
     "./server": {
-      "types": "./dist/types/server/server.d.ts",
-      "import": "./dist/playsocket-server.js"
+      "types": "./types/server/server.d.ts",
+      "import": "./src/server/server.js"
     }
   },
   "files": [
-    "dist"
+    "src",
+    "types"
   ],
   "scripts": {
     "start": "node example/example-server.js",
     "test": "npm run build && npx playwright test --config e2e/playwright.config.js",
     "test:headed": "npm run build && npx playwright test --config e2e/playwright.config.js --headed",
-    "build": "rollup -c rollup.config.js && tsc -p tsconfig.declarations.json",
+    "build": "tsc -p tsconfig.declarations.json",
     "lint": "eslint ."
   },
   "repository": {
@@ -43,27 +44,23 @@
   "homepage": "https://github.com/therealPaulPlay/PlaySocketJS#readme",
   "devDependencies": {
     "@playwright/test": "^1.58.1",
-    "@rollup/plugin-node-resolve": "^16.0.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^26.1.1",
     "eslint": "^9.35.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^16.3.0",
-    "rollup": "^4.31.0",
     "typescript": "^7.0.2"
-  },
-  "peerDependencies": {
-    "ws": "^8.18.1"
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.1.1",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "ws": "^8.18.1"
   },
-  "types": "./dist/types/client/client.d.ts",
+  "types": "./types/client/client.d.ts",
   "typesVersions": {
     "*": {
       "server": [
-        "./dist/types/server/server.d.ts"
+        "./types/server/server.d.ts"
       ]
     }
   }

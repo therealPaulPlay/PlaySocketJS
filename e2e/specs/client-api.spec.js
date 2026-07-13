@@ -224,7 +224,7 @@ test.describe("Client API", () => {
     test("createRoom before init rejects", async ({ page }) => {
         await openPage(page, ts.httpUrl, "test-client.html");
         const err = await page.evaluate(async ({ wsUrl }) => {
-            const { default: PlaySocket } = await import("/dist/playsocket-client.js");
+            const { default: PlaySocket } = await import("/src/client/client.js");
             const client = new PlaySocket("noInit", { endpoint: wsUrl });
             try { await client.createRoom({}); return null; }
             catch (e) { return e.message; }
@@ -235,7 +235,7 @@ test.describe("Client API", () => {
     test("joinRoom before init rejects", async ({ page }) => {
         await openPage(page, ts.httpUrl, "test-client.html");
         const err = await page.evaluate(async ({ wsUrl }) => {
-            const { default: PlaySocket } = await import("/dist/playsocket-client.js");
+            const { default: PlaySocket } = await import("/src/client/client.js");
             const client = new PlaySocket("noInit2", { endpoint: wsUrl });
             try { await client.joinRoom("SOME_ROOM"); return null; }
             catch (e) { return e.message; }

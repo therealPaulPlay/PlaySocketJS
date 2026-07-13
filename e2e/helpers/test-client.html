@@ -3,16 +3,17 @@
 
 <head>
     <title>PlaySocket test client</title>
-</head>
-
-<body>
+    <!-- Import map is needed to tell the browser where to pull msgpack (imported in client.js) from -->
+    <script type="importmap">
+        { "imports": { "@msgpack/msgpack": "/node_modules/@msgpack/msgpack/dist.esm/index.mjs" } }
+    </script>
     <script type="module">
-        import PlaySocket from '/dist/playsocket-client.js';
+        import PlaySocket from '/src/client/client.js';
 
         const clients = {};
         const events = {};
         const capturedSockets = {};
-        
+
         let networkDown = false;
 
         // Optionally intercept WebSocket for reconnection tests (?intercept-ws)
@@ -46,10 +47,10 @@
 
             const assignedId = await client.init();
             clients[assignedId] = client;
-            
+
             // Move events from tempID to server-assigned ID if provided
             if (tempId !== assignedId) { events[assignedId] = events[tempId]; delete events[tempId]; }
-            
+
             capturedSockets[assignedId] = window.__latestSocket;
             return assignedId;
         };
@@ -75,6 +76,6 @@
 
         window.__ready = true;
     </script>
-</body>
+</head>
 
 </html>

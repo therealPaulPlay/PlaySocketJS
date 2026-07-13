@@ -1,8 +1,0 @@
-resources/
-src/
-example/
-e2e/
-.github/
-rollup.config.js
-eslint.config.js
-prettier.config.js
