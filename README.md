@@ -111,7 +111,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room and become host – Returns a promise which resolves with the room ID. The room participant maximum is 100 |
 | `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room |
 | `destroy()` | - | `void` | Use this to leave a room and close the connection |
-| `updateStorage()` | `key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Array operation types allow for conflict-free simultaneous array updates. For '-matching' operations, value becomes the value to match, and updateValue the replacement |
+| `updateStorage()` | `key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Number, array and object operation types allow for conflict-free simultaneous updates. For '-matching' operations, value becomes the value to match, and secondValue the replacement. For object operations, value is the property key, and secondValue the property value |
 | `sendRequest()` | `name: string, data?: any` | `void` | Send requests to the server with optional custom data (handle them in the `requestReceived` server event) |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback |
 
@@ -254,7 +254,8 @@ The callback signature is `callback(verified, code?, message?)` where `code` and
 | `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
-| `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'array-add' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching', value: any, updateValue?: any` | `void` | Update a key in the shared room storage from the server |
+| `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for custom validation logic in the `storageUpdateRequested` event |
+| `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared room storage from the server |
 | `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state)|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants |
 

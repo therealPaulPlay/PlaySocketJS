@@ -20,14 +20,17 @@ test.describe('CRDTManager', () => {
         crdt.updateProperty('items', 'array-add', 'banana');
         expect(crdt.propertyStore.items).toEqual(['apple', 'banana']);
 
+        crdt.updateProperty('items', 'array-prepend', 'kiwi');
+        expect(crdt.propertyStore.items).toEqual(['kiwi', 'apple', 'banana']);
+
         crdt.updateProperty('items', 'array-add-unique', 'apple'); // apple already exists in array
-        expect(crdt.propertyStore.items).toEqual(['apple', 'banana']);
+        expect(crdt.propertyStore.items).toEqual(['kiwi', 'apple', 'banana']);
 
         crdt.updateProperty('items', 'array-add-unique', 'cherry');
-        expect(crdt.propertyStore.items).toEqual(['apple', 'banana', 'cherry']);
+        expect(crdt.propertyStore.items).toEqual(['kiwi', 'apple', 'banana', 'cherry']);
 
         crdt.updateProperty('items', 'array-remove-matching', 'banana');
-        expect(crdt.propertyStore.items).toEqual(['apple', 'cherry']);
+        expect(crdt.propertyStore.items).toEqual(['kiwi', 'apple', 'cherry']);
 
         // array-update-matching with objects
         crdt.updateProperty('players', 'set', [{ id: 'a', score: 0 }]);
@@ -37,6 +40,10 @@ test.describe('CRDTManager', () => {
 
     test('array operations on non-array, then set, then array again', () => {
         const crdt = new CRDTManager();
+
+        // Fresh key (null) is treated as an empty array
+        crdt.updateProperty('fresh', 'array-add', 'first');
+        expect(crdt.propertyStore.fresh).toEqual(['first']);
 
         // Start with a non-array value
         crdt.updateProperty('data', 'set', 'hello');
@@ -58,6 +65,65 @@ test.describe('CRDTManager', () => {
         expect(crdt.propertyStore.data).toEqual(['bar']);
     });
 
+    test('updateProperty with number-increment operation', () => {
+        const crdt = new CRDTManager();
+
+        // Fresh key (null) is treated as 0
+        crdt.updateProperty('score', 'number-increment', 5);
+        expect(crdt.propertyStore.score).toBe(5);
+
+        crdt.updateProperty('score', 'number-increment', 10);
+        expect(crdt.propertyStore.score).toBe(15);
+
+        // Negative values decrement
+        crdt.updateProperty('score', 'number-increment', -20);
+        expect(crdt.propertyStore.score).toBe(-5);
+
+        // Non-number current value is treated as 0
+        crdt.updateProperty('name', 'set', 'text');
+        expect(crdt.propertyStore.name).toBe('text');
+        crdt.updateProperty('name', 'number-increment', 3);
+        expect(crdt.propertyStore.name).toBe(3);
+
+        // Non-number increment values are ignored
+        crdt.updateProperty('score', 'number-increment', '5');
+        expect(crdt.propertyStore.score).toBe(-5);
+    });
+
+    test('updateProperty with all object operations', () => {
+        const crdt = new CRDTManager();
+
+        // object-set-key on a fresh key (null) creates the object
+        crdt.updateProperty('settings', 'object-set-key', 'difficulty', 'hard');
+        expect(crdt.propertyStore.settings).toEqual({ difficulty: 'hard' });
+
+        crdt.updateProperty('settings', 'object-set-key', 'rounds', 5);
+        expect(crdt.propertyStore.settings).toEqual({ difficulty: 'hard', rounds: 5 });
+
+        // Overwrite an existing property
+        crdt.updateProperty('settings', 'object-set-key', 'difficulty', 'easy');
+        expect(crdt.propertyStore.settings).toEqual({ difficulty: 'easy', rounds: 5 });
+
+        crdt.updateProperty('settings', 'object-remove-key', 'rounds');
+        expect(crdt.propertyStore.settings).toEqual({ difficulty: 'easy' });
+
+        // Object operation on a primitive auto-converts to object
+        crdt.updateProperty('primitive', 'set', 42);
+        expect(crdt.propertyStore.primitive).toBe(42);
+        crdt.updateProperty('primitive', 'object-set-key', 'a', 1);
+        expect(crdt.propertyStore.primitive).toEqual({ a: 1 });
+
+        // Object operation on an array auto-converts to object
+        crdt.updateProperty('arr', 'set', [1, 2]);
+        expect(crdt.propertyStore.arr).toEqual([1, 2]);
+        crdt.updateProperty('arr', 'object-set-key', 'b', 2);
+        expect(crdt.propertyStore.arr).toEqual({ b: 2 });
+
+        // __proto__ key is ignored (would change the prototype instead of adding a key)
+        crdt.updateProperty('settings', 'object-set-key', '__proto__', { polluted: true });
+        expect(crdt.propertyStore.settings).toEqual({ difficulty: 'easy' });
+    });
+
     test('importPropertyUpdate merges operations correctly', () => {
         const crdt1 = new CRDTManager();
         const crdt2 = new CRDTManager();
@@ -77,19 +143,22 @@ test.describe('CRDTManager', () => {
         crdt2.importPropertyUpdate(init);
         expect(crdt2.propertyStore.items).toEqual(['a', 'b']);
 
-        // crdt2 independently adds items
+        // crdt2 independently adds items & an object key
         crdt2.updateProperty('items', 'array-add', 'local1');
         crdt2.updateProperty('items', 'array-add', 'local2');
+        crdt2.updateProperty('prices', 'object-set-key', 'local', 13);
 
-        // crdt1 independently adds items
+        // crdt1 independently adds items & an object key
         const r1 = crdt1.updateProperty('items', 'array-add', 'remote1');
         const r2 = crdt1.updateProperty('items', 'array-add', 'remote2');
+        const r3 = crdt1.updateProperty('prices', 'object-set-key', 'remote', 21);
 
         // Import crdt1's operations into crdt2
         crdt2.importPropertyUpdate(r1);
         crdt2.importPropertyUpdate(r2);
+        crdt2.importPropertyUpdate(r3);
 
-        // crdt2 should have all items merged
+        // crdt2 should have all items & object keys merged
         const store = crdt2.propertyStore;
         expect(store.items).toContain('a');
         expect(store.items).toContain('b');
@@ -97,6 +166,7 @@ test.describe('CRDTManager', () => {
         expect(store.items).toContain('local2');
         expect(store.items).toContain('remote1');
         expect(store.items).toContain('remote2');
+        expect(store.prices).toEqual({ local: 13, remote: 21 });
     });
 
     test('state and importState round-trip preserves state', () => {

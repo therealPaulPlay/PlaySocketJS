@@ -1,7 +1,7 @@
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node:http';
 import { encode, decode } from '@msgpack/msgpack';
-import CRDTManager from '../universal/crdtManager';
+import CRDTManager, { getUpdateDetails } from '../universal/crdtManager';
 import { HEARTBEAT_INTERVAL } from '../universal/constants.js';
 
 /* eslint-disable jsdoc/require-returns */
@@ -515,18 +515,27 @@ export default class PlaySocketServer {
     }
 
     /**
+     * Get the operation details from a storage update (e.g. in the "storageUpdateRequested" event)
+     * @param {object} update - Property update
+     * @returns {{type: string, value: *, secondValue: *}} - Operation details
+     */
+    getUpdateDetails(update) {
+        return getUpdateDetails(update);
+    }
+
+    /**
      * Update a value in a room's storage
      * @param {string} roomId - Room ID
      * @param {string} key - Storage key
-     * @param {'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching'} type - Operation type
-     * @param {*} value - New value or value to operate on
-     * @param {*} updateValue - New value for update-matching
+     * @param {'set' | 'number-increment' | 'array-add' | 'array-prepend' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching' | 'object-set-key' | 'object-remove-key'} type - Operation type
+     * @param {*} value - Value
+     * @param {*} secondValue - Second value (needed for some operations)
      */
-    updateRoomStorage(roomId, key, type, value, updateValue) {
-        if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
+    updateRoomStorage(roomId, key, type, value, secondValue) {
+        if (this.#debug) console.log(`Playsocket server property update for room ${roomId}, key ${key}, operation ${type}, value ${value} and secondValue ${secondValue}.`);
         const room = this.#rooms[roomId];
         if (room) {
-            const propertyUpdate = room.crdtManager.updateProperty(key, type, value, updateValue);
+            const propertyUpdate = room.crdtManager.updateProperty(key, type, value, secondValue);
             const currentVersion = this.#roomVersions.get(roomId) + 1;
             this.#roomVersions.set(roomId, currentVersion); // Increment version for this room
 

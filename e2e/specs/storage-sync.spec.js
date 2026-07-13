@@ -37,7 +37,7 @@ test.describe('Storage sync', () => {
         await page2.close();
     });
 
-    // Array operations --------------
+    // Set operation ------------------
 
     test('set with object value', async () => {
         await page1.evaluate(({ id }) => window.updateStorage(id, 'config', 'set', { difficulty: 'hard', rounds: 5 }), { id: page1.__cid });
@@ -46,12 +46,22 @@ test.describe('Storage sync', () => {
         expect(s.config).toEqual({ difficulty: 'hard', rounds: 5 });
     });
 
+    // Array operations --------------
+
     test('array-add appends items', async () => {
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'apple'), { id: page1.__cid });
         await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'banana'), { id: page1.__cid });
         await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid });
         const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.items).toEqual(['apple', 'banana']);
+    });
+
+    test('array-prepend adds items to the front', async () => {
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-add', 'second'), { id: page1.__cid });
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'items', 'array-prepend', 'first'), { id: page1.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
+        expect(s.items).toEqual(['first', 'second']);
     });
 
     test('array-add-unique prevents duplicates', async () => {
@@ -101,6 +111,35 @@ test.describe('Storage sync', () => {
         await page2.waitForFunction(({ id }) => window.storage(id)?.score === 3, { id: page2.__cid });
         const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.score).toBe(3);
+    });
+
+    // Object operations -----------
+
+    test('object-set-key sets object properties', async () => {
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'prices', 'object-set-key', 'flower', 7), { id: page1.__cid });
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'prices', 'object-set-key', 'stone', 3), { id: page1.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.prices?.stone === 3, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
+        expect(s.prices).toEqual({ flower: 7, stone: 3 });
+    });
+
+    test('object-remove-key removes an object property', async () => {
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'prices', 'set', { flower: 7, stone: 3 }), { id: page1.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.prices?.flower === 7, { id: page2.__cid });
+        await page2.evaluate(({ id }) => window.updateStorage(id, 'prices', 'object-remove-key', 'flower'), { id: page2.__cid });
+        await page1.waitForFunction(({ id }) => window.storage(id)?.prices?.flower === undefined, { id: page1.__cid });
+        const s = await page1.evaluate(({ id }) => window.storage(id), { id: page1.__cid });
+        expect(s.prices).toEqual({ stone: 3 });
+    });
+
+    // Number operation -----------
+
+    test('number-increment increments and decrements', async () => {
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'score', 'number-increment', 10), { id: page1.__cid });
+        await page1.evaluate(({ id }) => window.updateStorage(id, 'score', 'number-increment', -3), { id: page1.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.score === 7, { id: page2.__cid });
+        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
+        expect(s.score).toBe(7);
     });
 
     // Multi-client sync and convergence ----------------------
@@ -257,6 +296,60 @@ test.describe('Storage sync', () => {
         await p1.close(); await p2.close();
     });
 
+    test('concurrent number-increment from two clients sums up', async ({ context }) => {
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, 'test-client.html');
+        await openPage(p2, ts.httpUrl, 'test-client.html');
+
+        await p1.evaluate(({ wsUrl }) => window.initClient('ni1', wsUrl), { wsUrl: ts.wsUrl });
+        const newRoomId = await p1.evaluate(() => window.createRoom('ni1', { score: 0 }));
+        await p2.evaluate(({ wsUrl }) => window.initClient('ni2', wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ roomId }) => window.joinRoom('ni2', roomId), { roomId: newRoomId });
+        await p1.waitForFunction(() => window.participantCount('ni1') === 2, null, { timeout: 2_000 });
+
+        // Both clients increment concurrently — increments must not overwrite each other
+        await Promise.all([
+            p1.evaluate(() => { for (let i = 0; i < 5; i++) window.updateStorage('ni1', 'score', 'number-increment', 2); }),
+            p2.evaluate(() => { for (let i = 0; i < 5; i++) window.updateStorage('ni2', 'score', 'number-increment', 4); }),
+        ]);
+
+        // Both must converge to the total sum
+        await p1.waitForFunction(() => window.storage('ni1')?.score === 30, null, { timeout: 5_000 });
+        await p2.waitForFunction(() => window.storage('ni2')?.score === 30, null, { timeout: 5_000 });
+
+        await p1.close(); await p2.close();
+    });
+
+    test('concurrent object-set-key on different keys merges both', async ({ context }) => {
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, 'test-client.html');
+        await openPage(p2, ts.httpUrl, 'test-client.html');
+
+        await p1.evaluate(({ wsUrl }) => window.initClient('oc1', wsUrl), { wsUrl: ts.wsUrl });
+        const newRoomId = await p1.evaluate(() => window.createRoom('oc1', { prices: {} }));
+        await p2.evaluate(({ wsUrl }) => window.initClient('oc2', wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ roomId }) => window.joinRoom('oc2', roomId), { roomId: newRoomId });
+        await p1.waitForFunction(() => window.participantCount('oc1') === 2, null, { timeout: 2_000 });
+
+        // Both clients set different keys on the same object concurrently
+        await Promise.all([
+            p1.evaluate(() => window.updateStorage('oc1', 'prices', 'object-set-key', 'flower', 7)),
+            p2.evaluate(() => window.updateStorage('oc2', 'prices', 'object-set-key', 'stone', 3)),
+        ]);
+
+        // Both keys must be present on both clients
+        await p1.waitForFunction(() => {
+            const prices = window.storage('oc1')?.prices;
+            return prices?.flower === 7 && prices?.stone === 3;
+        }, null, { timeout: 5_000 });
+        await p2.waitForFunction(() => {
+            const prices = window.storage('oc2')?.prices;
+            return prices?.flower === 7 && prices?.stone === 3;
+        }, null, { timeout: 5_000 });
+
+        await p1.close(); await p2.close();
+    });
+
     test('reactive concurrent updates - shared flag triggers simultaneous score writes', async ({ context }) => {
         const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
         await openPage(p1, ts.httpUrl, 'test-client.html');
@@ -322,15 +415,18 @@ test.describe('Storage sync', () => {
         await p1.close(); await p2.close();
     });
 
-    test('concurrent mixed operations (set, array-add, add-unique, remove, update) converge', async ({ context }) => {
+    test('concurrent mixed operations (all operation types) converge', async ({ context }) => {
         const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
         await openPage(p1, ts.httpUrl, 'test-client.html');
         await openPage(p2, ts.httpUrl, 'test-client.html');
 
         const initialStorage = {
             counter: 0,
+            score: 0,
             items: [],
             tags: [],
+            queue: [],
+            levelPlays: {},
             players: [{ id: 'p1', score: 0 }, { id: 'p2', score: 0 }],
         };
 
@@ -344,30 +440,40 @@ test.describe('Storage sync', () => {
         await Promise.all([
             p1.evaluate(() => {
                 for (let i = 0; i < 5; i++) window.updateStorage('mr1', 'counter', 'set', i * 10);
+                for (let i = 0; i < 5; i++) window.updateStorage('mr1', 'score', 'number-increment', 2);
                 for (let i = 0; i < 5; i++) window.updateStorage('mr1', 'items', 'array-add', 'a' + i);
+                window.updateStorage('mr1', 'queue', 'array-prepend', 'fromA');
                 window.updateStorage('mr1', 'tags', 'array-add-unique', 'shared');
                 window.updateStorage('mr1', 'tags', 'array-add-unique', 'onlyA');
                 window.updateStorage('mr1', 'players', 'array-update-matching', { id: 'p1', score: 0 }, { id: 'p1', score: 100 });
                 window.updateStorage('mr1', 'items', 'array-remove-matching', 'a0');
+                window.updateStorage('mr1', 'levelPlays', 'object-set-key', 'levelA', 3);
+                window.updateStorage('mr1', 'levelPlays', 'object-set-key', 'obsolete', 1);
+                window.updateStorage('mr1', 'levelPlays', 'object-remove-key', 'obsolete');
             }),
             p2.evaluate(() => {
                 for (let i = 0; i < 5; i++) window.updateStorage('mr2', 'counter', 'set', i * 10 + 5);
+                for (let i = 0; i < 5; i++) window.updateStorage('mr2', 'score', 'number-increment', 4);
                 for (let i = 0; i < 5; i++) window.updateStorage('mr2', 'items', 'array-add', 'b' + i);
+                window.updateStorage('mr2', 'queue', 'array-prepend', 'fromB');
                 window.updateStorage('mr2', 'tags', 'array-add-unique', 'shared');
                 window.updateStorage('mr2', 'tags', 'array-add-unique', 'onlyB');
                 window.updateStorage('mr2', 'players', 'array-update-matching', { id: 'p2', score: 0 }, { id: 'p2', score: 200 });
                 window.updateStorage('mr2', 'items', 'array-remove-matching', 'b0');
+                window.updateStorage('mr2', 'levelPlays', 'object-set-key', 'levelB', 5);
             }),
         ]);
 
-        // Wait for convergence: both clients see both player updates
+        // Wait for convergence: both clients see both player updates, the summed score & the trailing queue and object operations
         await p1.waitForFunction(() => {
             const s = window.storage('mr1');
-            return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200);
+            return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200) && s?.score === 30
+                && s?.queue?.length === 2 && s?.levelPlays?.levelA === 3 && s?.levelPlays?.levelB === 5;
         }, null, { timeout: 5_000 });
         await p2.waitForFunction(() => {
             const s = window.storage('mr2');
-            return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200);
+            return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200) && s?.score === 30
+                && s?.queue?.length === 2 && s?.levelPlays?.levelA === 3 && s?.levelPlays?.levelB === 5;
         }, null, { timeout: 5_000 });
 
         const s1 = await p1.evaluate(() => window.storage('mr1'));
@@ -376,16 +482,27 @@ test.describe('Storage sync', () => {
         // Both clients must have converged to identical state
         expect(JSON.stringify(s1)).toBe(JSON.stringify(s2));
 
-        // counter: last-write-wins, value must be one of the values that were set
+        // Last-write-wins, value must be one of the values that were set
         expect(s1.counter % 5 === 0).toBe(true);
 
-        // tags: 'shared' appears exactly once, both unique tags present
+        // Ensure concurrent increments added up
+        expect(s1.score).toBe(30);
+
+        // Ensure both prepended items are present in the queue
+        expect(s1.queue).toHaveLength(2);
+        expect(s1.queue).toContain('fromA');
+        expect(s1.queue).toContain('fromB');
+
+        // Ensure object keys from both clients were set and the removed key is gone
+        expect(s1.levelPlays).toEqual({ levelA: 3, levelB: 5 });
+
+        // Ensure 'shared' appears exactly once in the tags, both unique tags present
         expect(s1.tags).toContain('shared');
         expect(s1.tags).toContain('onlyA');
         expect(s1.tags).toContain('onlyB');
         expect(s1.tags.filter(t => t === 'shared').length).toBe(1);
 
-        // items: a0 and b0 were removed, all others present
+        // Ensure a0 and b0 were removed, all other items present
         expect(s1.items).not.toContain('a0');
         expect(s1.items).not.toContain('b0');
         for (let i = 1; i < 5; i++) {
@@ -393,7 +510,7 @@ test.describe('Storage sync', () => {
             expect(s1.items).toContain('b' + i);
         }
 
-        // players: both scores updated
+        // Both scores should be updated
         expect(s1.players.find(p => p.id === 'p1').score).toBe(100);
         expect(s1.players.find(p => p.id === 'p2').score).toBe(200);
 

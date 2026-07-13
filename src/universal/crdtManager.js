@@ -111,18 +111,18 @@ export default class CRDTManager {
      * Update a property
      * @param {string} key - Storage key
      * @param {string} type - Operation type
-     * @param {*} value - New value, or value to match
-     * @param {*} updateValue - New value for 'matching' operations
+     * @param {*} value - Value
+     * @param {*} secondValue - Second value
      * @returns {object | undefined} - Returns the property update
      */
-    updateProperty(key, type, value, updateValue) {
+    updateProperty(key, type, value, secondValue) {
         try {
             // Sanitize inputs
             value = this.#sanitizeValue(value);
-            updateValue = this.#sanitizeValue(updateValue);
+            secondValue = this.#sanitizeValue(secondValue);
 
             // Debug log
-            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and updateValue ${updateValue}.`);
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and secondValue ${secondValue}.`);
 
             // Increment vector clock
             const counter = this.#vectorClock.get(this.#replicaId) || 0;
@@ -132,7 +132,7 @@ export default class CRDTManager {
             const currentOps = [...(this.#keyOperations.get(key) || [])];
 
             // Add operation
-            const newOp = this.#createOperation({ type, value, updateValue }, Array.from(this.#vectorClock.entries()));
+            const newOp = this.#createOperation({ type, value, secondValue }, Array.from(this.#vectorClock.entries()));
             currentOps.push(newOp);
             this.#keyOperations.set(key, currentOps); // Update the operations (no need to sort via vector clock since local updates are always the latest)
             this.#processLocalProperty(key); // Process local value
@@ -187,7 +187,7 @@ export default class CRDTManager {
                             baselineValue,
                             op.data.type,
                             op.data.value,
-                            op.data.updateValue
+                            op.data.secondValue
                         );
                     }
 
@@ -208,7 +208,7 @@ export default class CRDTManager {
 
     /**
      * Create an operation object
-     * @param {object} data - Operation data, consists of type, value and updateValue
+     * @param {object} data - Operation data, consists of type, value and secondValue
      * @param {Array} vectorClock - Vector clock of the replica/client
      * @returns {object} - Operation object
      */
@@ -241,7 +241,7 @@ export default class CRDTManager {
                     value,
                     op.data.type,
                     op.data.value,
-                    op.data.updateValue
+                    op.data.secondValue
                 );
             }
 
@@ -291,11 +291,11 @@ export default class CRDTManager {
      * Handle an operation
      * @param {*} curValue - Current value of the storage key
      * @param {string} type - Operation type
-     * @param {*} value - New value, or value to match
-     * @param {*} [updateValue] - New value for 'matching' operations
+     * @param {*} value - Value
+     * @param {*} [secondValue] - Second value (needed for some operations)
      * @returns {*} - Value after the operation
      */
-    #handleOperation(curValue, type, value, updateValue) {
+    #handleOperation(curValue, type, value, secondValue) {
         try {
             // Deep copy to avoid reference issues in case value is or contains object(s)
             curValue = structuredClone(curValue);
@@ -303,32 +303,55 @@ export default class CRDTManager {
             // Set operation
             if (type === "set") return value;
 
+            // Number increment operation
+            if (type === "number-increment") {
+                if (!Number.isFinite(curValue)) curValue = 0; // Auto-convert to number if current value isn't a finite number
+                if (Number.isFinite(value)) curValue += value; // Negative values are allowed, increment can be used for decrementing (non-finite values are ignored)
+            }
+
             // Array operations
-            if (type.startsWith('array')) {
+            if (type.startsWith("array")) {
                 if (!Array.isArray(curValue)) curValue = []; // Auto-convert to array if current value isn't one
 
                 // Comparison function
-                const isObject = typeof value === 'object' && value !== null;
+                const isObject = typeof value === "object" && value !== null;
                 const compare = (item) => {
-                    if (isObject && typeof item === 'object' && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
+                    if (isObject && typeof item === "object" && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     return item === value; // Value comparison
                 };
 
                 switch (type) {
-                    case 'array-add':
+                    case "array-add":
                         curValue.push(value);
                         break;
-                    case 'array-add-unique':
+                    case "array-prepend":
+                        curValue.unshift(value);
+                        break;
+                    case "array-add-unique":
                         if (!curValue.some(compare)) curValue.push(value);
                         break;
-                    case 'array-remove-matching':
+                    case "array-remove-matching":
                         curValue = curValue.filter(item => !compare(item));
                         break;
-                    case 'array-update-matching': {
+                    case "array-update-matching": {
                         const index = curValue.findIndex(compare);
-                        if (index !== -1) curValue[index] = updateValue;
+                        if (index !== -1) curValue[index] = secondValue;
                         break;
                     }
+                }
+            }
+
+            // Object operations
+            if (type.startsWith("object")) {
+                if (typeof curValue !== "object" || curValue === null || Array.isArray(curValue)) curValue = {}; // Auto-convert to object if current value isn't one
+
+                switch (type) {
+                    case "object-set-key":
+                        if (value !== "__proto__") curValue[value] = secondValue; // Assigning __proto__ is not allowed as it would break things
+                        break;
+                    case "object-remove-key":
+                        delete curValue[value];
+                        break;
                 }
             }
 
@@ -348,11 +371,11 @@ export default class CRDTManager {
     #sanitizeValue(value) {
         // Check total serialized size
         const jsonString = JSON.stringify(value);
-        if (jsonString?.length > 50000) throw new Error('Value too large!'); // 50KB limit
+        if (jsonString?.length > 50000) throw new Error("Value too large!"); // 50KB limit
 
-        if (typeof value === 'string') return (value.includes('<') || value.includes('>')) ? value.replace(/[<>]/g, '') : value;
+        if (typeof value === "string") return (value.includes("<") || value.includes(">")) ? value.replace(/[<>]/g, '') : value;
         if (Array.isArray(value)) return value.map(item => this.#sanitizeValue(item));
-        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
         return value;
     }
 
@@ -395,4 +418,14 @@ export default class CRDTManager {
             vectorClock: [...this.#vectorClock.entries()]
         };
     }
+}
+
+/**
+ * Get the operation details from a property update
+ * @param {object} update - Property update
+ * @returns {{type: string, value: *, secondValue: *}} - Operation details
+ */
+export function getUpdateDetails(update) {
+    const { type, value, secondValue } = update?.operation?.data || {};
+    return { type, value, secondValue };
 }

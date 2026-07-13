@@ -425,17 +425,17 @@ export default class PlaySocket {
     /**
      * Update a value in the shared storage
      * @param {string} key - Storage key
-     * @param {'set' | 'array-add' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching'} type - Operation type
-     * @param {*} value - New value or value to operate on
-     * @param {*} updateValue - New value for update-matching
+     * @param {'set' | 'number-increment' | 'array-add' | 'array-prepend' | 'array-add-unique' | 'array-remove-matching' | 'array-update-matching' | 'object-set-key' | 'object-remove-key'} type - Operation type
+     * @param {*} value - Value
+     * @param {*} secondValue - Second value (needed for some operations)
      */
-    updateStorage(key, type, value, updateValue) {
+    updateStorage(key, type, value, secondValue) {
         if (!this.#inRoom) {
             this.#triggerEvent("error", "Failed to update storage - not in a room.");
             return;
         };
-        if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and updateValue ${updateValue}.`);
-        const propUpdate = this.#crdtManager.updateProperty(key, type, value, updateValue);
+        if (this.#debug) console.log(LOG_PREFIX + `Property update for key ${key}, operation ${type}, value ${value} and secondValue ${secondValue}.`);
+        const propUpdate = this.#crdtManager.updateProperty(key, type, value, secondValue);
         this.#sendToServer({
             type: 'update_property',
             update: propUpdate

@@ -30,6 +30,25 @@ test.describe('Server API', () => {
         ts.close();
     });
 
+    test('server getUpdateDetails returns the operation details of a storage update', async ({ page }) => {
+        let details;
+        const ts = await createTestServer({
+            eventHandlers: {
+                storageUpdateRequested: ({ update }) => {
+                    details = ts.server.getUpdateDetails(update);
+                }
+            }
+        });
+        await openPage(page, ts.httpUrl, 'test-client.html');
+        await page.evaluate(({ wsUrl }) => window.initClient('sr5', wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom('sr5', { settings: {} }));
+
+        await page.evaluate(() => window.updateStorage('sr5', 'settings', 'object-set-key', 'volume', 11));
+
+        await expect.poll(() => details, { timeout: 5_000 }).toEqual({ type: 'object-set-key', value: 'volume', secondValue: 11 });
+        ts.close();
+    });
+
     test('server updateRoomStorage broadcasts to all room participants', async ({ context }) => {
         const ts = await createTestServer();
         const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
