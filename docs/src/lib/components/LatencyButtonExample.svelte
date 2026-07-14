@@ -8,7 +8,7 @@
 </script>
 
 <div class="grow text-center content-center">
-	<Button class="min-w-25" variant={button2Clicked ? "secondary" : undefined} onclick={() => (button2Clicked = true)}
+	<Button class="min-w-25 mt-1" variant={button2Clicked ? "secondary" : undefined} onclick={() => (button2Clicked = true)}
 		>{button2Clicked ? "Active" : "Activate"}</Button
 	>
 	<p class="text-muted-foreground mt-2.5 text-sm">Instant</p>
@@ -16,7 +16,7 @@
 <Separator orientation={innerWidth.current < 768 ? "horizontal" : "vertical"} class="md:h-20! max-md:my-4 md:mx-4" />
 <div class="grow text-center content-center">
 	<Button
-		class="min-w-25"
+		class="min-w-25 mt-1"
 		variant={button1Clicked ? "secondary" : undefined}
 		onclick={() => setTimeout(() => (button1Clicked = true), 500)}>{button1Clicked ? "Active" : "Activate"}</Button
 	>

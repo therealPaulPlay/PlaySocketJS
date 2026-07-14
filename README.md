@@ -14,9 +14,7 @@ PlaySocket makes developing shared experiences a breeze:
 
 &nbsp;
 
-# PlaySocket Client
-
-The client-side part of PlaySocket.
+<!-- docs-start -->
 
 ## Installation
 
@@ -24,24 +22,30 @@ The client-side part of PlaySocket.
 npm install playsocketjs
 ```
 
-## Usage examples
+## PlaySocket Client
 
-Note that in production, you should **always try...catch** promises, such as socket.init() – they can reject!
+The client-side part of PlaySocket.
+
+### Examples
+
+> [!NOTE]
+> In production, you should **always try...catch** promises such as `socket.init()` as they can reject. These examples omit the error handling to keep them simple.
 
 Initializing the client:
 ```javascript
 import PlaySocket from 'playsocketjs';
 
 // Create a new instance
-const socket = new PlaySocket('unique-client-id', { // You can pass no ID to let the server pick one
+// Omit the ID to let the server pick one
+const socket = new PlaySocket('unique-client-id', {
     endpoint: 'wss://example.com/socket'
 });
 
-// Set up event handlers (optional)
-socket.onEvent('status', status => console.log('Status:', status));
-socket.onEvent('error', error => console.log('Error:', error));
+// Set up event handlers
+socket.onEvent('status', status => console.log(status));
+socket.onEvent('error', error => console.error(error));
 
-const clientId = await socket.init(); // Initialize the socket
+const clientId = await socket.init(); // Connect
 ```
 
 Creating a room:
@@ -51,7 +55,7 @@ const roomId = await socket.createRoom();
 
 // Optionally, with initial storage
 const roomId = await socket.createRoom({
-  players: ["this-player"],
+  players: [{ name: "Player-1", level: 35 }],
   latestPlayer: null,
 });
 ```
@@ -63,117 +67,117 @@ await socket.joinRoom('room-id'); // Join an existing room
 
 Leaving a room:
 ```javascript
-socket.destroy(); // To leave the room, destroy the instance
+socket.destroy(); // Destroy the instance to leave
 ```
 
-Using the storage update event for reactivity:
+Using the storage update event with reactivity:
 ```javascript
-const reactiveVariable = useState(); // Or $state(), reactive(), depending on your framework
-socket.onEvent('storageUpdated', storage => (reactiveVariable = storage)); // Assign on update
+// Assign to useState(), $state(), reactive() etc. on update
+const [reactiveVar, setReactiveVar] = useState(); 
+socket.onEvent('storageUpdated', storage => {
+    setReactiveVar(storage);
+});
 ```
 
-Interfacing with the synchronized storage (examples):
+```jsx
+<p>Players: {reactiveVar.players?.join(", ")}</p>
+```
+
+Interfacing with the synchronized storage:
 ```javascript
-const currentState = socket.storage; // Synchronous, local access
-socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 }); // Special method to enable conflict-free additions for arrays
-socket.updateStorage('latestPlayer', 'set', 'Player4'); // Regular synced storage update
+const currentState = socket.storage; // Read-only
+
+socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 });
+socket.updateStorage('latestPlayer', 'set', 'Player4');
+socket.updateStorage('playerInfo', 'set', '{ date: "22-6-2026 }');
+socket.updateStorage('playerInfo', 'object-set-key', 'color', 'red')
+
+console.log(socket.storage.players); // Log players array
 ```
 
-Sending traditional requests to the server:
+Sometimes it's convenient to send a traditional request to the server. For example, when you want to opt out of optimistic updates, or when
+the validation logic would be too complex otherwise:
 ```javascript
-socket.sendRequest('chosen-request-name', { fact: "You can build server-authoritative logic using this!" })
+socket.sendRequest('my-request-name', { fact: "You can build traditional client-server logic like this." })
 ```
 
-## API reference
+### API reference
 
-### Constructor
+#### Constructor
 
-Creates a new PlaySocket instance with a specified ID and configuration options.
+Create a new PlaySocket instance with a specified ID and configuration options.
 The ID can be set to `null` to let the server pick a unique one.
 
 ```javascript
 new PlaySocket(id?: string, options: PlaySocketOptions)
 ```
 
-#### Configuration options
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `endpoint` | `string` | Yes | `undefined` | WebSocket server endpoint (e.g., wss://example.com/socket). |
+| `customData` | `object` | No | `{}` | Arbitrary data to pass to the "clientRegistered" server event. |
+| `debug` | `boolean` | No | `false` | Set to true to enable extra logging. |
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `endpoint` | string | `undefined` | WebSocket server endpoint (e.g., 'wss://example.com/socket') (required) |
-| `customData` | object | `{}` | Arbitrary data to pass to the "clientRegistered" server event |
-| `debug` | boolean | `false` | Set to true to enable extra logging |
+#### Methods
 
-### Methods
-
-| Method | Parameters | Return type | Description |
+| Name | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
-| `init()` | - | `Promise<string>` | Initialize the WebSocket connection – Returns a promise which resolves with the client's ID |
-| `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room and become host – Returns a promise which resolves with the room ID. The room participant maximum is 100 |
-| `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room |
-| `destroy()` | - | `void` | Use this to leave a room and close the connection |
-| `updateStorage()` | `key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Number, array and object operation types allow for conflict-free simultaneous updates. For '-matching' operations, value becomes the value to match, and secondValue the replacement. For object operations, value is the property key, and secondValue the property value |
-| `sendRequest()` | `name: string, data?: any` | `void` | Send requests to the server with optional custom data (handle them in the `requestReceived` server event) |
-| `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback |
+| `init()` | - | `Promise<string>` | Initialize the WebSocket connection, resolves with the client ID. |
+| `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room, resolves with the room ID. Max. 500 participants. |
+| `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room. |
+| `destroy()` | - | `void` | Leave room, close the connection, and destroy the instance. |
+| `updateStorage()` | `key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Number, array and object operation types allow for conflict-free simultaneous updates. For '-matching' operations, value becomes the value to match, and secondValue the replacement. For object operations, value is the property key, and secondValue the property value. |
+| `sendRequest()` | `name: string, data?: any` | `void` | Send a request to the server with optional attached data. |
+| `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback. |
 
-### Event types
+#### Event types
 
 | Event | Callback parameter | Description |
 |-------|-------------------|-------------|
-| `status` | `status: string` | Connection status updates |
-| `error` | `error: string` | Error events |
-| `moved` | `roomId: string` | Moved to different room |
-| `instanceDestroyed` | - | Destruction event - triggered by manual .destroy() method invocation or by fatal errors and disconnects |
-| `storageUpdated` | `storage: object` | Storage state changes |
-| `hostMigrated` | `roomId: string` | Host changes |
-| `clientJoined` | `clientId: string` | New client joined the room |
-| `clientLeft` | `clientId: string, roomId?: string` | Client left the room |
+| `status` | `status: string` | Connection or room status updated. |
+| `error` | `error: string` | Error occured. |
+| `moved` | `roomId: string` | Moved to different room. |
+| `instanceDestroyed` | - | Instance destruction event, triggered by destroy() invocation or by fatal errors. |
+| `storageUpdated` | `storage: object` | Storage state changed. Does not trigger on no-op updates (e.g. setting color to red when it's already red). |
+| `hostMigrated` | `roomId: string` | Host was changed. |
+| `clientJoined` | `clientId: string` | A client joined the room. |
+| `clientLeft` | `clientId: string, roomId?: string` | Client left the room. |
 
-### Properties (Read-only)
+#### Properties (read-only)
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | string | Client's unique identifier on the WebSocket server |
-| `isHost` | boolean | If this user is currently assigned the host role |
-| `participantCount` | number | Number of active client connections in room (with yourself) |
-| `storage` | object | Retrieve storage object |
+| `id` | `string` | Client's unique ID. |
+| `isHost` | `boolean` | Whether this client is currently assigned the host role. |
+| `participantCount` | `number` | Number of active client connections in room. |
+| `storage` | `object` | Retrieve the storage object. |
 
 &nbsp;
 
-# PlaySocket Server
+## PlaySocket Server
 
 The server-side part of PlaySocket.
 
-## Installation
+### Examples
 
-To use PlaySocket on your server, you'll need to install playsocketjs:
-
-```bash
-npm install playsocketjs
-```
-
-## Usage examples
-
-Here are usage examples for a standalone server and an Express.js application.
-
-### Standalone server
+Using PlaySocket as a standalone server:
 
 ```javascript
-import PlaySocketServer from 'playsocketjs/server'; // Both ES Module & CommonJS Module syntax is supported
+import PlaySocketServer from 'playsocketjs/server';
 
-const server = new PlaySocketServer(); // Create and start the server (default path is /)
+// Path defaults to "/"
+const server = new PlaySocketServer();
 
-// Gracefully disconnect all clients and close the server (optional)
 function shutdown() {
-    server.stop();
+    server.stop(); // Gracefully disconnect all clients
     process.exit(0);
 }
 
-// Handle both SIGINT and SIGTERM
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
 
-### Together with Express.js (or other Backend frameworks)
+Using PlaySocket together with Express.js (or other Backend frameworks):
 
 ```javascript
 const express = require('express');
@@ -183,7 +187,7 @@ const PlaySocketServer = require('playsocketjs/server');
 const app = express();
 const httpServer = http.createServer(app);
 
-// Create PlaySocket server with your HTTP server
+// Create PlaySocket server with existing HTTP server
 const playSocketServer = new PlaySocketServer({
   server: httpServer,
   path: '/socket'
@@ -194,39 +198,89 @@ httpServer.listen(3000, () => {
   console.log('Server running on port 3000');
 });
 
-// Gracefully disconnect all clients and close the server (recommended)
 function shutdown() {
-    playSocketServer.stop();
+    playSocketServer.stop(); // Gracefully disconnect clients
     process.exit(0);
 }
 
-// Handle both SIGINT and SIGTERM
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
 
-## API reference
-
-### Constructor
-
-Creates a new PlaySocket Server instance with configuration options.
+Validating an incoming storage update:
 
 ```javascript
-new PlaySocketServer(options: PlaySocketServerOptions)
+const server = new PlaySocketServer();
+
+server.onEvent("storageUpdateRequested", ({ roomId, clientId, update, storage }) => {
+    // Block updates on all keys except for "players" and "chats"
+    if (!["players", "chats"].includes(update.key)) return false;
+
+    if (update.key === "chats") {
+        const { type, value, secondValue } = server.getUpdateDetails(update);
+        if (type !== "array-add") return false; // Only allow adding chats
+        if (typeof value !== "string") return false; // Only allow strings
+    }
+});
 ```
 
-#### Configuration options
+Handling an incoming request:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `port` | number | 3000 | Port to listen on (used only if no server provided) |
-| `path` | string | '/' | WebSocket endpoint path |
-| `server` | http.Server | - | Existing http server (optional) |
-| `rateLimit` | number | 20 | Adjust the messages/second rate limit |
-| `debug` | boolean | false | Set to true to enable extra logging |
-| `verifyClient` | function | - | Optional callback to verify connections before WebSocket upgrade |
+```javascript
+const server = new PlaySocketServer();
 
-#### verifyClient callback
+server.onEvent("requestReceived", async ({ roomId, clientId, name, data }) => {
+    if (name === "add-player-request") {
+        const players = server.getRoomStorage(roomId)?.players || [];
+        if (players.find(p => p.id === clientId)) return; // Already added this client
+        server.updateRoomStorage(roomId, "players", "array-add", { id: clientId, timestamp: Date.now() });
+    }
+});
+```
+
+Combining PlaySocket with a custom authentication system:
+
+```javascript
+const authedClients = [];
+const server = new PlaySocketServer();
+
+server.onEvent("clientRegistrationRequested", async (clientId, data) => {
+    try {
+        // Your custom auth logic...
+        // For example, data could contain a session token provided by the client
+        authedClients.push(clientId);
+    } catch (error) {
+        return "An error occured during auth."; // Blocks the registration
+    }
+});
+
+server.onEvent("clientDisconnected", async (clientId) => {
+    const removeIndex = authedClients.indexOf(clientId);
+    if (removeIndex !== -1) authedClients.splice(removeIndex, 1);
+});
+
+```
+
+### API reference
+
+#### Constructor
+
+Create a new PlaySocket Server instance with configuration options.
+
+```javascript
+new PlaySocketServer(options?: PlaySocketServerOptions)
+```
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `port` | `number` | No | 3000 | Port to listen on (used only if no server provided). |
+| `path` | `string` | No | '/' | WebSocket endpoint path. |
+| `server` | `http.Server` | No | - | Existing http server. |
+| `rateLimit` | `number` | No | 20 | Messages/second rate limit. |
+| `debug` | `boolean` | No | false | Enable debug logging. |
+| `verifyClient` | `function` | No | - | Callback to verify connections before WebSocket upgrade. |
+
+**verifyClient callback**
 
 The `verifyClient` option allows you to implement custom connection verification logic, such as rate limiting, before the WebSocket handshake completes.
 
@@ -235,52 +289,58 @@ const server = new PlaySocketServer({
     server: httpServer,
     path: '/socket',
     verifyClient: (info, callback) => {
-        // info.req - the HTTP request object, info.origin - the Origin header value
-        const ip = info.req.headers['x-forwarded-for'] || info.req.socket.remoteAddress;
-        if (isRateLimited(ip)) return callback(false, 429, 'Too Many Requests');
+        const ip = info.req.headers['x-forwarded-for'];
+        if (isRateLimited(ip)) { 
+            return callback(false, 429, 'Too Many Requests');
+        }
         callback(true);
     }
 });
 ```
 
-The callback signature is `callback(verified, code?, message?)` where `code` and `message` are the optional HTTP response status for rejected connections.
+The callback signature is `callback(verified, code?, message?)` where `code` refers to an HTTP status code and `message` to a rejection reason.
 
-### Methods
+#### Methods
 
-| Method | Parameters | Return type | Description |
+> [!IMPORTANT]
+> Rooms created by the server default to host ID "server". If that host string is used, the room will not be auto-deleted when all participants have left and you need to take care of its lifecycle.
+
+| Name | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
-| `stop()` | - | `void` | Closes all active client connections, the websocket server and the underlying http server if it's standalone |
-| `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their clientID – this will close their connection and set an error message |
-| `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room |
-| `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback |
-| `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage |
-| `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for custom validation logic in the `storageUpdateRequested` event |
-| `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared room storage from the server |
-| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state)|
-| `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants |
+| `stop()` | - | `void` | Closes active client connections, the WS server, and the underlying http server (if it's standalone). |
+| `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their client ID. |
+| `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room. |
+| `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback. |
+| `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage. |
+| `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for custom validation logic in the `storageUpdateRequested` event. |
+| `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared room storage. |
+| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state).|
+| `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants. |
 
-### Event types
+#### Event types
 
 | Event | Callback parameters | Description | Return for action |
 |-------|-------------------|-------------|--------------|
-| `clientRegistered` | `clientId: string, customData: object` | Client registered with the server | - |
-| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requests to register | Return `false` or rejection reason `string` to block |
-| `clientDisconnected` | `clientId: string` | Client disconnected from the server | - |
-| `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room | - |
-| `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room | Return `false` or rejection reason `string` to block |
-| `clientLeftRoom` | `clientId: string, roomId: string` | Client left a room | - |
-| `roomCreated` | `roomId: string` | Client created a room | - |
-| `roomDestroyed` | `roomId: string` | Room was destroyed (happens when all participants leave, unless room host is "server") | - |
-| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Room creation requested by client | Return `object` to override initial storage, `false` to deny |
-| `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage property updated | - |
-| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage property update requested by client | Return `false` to block the update |
-| `requestReceived` | `{clientId: string, roomId?: string, requestName: string, data?: any}` | Request from client was received by the server | - |
+| `clientRegistered` | `clientId: string, customData: object` | Client registered with the server. | - |
+| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requests to register. | Return `false` or rejection reason `string` to block. |
+| `clientDisconnected` | `clientId: string` | Client disconnected. | - |
+| `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room. | - |
+| `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room. | Return `false` or rejection reason `string` to block. |
+| `clientLeftRoom` | `clientId: string, roomId: string` | Client left a room. | - |
+| `roomCreated` | `roomId: string` | Client created a room. | - |
+| `roomDestroyed` | `roomId: string` | Room was destroyed. | - |
+| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requests to create room. | Return `object` to override initial storage, `false` to block. |
+| `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
+| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requests storage update. | Return `false` to block the update. |
+| `requestReceived` | `{clientId: string, roomId?: string, requestName: string, data?: any}` | Request from client. | - |
 
-### Properties (Read-only)
+#### Properties (read-only)
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `rooms` | object | Retrieve the rooms object |
+| `rooms` | `object` | Retrieve the rooms object. |
+
+<!-- docs-end -->
 
 # License
 

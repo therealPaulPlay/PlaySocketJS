@@ -7,7 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--background: oklch(97.531% 0.00386 106.914);
+	--background: oklch(97.531% 0 0);
 	--foreground: oklch(0.145 0 0);
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.145 0 0);
@@ -134,4 +134,40 @@
 	.prose h2 {
 		@apply font-semibold!;
 	}
+}
+
+.prose code:not(pre code) {
+	@apply bg-border rounded px-0.5 font-normal;
+}
+
+.prose code::before,
+.prose code::after {
+	content: none;
+}
+
+.markdown-alert {
+	padding: 0.5rem 1rem;
+	margin-block: 1.25em;
+	border-left: 0.25em solid var(--primary);
+}
+
+.markdown-alert > :first-child {
+	margin-top: 0;
+}
+
+.markdown-alert > :last-child {
+	margin-bottom: 0;
+}
+
+.markdown-alert .markdown-alert-title {
+	display: flex;
+	align-items: center;
+	font-weight: 500;
+	line-height: 1;
+	color: var(--primary);
+}
+
+.markdown-alert .octicon {
+	fill: currentColor;
+	margin-right: 0.35rem;
 }

@@ -1,21 +1,49 @@
 <script>
 	import InteractiveBox from "$lib/components/InteractiveBox.svelte";
 	import LatencyButtonExample from "$lib/components/LatencyButtonExample.svelte";
+	import RenderCode from "$lib/components/RenderCode.svelte";
+	import Button from "$lib/components/ui/button/button.svelte";
+	import { ArrowRight } from "@hugeicons/core-free-icons";
+	import { HugeiconsIcon } from "@hugeicons/svelte";
+
+	let clientInventoryExample = `import PlaySocket from 'playsocketjs';
+
+const socket = new PlaySocket("michael's-id", {
+    endpoint: "wss://example.com/socket"
+});
+
+socket.onEvent("storageUpdated", (storage) => {
+	console.log("Current inventory:", storage.inventory);
+}
+
+// Assuming Lana already created a room
+await socket.init();
+await socket.joinRoom("lana's-room-id");
+
+socket.updateStorage("inventory", "array-add", "rope");`;
+
+	let serverInventoryExample = `import PlaySocketServer from 'playsocketjs/server';
+
+const server = new PlaySocketServer({ path: "/socket" });`;
 </script>
 
-<img alt="artwork" src="/images/clear-connection-wassily-kandinsky.jpg" class="w-full h-auto mb-2" />
+<img
+	alt="artwork"
+	src="/images/clear-connection-wassily-kandinsky.jpg"
+	class="w-full h-auto mb-2 object-contain object-left max-h-[calc(100dvh-275px)]"
+/>
 
-<article class="prose max-md:px-4 text-pretty">
+<article class="prose prose-h1:mt-14 prose-h1:mb-4 max-md:px-4 text-pretty">
 	<p class="text-muted-foreground/50 text-xs">Clear Connection, Wassily Kandinsky, 1925</p>
 
-	<h1 class="mt-14 mb-4">PlaySocketJS</h1>
+	<h1>PlaySocket</h1>
 
 	<p>
-		PlaySocketJS is a WebSocket-based synchronization library built for creating collaborative experiences, such as
+		PlaySocket is a WebSocket-based synchronization library built for creating collaborative experiences, such as
 		multiplayer games.
 	</p>
 	<p>
-		The two unique aspects of PlaySocketJS are its <span class="bg-border rounded px-0.5">CRDT-based architecture</span>
+		The two unique aspects of PlaySocket are its <span class="bg-border rounded px-0.5">CRDT-based architecture</span>
 		that allows for optimistic updates without any extra logic, and its
 		<span class="bg-border rounded px-0.5">synchronized storage</span> that works beautifully with reactive frontend frameworks
 		such as React or Svelte.
@@ -26,7 +54,7 @@
 		client input is made easy through callbacks and helper functions.
 	</p>
 	<p>
-		Security is a top priority of PlaySocketJS. Out of the box, it protects against XSS attacks and comes with thorough
+		Security is a top priority of PlaySocket. Out of the box, it protects against XSS attacks and comes with thorough
 		WebSocket rate limiting.
 	</p>
 	<p>
@@ -37,31 +65,35 @@
 	<h2>The problem</h2>
 
 	<p>
-		When building a UX that combines user input with server requests, latency becomes a problem. It feels <i>odd</i> when
-		a UI update triggered by an interaction isn't immediate.
+		When building a UX that combines user input with server requests, latency becomes troublesome. It feels <i>odd</i> when
+		the UI update isn't immediate.
 	</p>
 	<InteractiveBox><LatencyButtonExample /></InteractiveBox>
 	<p>
 		Optimistic updates – updating the UI before the request resolves, and reverting on error – are what developers reach
 		for in these scenarios.
 	</p>
-	<h3>Ordering complexity</h3>
 	<p>
-		In situations where there's only one user making changes to an interface at a time, this is relatively trivial to
-		do. The real complexity comes when multiple users can interact with an interface simultaneously.
+		When there's only one user making changes to an interface at a time, this is relatively trivial to do. The real
+		complexity arises when multiple users can interact with an interface simultaneously.
 	</p>
-	<p>Let's think through a scenario where two users collaborate to pick a color:</p>
+	<h3>Ordering complexity</h3>
+
+	<p>
+		Let's think through a scenario where two users collaborate to pick a color in an optimistically-updated user
+		interface:
+	</p>
 	<ol>
 		<li>
-			Michael selects <span class="bg-border rounded px-0.5">green</span>, and his UI optimistically updates to green
+			Michael selects <span class="bg-border rounded px-0.5">green</span>, and his UI updates to green.
 		</li>
 		<li>
-			Lana selects <span class="bg-border rounded px-0.5">blue</span>, and her UI optimistically updates to blue
+			Lana selects <span class="bg-border rounded px-0.5">blue</span>, and her UI updates to blue.
 		</li>
-		<li>Server receives <span class="bg-border rounded px-0.5">green</span> and broadcasts it to all clients</li>
-		<li>Lana's UI now shows <span class="bg-border rounded px-0.5">green</span>, Michael's already does</li>
-		<li>Server receives <span class="bg-border rounded px-0.5">blue</span> and broadcasts it to all clients</li>
-		<li>Lana's UI now shows <span class="bg-border rounded px-0.5">blue</span> again, Michael's now shows blue</li>
+		<li>Server receives <span class="bg-border rounded px-0.5">green</span> and broadcasts it to all clients.</li>
+		<li>Lana's UI now shows <span class="bg-border rounded px-0.5">green</span>, Michael's already does.</li>
+		<li>Server receives <span class="bg-border rounded px-0.5">blue</span> and broadcasts it to all clients.</li>
+		<li>Lana's UI now shows <span class="bg-border rounded px-0.5">blue</span> again, Michael's now shows blue.</li>
 	</ol>
 	<p>
 		The issue with this flow is that Lana's UI briefly flashes green, even though that color was selected by Michael <i
@@ -70,33 +102,32 @@
 		her selection.
 	</p>
 	<p>
-		PlaySocketJS uses a <span class="bg-border rounded px-0.5">vector clock</span> to avoid this issue – with it, Lana's
-		client, upon receiving Michael's color update, knows that her selection is newer than Michael's and her UI remains unchanged.
+		PlaySocket uses a <span class="bg-border rounded px-0.5">vector clock</span> to avoid this issue – with it, Lana's client,
+		upon receiving Michael's color update, knows that her selection is newer than Michael's and her UI remains unchanged.
 	</p>
 	<h3>Merging complexity</h3>
 	<p>
-		Ordering isn't the only thing that goes wrong when multiple users act at once. When two users modify the same piece
-		of data simultaneously, one change can silently overwrite the other.
+		Ordering isn't the only thing that can go wrong when multiple users act at once. Let's think through a scenario
+		where two players add items to a shared, optimistically-updated inventory at the same time:
 	</p>
-	<p>Let's think through a scenario where two players add items to a shared inventory:</p>
 	<ol>
-		<li>Two players share an inventory that starts out as <span class="bg-border rounded px-0.5">["torch"]</span></li>
+		<li>The inventory starts out as <span class="bg-border rounded px-0.5">["torch"]</span>.</li>
 		<li>
 			Michael adds <span class="bg-border rounded px-0.5">rope</span>, and his UI optimistically shows
-			<span class="bg-border rounded px-0.5">["torch", "rope"]</span>
+			<span class="bg-border rounded px-0.5">["torch", "rope"]</span>.
 		</li>
 		<li>
 			Lana adds <span class="bg-border rounded px-0.5">map</span>, and her UI optimistically shows
-			<span class="bg-border rounded px-0.5">["torch", "map"]</span>
+			<span class="bg-border rounded px-0.5">["torch", "map"]</span>.
 		</li>
 		<li>
-			Server receives Michael's list <span class="bg-border rounded px-0.5">["torch", "rope"]</span> and broadcasts it
+			Server receives Michael's list <span class="bg-border rounded px-0.5">["torch", "rope"]</span> and broadcasts it.
 		</li>
 		<li>
-			Server receives Lana's list <span class="bg-border rounded px-0.5">["torch", "map"]</span> and broadcasts it
+			Server receives Lana's list <span class="bg-border rounded px-0.5">["torch", "map"]</span> and broadcasts it.
 		</li>
 		<li>
-			Every UI now shows <span class="bg-border rounded px-0.5">["torch", "map"]</span>
+			Both UIs now show <span class="bg-border rounded px-0.5">["torch", "map"]</span>.
 		</li>
 	</ol>
 	<p>
@@ -104,19 +135,24 @@
 		last wins. Michael's addition to the inventory, the rope, is silently lost.
 	</p>
 	<p>
-		PlaySocketJS avoids this by describing changes as <span class="bg-border rounded px-0.5">operations</span>. Instead
-		of setting the whole array, both clients send an
+		PlaySocket avoids this by describing changes as <span class="bg-border rounded px-0.5">operations</span>. Instead of
+		setting the whole array, both clients send an
 		<span class="bg-border rounded px-0.5">array-add</span> operation. The two changes simply combine, and every client converges
 		to the expected result.
 	</p>
 
 	<h2>A quick example</h2>
 
-	<p>This is how PlaySocketJS could be used to solve the inventory problem.</p>
+	<p>
+		This is how the inventory problem from above can be solved. The code below isn't quite production ready, but should
+		give you an idea of how the library works.
+	</p>
 
-    <p>WIP, show code here.</p>
+	<RenderCode code={clientInventoryExample} text="Client" />
+	<RenderCode code={serverInventoryExample} text="Server" class="mt-4" />
 
 	<h2>Getting started</h2>
 
-	<p>To get started, install the library via your package manager of choice.</p>
+	<p>To get started with PlaySocket, please refer to the documentation.</p>
+	<Button href="/documentation">Documentation <HugeiconsIcon icon={ArrowRight} strokeWidth={2} /></Button>
 </article>

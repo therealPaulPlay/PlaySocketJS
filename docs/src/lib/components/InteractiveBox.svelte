@@ -8,11 +8,11 @@
 	let keyVal = $state(0);
 </script>
 
-<div class="rounded-sm bg-muted p-8 flex gap-4 flex-col md:flex-row not-prose relative">
+<div class="rounded-sm bg-white p-8 flex gap-4 flex-col md:flex-row not-prose relative">
 	{#key keyVal}
 		{@render children?.()}
 	{/key}
-	<Button size="icon" variant="outline" class="absolute right-4 bottom-4" onclick={() => keyVal++}
+	<Button size="icon" variant="secondary" class="absolute right-4 bottom-4" onclick={() => keyVal++}
 		><HugeiconsIcon icon={Refresh01Icon} strokeWidth={2} /></Button
 	>
 </div>
