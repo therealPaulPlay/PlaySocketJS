@@ -12,8 +12,6 @@ PlaySocket makes developing shared experiences a breeze:
 - **Resilient & secure**: Automatic reconnection handling & strict rate-limiting.
 - **Lightweight**: Uses WebSockets, has few dependencies, and utilizes `MessagePack` for maximum efficiency.
 
-&nbsp;
-
 <!-- docs-start -->
 
 ## Installation
@@ -21,6 +19,8 @@ PlaySocket makes developing shared experiences a breeze:
 ```bash
 npm install playsocketjs
 ```
+
+&nbsp;
 
 ## PlaySocket Client
 
