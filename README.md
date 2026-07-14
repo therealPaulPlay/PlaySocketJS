@@ -16,6 +16,8 @@ PlaySocket makes developing shared experiences a breeze:
 
 ## Installation
 
+Install PlaySocket with your package manager of choice to get started.
+
 ```bash
 npm install playsocketjs
 ```
