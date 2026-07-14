@@ -4,7 +4,7 @@ import unusedImports from "eslint-plugin-unused-imports";
 import globals from "globals";
 
 export default [
-  { ignores: ["dist"] },
+  { ignores: ["docs"] },
   js.configs.recommended,
   {
     languageOptions: {
