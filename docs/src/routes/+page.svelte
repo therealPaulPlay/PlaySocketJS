@@ -5,6 +5,7 @@
 	import Button from "$lib/components/ui/button/button.svelte";
 	import { ArrowRight, Github } from "@hugeicons/core-free-icons";
 	import { HugeiconsIcon } from "@hugeicons/svelte";
+	import { asset, resolve } from "$app/paths";
 
 	let clientInventoryExample = `import PlaySocket from 'playsocketjs';
 
@@ -29,7 +30,7 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 
 <img
 	alt="artwork"
-	src="/images/clear-connection-wassily-kandinsky.jpg"
+	src={asset("/images/clear-connection-wassily-kandinsky.jpg")}
 	class="w-full h-auto mb-2 object-contain object-left sm:max-h-[calc(100dvh-275px)]"
 />
 
@@ -160,7 +161,7 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 	<h2>Getting started</h2>
 
 	<p>To get started with PlaySocket, please refer to the documentation.</p>
-	<Button href="/documentation" class="no-underline"
+	<Button href={resolve("/documentation")} class="no-underline"
 		>Documentation <HugeiconsIcon icon={ArrowRight} strokeWidth={2} /></Button
 	>
 	<Button variant="link" target="_blank" href="https://github.com/therealPaulPlay/PlaySocketJS">GitHub repository <HugeiconsIcon icon={Github} strokeWidth={2} /></Button>
