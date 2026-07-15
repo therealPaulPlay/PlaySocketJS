@@ -1,35 +1,16 @@
 <script>
-	import { codeToHtml } from "shiki";
-	import { onMount } from "svelte";
 	import Button from "./ui/button/button.svelte";
 	import { HugeiconsIcon } from "@hugeicons/svelte";
 	import { CopyCheckIcon, CopyIcon } from "@hugeicons/core-free-icons";
 
-	let { language = "javascript", theme = "vitesse-light", code = "", text = "", class: classes = "" } = $props();
+	let { code = "", html = "", text = "", class: classes = "" } = $props();
 
-	let htmlContent = $state("");
 	let showCopied = $state(false);
 	let hideCopiedTimeout;
-
-	onMount(async () => {
-		htmlContent = await codeToHtml(code, {
-			lang: language,
-			theme,
-			transformers: [
-				{
-					pre(node) {
-						this.addClassToHast(node, "of-left of-right of-length-2"); // Put overfade classes on the scrollable pre
-					},
-				},
-			],
-		});
-	});
 </script>
 
 <div
 	class="bg-white rounded-sm overflow-hidden not-prose [&>pre]:text-sm [&>pre]:p-4 [&>pre]:overflow-x-auto relative group {classes}"
-	class:min-h-13={!htmlContent}
-	class:animate-pulse={!htmlContent}
 >
 	{#if text}
 		<div
@@ -63,5 +44,5 @@
 			{/if}
 		</Button>
 	</div>
-	{@html htmlContent}
+	{@html html}
 </div>

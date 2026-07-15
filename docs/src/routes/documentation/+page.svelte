@@ -105,7 +105,7 @@
 								top: offsetPos - 15,
 							});
 						}}
-						class="cursor-pointer hover:opacity-100 active:opacity-100 transition duration-150"
+						class="cursor-pointer hover:opacity-100 active:opacity-100 transition duration-150 decoration-1"
 					>
 						{title.text}
 					</p>
@@ -122,10 +122,10 @@
 	<h1>Documentation</h1>
 	<p>Everything you need to know to build with PlaySocket.</p>
 	{#each data.apiDocsSegments as segment}
-		{#if segment.html}
-			{@html segment.html}
+		{#if segment.code}
+			<RenderCode code={segment.code} html={segment.html} class="my-4" />
 		{:else}
-			<RenderCode code={segment.code} language={segment.language} class="my-4" />
+			{@html segment.html}
 		{/if}
 	{/each}
 </article>

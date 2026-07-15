@@ -7,25 +7,7 @@
 	import { HugeiconsIcon } from "@hugeicons/svelte";
 	import { asset, resolve } from "$app/paths";
 
-	let clientInventoryExample = `import PlaySocket from 'playsocketjs';
-
-const socket = new PlaySocket("michael's-id", {
-    endpoint: "wss://example.com/socket"
-});
-
-socket.onEvent("storageUpdated", (storage) => {
-	console.log("Current inventory:", storage.inventory);
-}
-
-// Assuming Lana has created a room
-await socket.init();
-await socket.joinRoom("lana's-room-id");
-
-socket.updateStorage("inventory", "array-add", "rope");`;
-
-	let serverInventoryExample = `import PlaySocketServer from 'playsocketjs/server';
-
-const server = new PlaySocketServer({ path: "/socket" });`;
+	let { data } = $props();
 </script>
 
 <img
@@ -149,8 +131,8 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 		inventory problem.
 	</p>
 
-	<RenderCode code={clientInventoryExample} text="Client" />
-	<RenderCode code={serverInventoryExample} text="Server" class="mt-4" />
+	<RenderCode {...data.clientInventoryExample} text="Client" />
+	<RenderCode {...data.serverInventoryExample} text="Server" class="mt-4" />
 
 	<p>
 		The magic part here is that <span class="bg-border rounded px-0.5">updateStorage()</span> is synchronous. The
@@ -158,7 +140,7 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 		to think about handling optimistic updates yourself.
 	</p>
 
-	<h2>Getting started</h2>
+	<h2>Get started</h2>
 
 	<p>To get started with PlaySocket, please refer to the documentation.</p>
 	<Button href={resolve("/documentation")} class="no-underline"
