@@ -341,15 +341,14 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 |----------|------|-------------|
 | `rooms` | `object` | Retrieve the rooms object. |
 
-## Storage operations
-
+## Storage
 Both `updateStorage()` and `updateRoomStorage()` work the same way. The only difference is that the latter takes `roomId` as the first argument and runs on the server. There's a limit of 100 storage keys.
 
 Number, array and object operation types allow for conflict-free simultaneous updates. The set operation just replaces the property and ensures correct ordering. 
 
 For `-matching` operation types, `value` becomes the value to match, and `secondValue` the replacement. For object operations, `value` is the property key, and `secondValue` the property value. 
 
-The following types exist:
+### Operation types
 - `set`
 - `number-increment`
 - `array-add`

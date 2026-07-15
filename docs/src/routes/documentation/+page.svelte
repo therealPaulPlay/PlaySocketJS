@@ -94,8 +94,8 @@
 					<p
 						style:margin-left={title.level > 1 ? title.level - 1 + "rem" : ""}
 						class:opacity-90={title.level == 2}
-						class:opacity-65={title.level == 3}
-						class:opacity-50={title.level >= 4}
+						class:opacity-70={title.level == 3}
+						class:opacity-60={title.level >= 4}
 						class:opacity-100={title.element === closestOverviewElement}
 						class:underline={title.element === closestOverviewElement}
 						onclick={() => {
