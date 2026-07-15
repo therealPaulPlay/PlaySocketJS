@@ -20,17 +20,14 @@ test.describe("CRDTManager", () => {
         crdt.updateProperty("items", "array-add", "banana");
         expect(crdt.propertyStore.items).toEqual(["apple", "banana"]);
 
-        crdt.updateProperty("items", "array-prepend", "kiwi");
-        expect(crdt.propertyStore.items).toEqual(["kiwi", "apple", "banana"]);
-
         crdt.updateProperty("items", "array-add-unique", "apple"); // apple already exists in array
-        expect(crdt.propertyStore.items).toEqual(["kiwi", "apple", "banana"]);
+        expect(crdt.propertyStore.items).toEqual(["apple", "banana"]);
 
         crdt.updateProperty("items", "array-add-unique", "cherry");
-        expect(crdt.propertyStore.items).toEqual(["kiwi", "apple", "banana", "cherry"]);
+        expect(crdt.propertyStore.items).toEqual(["apple", "banana", "cherry"]);
 
         crdt.updateProperty("items", "array-remove-matching", "banana");
-        expect(crdt.propertyStore.items).toEqual(["kiwi", "apple", "cherry"]);
+        expect(crdt.propertyStore.items).toEqual(["apple", "cherry"]);
 
         // array-update-matching with objects
         crdt.updateProperty("players", "set", [{ id: "a", score: 0 }]);

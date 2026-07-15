@@ -31,8 +31,8 @@ test.describe("Storage sync", () => {
     });
 
     test.afterEach(async () => {
-        await page1.evaluate(({ id }) => window.destroy(id), { id: page1.__cid }).catch(() => {});
-        await page2.evaluate(({ id }) => window.destroy(id), { id: page2.__cid }).catch(() => {});
+        await page1.evaluate(({ id }) => window.destroy(id), { id: page1.__cid }).catch(() => { });
+        await page2.evaluate(({ id }) => window.destroy(id), { id: page2.__cid }).catch(() => { });
         await page1.close();
         await page2.close();
     });
@@ -54,14 +54,6 @@ test.describe("Storage sync", () => {
         await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid });
         const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
         expect(s.items).toEqual(["apple", "banana"]);
-    });
-
-    test("array-prepend adds items to the front", async () => {
-        await page1.evaluate(({ id }) => window.updateStorage(id, "items", "array-add", "second"), { id: page1.__cid });
-        await page1.evaluate(({ id }) => window.updateStorage(id, "items", "array-prepend", "first"), { id: page1.__cid });
-        await page2.waitForFunction(({ id }) => window.storage(id)?.items?.length === 2, { id: page2.__cid });
-        const s = await page2.evaluate(({ id }) => window.storage(id), { id: page2.__cid });
-        expect(s.items).toEqual(["first", "second"]);
     });
 
     test("array-add-unique prevents duplicates", async () => {
@@ -425,7 +417,6 @@ test.describe("Storage sync", () => {
             score: 0,
             items: [],
             tags: [],
-            queue: [],
             levelPlays: {},
             players: [{ id: "p1", score: 0 }, { id: "p2", score: 0 }],
         };
@@ -442,7 +433,6 @@ test.describe("Storage sync", () => {
                 for (let i = 0; i < 5; i++) window.updateStorage("mr1", "counter", "set", i * 10);
                 for (let i = 0; i < 5; i++) window.updateStorage("mr1", "score", "number-increment", 2);
                 for (let i = 0; i < 5; i++) window.updateStorage("mr1", "items", "array-add", "a" + i);
-                window.updateStorage("mr1", "queue", "array-prepend", "fromA");
                 window.updateStorage("mr1", "tags", "array-add-unique", "shared");
                 window.updateStorage("mr1", "tags", "array-add-unique", "onlyA");
                 window.updateStorage("mr1", "players", "array-update-matching", { id: "p1", score: 0 }, { id: "p1", score: 100 });
@@ -455,7 +445,6 @@ test.describe("Storage sync", () => {
                 for (let i = 0; i < 5; i++) window.updateStorage("mr2", "counter", "set", i * 10 + 5);
                 for (let i = 0; i < 5; i++) window.updateStorage("mr2", "score", "number-increment", 4);
                 for (let i = 0; i < 5; i++) window.updateStorage("mr2", "items", "array-add", "b" + i);
-                window.updateStorage("mr2", "queue", "array-prepend", "fromB");
                 window.updateStorage("mr2", "tags", "array-add-unique", "shared");
                 window.updateStorage("mr2", "tags", "array-add-unique", "onlyB");
                 window.updateStorage("mr2", "players", "array-update-matching", { id: "p2", score: 0 }, { id: "p2", score: 200 });
@@ -464,16 +453,16 @@ test.describe("Storage sync", () => {
             }),
         ]);
 
-        // Wait for convergence: both clients see both player updates, the summed score & the trailing queue and object operations
+        // Wait for convergence: both clients see both player updates, the summed score, and object operations
         await p1.waitForFunction(() => {
             const s = window.storage("mr1");
             return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200) && s?.score === 30
-                && s?.queue?.length === 2 && s?.levelPlays?.levelA === 3 && s?.levelPlays?.levelB === 5;
+                && s?.levelPlays?.levelA === 3 && s?.levelPlays?.levelB === 5;
         }, null, { timeout: 5_000 });
         await p2.waitForFunction(() => {
             const s = window.storage("mr2");
             return s?.players?.some(p => p.score === 100) && s?.players?.some(p => p.score === 200) && s?.score === 30
-                && s?.queue?.length === 2 && s?.levelPlays?.levelA === 3 && s?.levelPlays?.levelB === 5;
+                && s?.levelPlays?.levelA === 3 && s?.levelPlays?.levelB === 5;
         }, null, { timeout: 5_000 });
 
         const s1 = await p1.evaluate(() => window.storage("mr1"));
@@ -487,11 +476,6 @@ test.describe("Storage sync", () => {
 
         // Ensure concurrent increments added up
         expect(s1.score).toBe(30);
-
-        // Ensure both prepended items are present in the queue
-        expect(s1.queue).toHaveLength(2);
-        expect(s1.queue).toContain("fromA");
-        expect(s1.queue).toContain("fromB");
 
         // Ensure object keys from both clients were set and the removed key is gone
         expect(s1.levelPlays).toEqual({ levelA: 3, levelB: 5 });

@@ -116,7 +116,7 @@
 </div>
 
 <article
-	class="prose prose-h1:mt-14 prose-h1:mb-4 prose-table:mb-12 prose-table:overflow-x-auto prose-table:block prose-table:mt-6 prose-th:text-nowrap text-pretty mb-20"
+	class="prose prose-h1:mt-14 prose-h1:mb-4 prose-table:mb-12 prose-table:overflow-x-auto prose-table:block prose-table:mt-6 prose-th:text-nowrap mb-20"
 	bind:this={articleEl}
 >
 	<h1>Documentation</h1>

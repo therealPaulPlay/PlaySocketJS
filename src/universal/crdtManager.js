@@ -2,7 +2,7 @@ import { HEARTBEAT_INTERVAL } from "./constants.js";
 
 const CONSOLE_PREFIX = "PlaySocket CRDT manager: ";
 
-/** @typedef {"set" | "number-increment" | "array-add" | "array-prepend" | "array-add-unique" | "array-remove-matching" | "array-update-matching" | "object-set-key" | "object-remove-key"} PropertyUpdateType */
+/** @typedef {"set" | "number-increment" | "array-add" | "array-add-unique" | "array-remove-matching" | "array-update-matching" | "object-set-key" | "object-remove-key"} PropertyUpdateType */
 
 /** @typedef {[string, number][]} VectorClockEntries */
 
@@ -362,9 +362,6 @@ export default class CRDTManager {
                 switch (type) {
                     case "array-add":
                         curValue.push(value);
-                        break;
-                    case "array-prepend":
-                        curValue.unshift(value);
                         break;
                     case "array-add-unique":
                         if (!curValue.some(compare)) curValue.push(value);

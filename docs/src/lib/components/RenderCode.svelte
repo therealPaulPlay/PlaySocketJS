@@ -26,16 +26,20 @@
 </script>
 
 <div
-	class="bg-white rounded-sm overflow-hidden not-prose [&>pre]:p-4 [&>pre]:overflow-x-auto relative {classes}"
-	class:min-h-15={!htmlContent}
+	class="bg-white rounded-sm overflow-hidden not-prose [&>pre]:text-sm [&>pre]:p-4 [&>pre]:overflow-x-auto relative group {classes}"
+	class:min-h-13={!htmlContent}
 	class:animate-pulse={!htmlContent}
 >
 	{#if text}
-		<div class="absolute top-0 right-15 rounded-b-sm bg-muted px-2 z-1">
+		<div
+			class="transition duration-150 absolute top-0 right-15 rounded-b-sm bg-muted px-2 z-1 opacity-0 group-hover:opacity-100"
+		>
 			<p class="mt-1">{text}</p>
 		</div>
 	{/if}
-	<div class="absolute top-0 right-4 rounded-b-sm bg-muted z-1">
+	<div
+		class="transition duration-150 absolute top-0 right-4 rounded-b-sm bg-muted z-1 opacity-0 group-hover:opacity-100"
+	>
 		<Button
 			size="icon"
 			variant="ghost"

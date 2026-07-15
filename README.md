@@ -35,17 +35,17 @@ The client-side part of PlaySocket.
 
 Initializing the client:
 ```javascript
-import PlaySocket from 'playsocketjs';
+import PlaySocket from "playsocketjs";
 
 // Create a new instance
 // Omit the ID to let the server pick one
-const socket = new PlaySocket('unique-client-id', {
-    endpoint: 'wss://example.com/socket'
+const socket = new PlaySocket("unique-client-id", {
+    endpoint: "wss://example.com/socket"
 });
 
 // Set up the event handlers you need
-socket.onEvent('status', status => console.log(status));
-socket.onEvent('error', error => console.error(error));
+socket.onEvent("status", status => console.log(status));
+socket.onEvent("error", error => console.error(error));
 ...
 
 const clientId = await socket.init(); // Connect
@@ -55,7 +55,9 @@ Creating a room:
 ```javascript
 // Create a new room
 const roomId = await socket.createRoom();
+```
 
+```javascript
 // Optionally, with initial storage
 const roomId = await socket.createRoom({
   players: [{ name: "Player-1", level: 35 }],
@@ -65,7 +67,7 @@ const roomId = await socket.createRoom({
 
 Joining a room:
 ```javascript
-await socket.joinRoom('room-id'); // Join an existing room
+await socket.joinRoom("room-id"); // Join an existing room
 ```
 
 Leaving a room:
@@ -76,8 +78,8 @@ socket.destroy(); // Destroy the instance to leave
 Using the storage update event with reactivity:
 ```javascript
 // Assign to useState(), $state(), reactive() etc. on update
-const [reactiveVar, setReactiveVar] = useState(); 
-socket.onEvent('storageUpdated', storage => {
+const [reactiveVar, setReactiveVar] = useState({});
+socket.onEvent("storageUpdated", storage => {
     setReactiveVar(storage);
 });
 ```
@@ -90,10 +92,10 @@ Interfacing with the synchronized storage:
 ```javascript
 const currentState = socket.storage; // Read-only access
 
-socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 });
-socket.updateStorage('latestPlayer', 'set', 'Player4');
-socket.updateStorage('playerInfo', 'set', '{ date: "22-6-2026 }');
-socket.updateStorage('playerInfo', 'object-set-key', 'color', 'red')
+socket.updateStorage("players", "array-add-unique", { username: "Player4", level: 2 });
+socket.updateStorage("latestPlayer", "set", "Player4");
+socket.updateStorage("playerInfo", "set", { date: "22-6-2026" });
+socket.updateStorage("playerInfo", "object-set-key", "color", "red")
 
 console.log(socket.storage.players); // Log players array
 ```
@@ -101,7 +103,7 @@ console.log(socket.storage.players); // Log players array
 Sometimes it's convenient to send a traditional request to the server. For example, when you want to opt out of optimistic updates, or when
 the validation logic would be too complex otherwise:
 ```javascript
-socket.sendRequest('my-request-name', { fact: "You can build traditional client-server logic like this." })
+socket.sendRequest("my-request-name", { fact: "You can build traditional client-server logic like this." })
 ```
 
 ### API
@@ -138,7 +140,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | Event | Callback parameter | Description |
 |-------|-------------------|-------------|
 | `status` | `status: string` | Connection or room status updated. |
-| `error` | `error: string` | Error occured. |
+| `error` | `error: string` | Error occurred. |
 | `moved` | `roomId: string` | Moved to different room. |
 | `instanceDestroyed` | - | Instance destroyed through `destroy()` or fatal error. |
 | `storageUpdated` | `storage: object` | Storage state changed. Does not trigger on no-op updates. |
@@ -166,7 +168,7 @@ The server-side part of PlaySocket.
 Using PlaySocket as a standalone server:
 
 ```javascript
-import PlaySocketServer from 'playsocketjs/server';
+import PlaySocketServer from "playsocketjs/server";
 
 // Path defaults to "/"
 const server = new PlaySocketServer();
@@ -176,16 +178,16 @@ function shutdown() {
     process.exit(0);
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 ```
 
-Using PlaySocket together with Express.js (or other Backend frameworks):
+Using PlaySocket together with Express.js (or other backend frameworks):
 
 ```javascript
-const express = require('express');
-const http = require('http');
-const PlaySocketServer = require('playsocketjs/server');
+import express from "express";
+import http from "node:http";
+import PlaySocketServer from "playsocketjs/server";
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -193,12 +195,12 @@ const httpServer = http.createServer(app);
 // Create PlaySocket server with existing HTTP server
 const playSocketServer = new PlaySocketServer({
   server: httpServer,
-  path: '/socket'
+  path: "/socket"
 });
 
 // Start the server
 httpServer.listen(3000, () => {
-  console.log('Server running on port 3000');
+  console.log("Server running on port 3000");
 });
 
 function shutdown() {
@@ -206,8 +208,8 @@ function shutdown() {
     process.exit(0);
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 ```
 
 Validating an incoming storage update:
@@ -253,7 +255,7 @@ server.onEvent("clientRegistrationRequested", async (clientId, data) => {
         // For example, data could contain a token provided by the client
         authedClients.push(clientId);
     } catch (error) {
-        return "An error occured during auth."; // Blocks the registration
+        return "An error occurred during auth."; // Blocks the registration
     }
 });
 
@@ -277,7 +279,7 @@ new PlaySocketServer(options?: PlaySocketServerOptions)
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
 | `port` | `number` | No | 3000 | Port to listen on (used only if no server provided). |
-| `path` | `string` | No | '/' | WebSocket endpoint path. |
+| `path` | `string` | No | "/" | WebSocket endpoint path. |
 | `server` | `http.Server` | No | - | Existing http server. |
 | `rateLimit` | `number` | No | 20 | Messages/second rate limit. |
 | `debug` | `boolean` | No | false | Enable debug logging. |
@@ -288,11 +290,11 @@ The `verifyClient` option allows you to implement custom connection verification
 ```javascript
 const server = new PlaySocketServer({
     server: httpServer,
-    path: '/socket',
+    path: "/socket",
     verifyClient: (info, callback) => {
-        const ip = info.req.headers['x-forwarded-for'];
+        const ip = info.req.headers["x-forwarded-for"];
         if (isRateLimited(ip)) { 
-            return callback(false, 429, 'Too Many Requests');
+            return callback(false, 429, "Too Many Requests");
         }
         callback(true);
     }
@@ -333,7 +335,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` to block. |
 | `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
 | `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` to block the update. |
-| `requestReceived` | `{clientId: string, roomId?: string, requestName: string, data?: any}` | Request from client. | - |
+| `requestReceived` | `{clientId: string, roomId?: string, name: string, data?: any}` | Request from client. | - |
 
 #### Properties
 
@@ -342,6 +344,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `rooms` | `object` | Retrieve the rooms object. |
 
 ## Storage
+
 Both `updateStorage()` and `updateRoomStorage()` work the same way. The only difference is that the latter takes `roomId` as the first argument and runs on the server. There's a limit of 100 storage keys.
 
 Number, array and object operation types allow for conflict-free simultaneous updates. The set operation just replaces the property and ensures correct ordering. 
@@ -360,8 +363,8 @@ For `-matching` operation types, `value` becomes the value to match, and `second
 
 Example for each type:
 - `updateStorage("color", "set", "blue")`
-- `updateStorage("score", "number-increment", "25")`
-- `updateStorage("players", "array-add", { name: "Player1" })`
+- `updateStorage("score", "number-increment", 25)`
+- `updateStorage("players", "array-add", { name: "Player2" })`
 - `updateStorage("completedLevels", "array-add-unique", 14)`
 - `updateStorage("names", "array-update-matching", "Leo_cool", "TheCoolerLeo")`
 - `updateStorage("missingLevels", "array-remove-matching", 14)`

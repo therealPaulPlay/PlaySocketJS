@@ -33,7 +33,7 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 	class="w-full h-auto mb-2 object-contain object-left sm:max-h-[calc(100dvh-275px)]"
 />
 
-<article class="prose prose-h1:mt-14 prose-h1:mb-4 text-pretty mb-20">
+<article class="prose prose-h1:mt-14 prose-h1:mb-4 mb-20">
 	<p class="text-muted-foreground/50 text-xs">Clear Connection, Wassily Kandinsky, 1925</p>
 
 	<h1>PlaySocket</h1>
@@ -54,8 +54,8 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 		client input is made easy through callbacks and helper functions.
 	</p>
 	<p>
-		Security is a top priority of PlaySocket. Out of the box, it protects against XSS attacks and comes with thorough
-		WebSocket rate limiting.
+		Security is a top priority of PlaySocket. Out of the box, it protects against XSS attacks and comes with WebSocket
+		message rate limiting.
 	</p>
 	<p>
 		The library is also <span class="bg-border rounded px-0.5">lightweight</span>, relying only on two dependencies:
@@ -160,5 +160,7 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 	<h2>Getting started</h2>
 
 	<p>To get started with PlaySocket, please refer to the documentation.</p>
-	<Button href="/documentation">Documentation <HugeiconsIcon icon={ArrowRight} strokeWidth={2} /></Button>
+	<Button href="/documentation" class="no-underline"
+		>Documentation <HugeiconsIcon icon={ArrowRight} strokeWidth={2} /></Button
+	>
 </article>
