@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev --port 3000",
+		"dev": "vite dev --port 3000 --host",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''"
@@ -14,7 +14,6 @@
 		"@hugeicons/core-free-icons": "^4.2.2",
 		"@hugeicons/svelte": "^1.1.4",
 		"@internationalized/date": "^3.12.2",
-		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/typography": "^0.5.20",
@@ -30,6 +29,7 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@sveltejs/adapter-static": "^3.0.10",
 		"marked": "^18.0.6",
 		"marked-alert": "^2.1.2",
 		"overfade": "^0.0.11",

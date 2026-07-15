@@ -111,39 +111,42 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 		where two players add items to a shared, optimistically-updated inventory at the same time:
 	</p>
 	<ol>
-		<li>The inventory starts out as <span class="bg-border rounded px-0.5">["torch"]</span>.</li>
+		<li>The inventory starts out as <span class="bg-border rounded px-0.5">torch</span>.</li>
 		<li>
 			Michael adds <span class="bg-border rounded px-0.5">rope</span>, and his UI shows
-			<span class="bg-border rounded px-0.5">["torch", "rope"]</span>.
+			<span class="bg-border rounded px-0.5">torch, rope</span>.
 		</li>
 		<li>
 			Lana adds <span class="bg-border rounded px-0.5">map</span>, and her UI shows
-			<span class="bg-border rounded px-0.5">["torch", "map"]</span>.
+			<span class="bg-border rounded px-0.5">torch, map</span>.
 		</li>
 		<li>
-			Server receives Michael's list <span class="bg-border rounded px-0.5">["torch", "rope"]</span> and broadcasts it.
+			Server receives Michael's inventory <span class="bg-border rounded px-0.5">torch, rope</span> and broadcasts it.
 		</li>
 		<li>
-			Server receives Lana's list <span class="bg-border rounded px-0.5">["torch", "map"]</span> and broadcasts it.
+			Server receives Lana's inventory <span class="bg-border rounded px-0.5">torch, map</span> and broadcasts it.
 		</li>
 		<li>
-			Both UIs now show <span class="bg-border rounded px-0.5">["torch", "map"]</span>.
+			Both UIs now show <span class="bg-border rounded px-0.5">torch, map</span>.
 		</li>
 	</ol>
 	<p>
-		The issue with this flow is that each client sends the <i>entire new value</i> of the list, so whichever update arrives
+		The issue with this flow is that each client sends the <i>entire new value</i> of the invetory, so whichever update arrives
 		last wins. Michael's addition to the inventory, the rope, is silently lost.
 	</p>
 	<p>
 		PlaySocket avoids this by describing changes as <span class="bg-border rounded px-0.5">operations</span>. Instead of
-		setting the whole array, both clients send an
+		setting the whole inventory, both clients send an
 		<span class="bg-border rounded px-0.5">array-add</span> operation. The two changes simply combine, and every client converges
 		to the expected result.
 	</p>
 
 	<h2>A quick example</h2>
 
-	<p>The code below isn't quite production ready, but should give you an idea of how the library can be used to solve the inventory problem.</p>
+	<p>
+		The code below isn't quite production ready, but should give you an idea of how the library can be used to solve the
+		inventory problem.
+	</p>
 
 	<RenderCode code={clientInventoryExample} text="Client" />
 	<RenderCode code={serverInventoryExample} text="Server" class="mt-4" />

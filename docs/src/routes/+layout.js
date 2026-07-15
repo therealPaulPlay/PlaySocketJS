@@ -1,0 +1,1 @@
+export const prerender = true; // Pre-render all routes

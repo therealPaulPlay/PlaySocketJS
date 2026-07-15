@@ -104,7 +104,7 @@ the validation logic would be too complex otherwise:
 socket.sendRequest('my-request-name', { fact: "You can build traditional client-server logic like this." })
 ```
 
-### API reference
+### API
 
 #### Constructor
 
@@ -133,20 +133,20 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `sendRequest()` | `name: string, data?: any` | `void` | Send a request to the server with optional attached data. |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback. |
 
-#### Event types
+#### Events
 
 | Event | Callback parameter | Description |
 |-------|-------------------|-------------|
 | `status` | `status: string` | Connection or room status updated. |
 | `error` | `error: string` | Error occured. |
 | `moved` | `roomId: string` | Moved to different room. |
-| `instanceDestroyed` | - | Instance destruction event, triggered by destroy() invocation or by fatal errors. |
-| `storageUpdated` | `storage: object` | Storage state changed. Does not trigger on no-op updates (e.g. setting color to red when it's already red). |
+| `instanceDestroyed` | - | Instance destroyed through `destroy()` or fatal error. |
+| `storageUpdated` | `storage: object` | Storage state changed. Does not trigger on no-op updates. |
 | `hostMigrated` | `roomId: string` | Host was changed. |
-| `clientJoined` | `clientId: string` | A client joined the room. |
-| `clientLeft` | `clientId: string, roomId?: string` | Client left the room. |
+| `clientJoined` | `clientId: string` | New client joined the room. |
+| `clientLeft` | `clientId: string, roomId?: string` | A client left the room. |
 
-#### Properties (read-only)
+#### Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -250,7 +250,7 @@ const server = new PlaySocketServer();
 server.onEvent("clientRegistrationRequested", async (clientId, data) => {
     try {
         // Your custom auth logic...
-        // For example, data could contain a session token provided by the client
+        // For example, data could contain a token provided by the client
         authedClients.push(clientId);
     } catch (error) {
         return "An error occured during auth."; // Blocks the registration
@@ -264,7 +264,7 @@ server.onEvent("clientDisconnected", async (clientId) => {
 
 ```
 
-### API reference
+### API
 
 #### Constructor
 
@@ -282,8 +282,6 @@ new PlaySocketServer(options?: PlaySocketServerOptions)
 | `rateLimit` | `number` | No | 20 | Messages/second rate limit. |
 | `debug` | `boolean` | No | false | Enable debug logging. |
 | `verifyClient` | `function` | No | - | Callback to verify connections before WebSocket upgrade. |
-
-**verifyClient callback**
 
 The `verifyClient` option allows you to implement custom connection verification logic, such as rate limiting, before the WebSocket handshake completes.
 
@@ -310,46 +308,46 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 
 | Name | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
-| `stop()` | - | `void` | Closes active client connections, the WS server, and the underlying http server (if it's standalone). |
+| `stop()` | - | `void` | Closes active client connections and the underlying http server (if it's standalone). |
 | `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their client ID. |
 | `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room. |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback. |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage. |
-| `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for custom validation logic in the `storageUpdateRequested` event. |
-| `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared room storage. |
+| `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for building validation logic. |
+| `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage of a room. |
 | `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state).|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants. |
 
-#### Event types
+#### Events
 
 | Event | Callback parameters | Description | Return for action |
 |-------|-------------------|-------------|--------------|
 | `clientRegistered` | `clientId: string, customData: object` | Client registered with the server. | - |
-| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requests to register. | Return `false` or rejection reason `string` to block. |
+| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requested to register. | Return `false` or rejection reason `string` to block. |
 | `clientDisconnected` | `clientId: string` | Client disconnected. | - |
 | `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room. | - |
-| `clientJoinRequested` | `clientId: string, roomId: string` | Client requests to join a room. | Return `false` or rejection reason `string` to block. |
+| `clientJoinRequested` | `clientId: string, roomId: string` | Client requested to join a room. | Return `false` or rejection reason `string` to block. |
 | `clientLeftRoom` | `clientId: string, roomId: string` | Client left a room. | - |
-| `roomCreated` | `roomId: string` | Client created a room. | - |
+| `roomCreated` | `roomId: string` | Room was created. | - |
 | `roomDestroyed` | `roomId: string` | Room was destroyed. | - |
-| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requests to create room. | Return `object` to override initial storage, `false` to block. |
+| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` to block. |
 | `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
-| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requests storage update. | Return `false` to block the update. |
+| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` to block the update. |
 | `requestReceived` | `{clientId: string, roomId?: string, requestName: string, data?: any}` | Request from client. | - |
 
-#### Properties (read-only)
+#### Properties
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `rooms` | `object` | Retrieve the rooms object. |
 
-## Storage updates in detail
+## Storage operations
 
 Both `updateStorage()` and `updateRoomStorage()` work the same way. The only difference is that the latter takes `roomId` as the first argument and runs on the server. There's a limit of 100 storage keys.
 
 Number, array and object operation types allow for conflict-free simultaneous updates. The set operation just replaces the property and ensures correct ordering. 
 
-For `-matching` operations, `value` becomes the value to match, and `secondValue` the replacement. For object operations, `value` is the property key, and `secondValue` the property value. 
+For `-matching` operation types, `value` becomes the value to match, and `secondValue` the replacement. For object operations, `value` is the property key, and `secondValue` the property value. 
 
 The following types exist:
 - `set`

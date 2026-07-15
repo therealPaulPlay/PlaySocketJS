@@ -27,7 +27,7 @@
 
 <div
 	class="bg-white rounded-sm overflow-hidden not-prose [&>pre]:p-4 [&>pre]:overflow-x-auto relative {classes}"
-	class:min-h-25={!htmlContent}
+	class:min-h-15={!htmlContent}
 	class:animate-pulse={!htmlContent}
 >
 	{#if text}
@@ -40,8 +40,12 @@
 			size="icon"
 			variant="ghost"
 			class="w-8 h-6 mt-1"
-			onclick={() => {
-				navigator.clipboard.writeText(code);
+			onclick={async () => {
+				try {
+					await navigator.clipboard.writeText(code);
+				} catch (error) {
+					console.error("Error copying code:", error);
+				}
 				showCopied = true;
 				setTimeout(() => (showCopied = false), 1500);
 			}}
