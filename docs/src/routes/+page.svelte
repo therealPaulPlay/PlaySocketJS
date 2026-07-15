@@ -16,7 +16,7 @@ socket.onEvent("storageUpdated", (storage) => {
 	console.log("Current inventory:", storage.inventory);
 }
 
-// Assuming Lana already created a room
+// Assuming Lana has created a room
 await socket.init();
 await socket.joinRoom("lana's-room-id");
 
@@ -30,10 +30,10 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 <img
 	alt="artwork"
 	src="/images/clear-connection-wassily-kandinsky.jpg"
-	class="w-full h-auto mb-2 object-contain object-left max-h-[calc(100dvh-275px)]"
+	class="w-full h-auto mb-2 object-contain object-left sm:max-h-[calc(100dvh-275px)]"
 />
 
-<article class="prose prose-h1:mt-14 prose-h1:mb-4 max-md:px-4 text-pretty">
+<article class="prose prose-h1:mt-14 prose-h1:mb-4 text-pretty mb-20">
 	<p class="text-muted-foreground/50 text-xs">Clear Connection, Wassily Kandinsky, 1925</p>
 
 	<h1>PlaySocket</h1>
@@ -66,7 +66,7 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 
 	<p>
 		When building a UX that combines user input with server requests, latency becomes troublesome. It feels <i>odd</i> when
-		the UI update isn't immediate.
+		a UI update isn't immediate.
 	</p>
 	<InteractiveBox><LatencyButtonExample /></InteractiveBox>
 	<p>
@@ -85,10 +85,10 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 	</p>
 	<ol>
 		<li>
-			Michael selects <span class="bg-border rounded px-0.5">green</span>, and his UI updates to green.
+			Michael selects <span class="bg-border rounded px-0.5">green</span>, and his UI shows green.
 		</li>
 		<li>
-			Lana selects <span class="bg-border rounded px-0.5">blue</span>, and her UI updates to blue.
+			Lana selects <span class="bg-border rounded px-0.5">blue</span>, and her UI shows blue.
 		</li>
 		<li>Server receives <span class="bg-border rounded px-0.5">green</span> and broadcasts it to all clients.</li>
 		<li>Lana's UI now shows <span class="bg-border rounded px-0.5">green</span>, Michael's already does.</li>
@@ -113,11 +113,11 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 	<ol>
 		<li>The inventory starts out as <span class="bg-border rounded px-0.5">["torch"]</span>.</li>
 		<li>
-			Michael adds <span class="bg-border rounded px-0.5">rope</span>, and his UI optimistically shows
+			Michael adds <span class="bg-border rounded px-0.5">rope</span>, and his UI shows
 			<span class="bg-border rounded px-0.5">["torch", "rope"]</span>.
 		</li>
 		<li>
-			Lana adds <span class="bg-border rounded px-0.5">map</span>, and her UI optimistically shows
+			Lana adds <span class="bg-border rounded px-0.5">map</span>, and her UI shows
 			<span class="bg-border rounded px-0.5">["torch", "map"]</span>.
 		</li>
 		<li>
@@ -143,13 +143,16 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 
 	<h2>A quick example</h2>
 
-	<p>
-		This is how the inventory problem from above can be solved. The code below isn't quite production ready, but should
-		give you an idea of how the library works.
-	</p>
+	<p>The code below isn't quite production ready, but should give you an idea of how the library can be used to solve the inventory problem.</p>
 
 	<RenderCode code={clientInventoryExample} text="Client" />
 	<RenderCode code={serverInventoryExample} text="Server" class="mt-4" />
+
+	<p>
+		The magic part here is that <span class="bg-border rounded px-0.5">updateStorage()</span> is synchronous. The
+		storage updates – and <span class="bg-border rounded px-0.5">storageUpdated</span> fires – immediately. You don't need
+		to think about handling optimistic updates yourself.
+	</p>
 
 	<h2>Getting started</h2>
 

@@ -11,6 +11,6 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
-<main class="max-w-2xl mx-auto pb-20 pt-10">
+<main class="max-w-2xl mx-auto w-[calc(100%-2rem)] my-4">
 	{@render children()}
 </main>

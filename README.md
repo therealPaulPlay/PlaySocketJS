@@ -43,9 +43,10 @@ const socket = new PlaySocket('unique-client-id', {
     endpoint: 'wss://example.com/socket'
 });
 
-// Set up event handlers
+// Set up the event handlers you need
 socket.onEvent('status', status => console.log(status));
 socket.onEvent('error', error => console.error(error));
+...
 
 const clientId = await socket.init(); // Connect
 ```
@@ -87,7 +88,7 @@ socket.onEvent('storageUpdated', storage => {
 
 Interfacing with the synchronized storage:
 ```javascript
-const currentState = socket.storage; // Read-only
+const currentState = socket.storage; // Read-only access
 
 socket.updateStorage('players', 'array-add-unique', { username: 'Player4', level: 2 });
 socket.updateStorage('latestPlayer', 'set', 'Player4');
@@ -128,7 +129,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room, resolves with the room ID. Max. 500 participants. |
 | `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room. |
 | `destroy()` | - | `void` | Leave room, close the connection, and destroy the instance. |
-| `updateStorage()` | `key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared storage (max. 100 keys). Number, array and object operation types allow for conflict-free simultaneous updates. For '-matching' operations, value becomes the value to match, and secondValue the replacement. For object operations, value is the property key, and secondValue the property value. |
+| `updateStorage()` | `key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage. |
 | `sendRequest()` | `name: string, data?: any` | `void` | Send a request to the server with optional attached data. |
 | `onEvent()` | `event: string, callback: Function` | `void` | Register an event callback. |
 
@@ -315,7 +316,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `onEvent()` | `event: string, callback: Function` | `void` | Register a server-side event callback. |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage. |
 | `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for custom validation logic in the `storageUpdateRequested` event. |
-| `updateRoomStorage()` | `roomId: string, key: string, type: 'set' \| 'number-increment' \| 'array-add' \| 'array-prepend' \| 'array-add-unique' \| 'array-remove-matching' \| 'array-update-matching' \| 'object-set-key' \| 'object-remove-key', value: any, secondValue?: any` | `void` | Update a key in the shared room storage. |
+| `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared room storage. |
 | `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state).|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants. |
 
@@ -341,6 +342,34 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | Property | Type | Description |
 |----------|------|-------------|
 | `rooms` | `object` | Retrieve the rooms object. |
+
+## Storage updates in detail
+
+Both `updateStorage()` and `updateRoomStorage()` work the same way. The only difference is that the latter takes `roomId` as the first argument and runs on the server. There's a limit of 100 storage keys.
+
+Number, array and object operation types allow for conflict-free simultaneous updates. The set operation just replaces the property and ensures correct ordering. 
+
+For `-matching` operations, `value` becomes the value to match, and `secondValue` the replacement. For object operations, `value` is the property key, and `secondValue` the property value. 
+
+The following types exist:
+- `set`
+- `number-increment`
+- `array-add`
+- `array-add-unique`
+- `array-update-matching`
+- `array-remove-matching`
+- `object-set-key`
+- `object-remove-key`
+
+Example for each type:
+- `updateStorage("color", "set", "blue")`
+- `updateStorage("score", "number-increment", "25")`
+- `updateStorage("players", "array-add", { name: "Player1" })`
+- `updateStorage("completedLevels", "array-add-unique", 14)`
+- `updateStorage("names", "array-update-matching", "Leo_cool", "TheCoolerLeo")`
+- `updateStorage("missingLevels", "array-remove-matching", 14)`
+- `updateStorage("levelNames", "object-set-key", "evilSea", "Evil sea")`
+- `updateStorage("levelNames", "object-remove-key", "darkOcean")`
 
 <!-- docs-end -->
 
