@@ -248,10 +248,10 @@ const server = new PlaySocketServer();
 server.onEvent("clientRegistrationRequested", async (clientId, data) => {
     try {
         // Your custom auth logic...
-        // For example, data could contain a token provided by the client
+        // For example, data could contain a token
         authedClients.push(clientId);
     } catch (error) {
-        return "An error occurred during auth."; // Blocks the registration
+        return "Error occurred during auth."; // Blocks the registration
     }
 });
 
