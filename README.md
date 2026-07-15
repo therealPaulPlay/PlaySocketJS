@@ -22,8 +22,6 @@ Install PlaySocket with your package manager of choice to get started.
 npm install playsocketjs
 ```
 
-&nbsp;
-
 ## PlaySocket Client
 
 The client-side part of PlaySocket.
@@ -156,8 +154,6 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `isHost` | `boolean` | Whether this client is currently assigned the host role. |
 | `participantCount` | `number` | Number of active client connections in room. |
 | `storage` | `object` | Retrieve the storage object. |
-
-&nbsp;
 
 ## PlaySocket Server
 

@@ -3,7 +3,7 @@
 	import LatencyButtonExample from "$lib/components/LatencyButtonExample.svelte";
 	import RenderCode from "$lib/components/RenderCode.svelte";
 	import Button from "$lib/components/ui/button/button.svelte";
-	import { ArrowRight } from "@hugeicons/core-free-icons";
+	import { ArrowRight, Github } from "@hugeicons/core-free-icons";
 	import { HugeiconsIcon } from "@hugeicons/svelte";
 
 	let clientInventoryExample = `import PlaySocket from 'playsocketjs';
@@ -163,4 +163,5 @@ const server = new PlaySocketServer({ path: "/socket" });`;
 	<Button href="/documentation" class="no-underline"
 		>Documentation <HugeiconsIcon icon={ArrowRight} strokeWidth={2} /></Button
 	>
+	<Button variant="link" target="_blank" href="https://github.com/therealPaulPlay/PlaySocketJS">GitHub repository <HugeiconsIcon icon={Github} strokeWidth={2} /></Button>
 </article>

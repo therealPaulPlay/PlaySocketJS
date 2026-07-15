@@ -9,6 +9,7 @@
 
 	let htmlContent = $state("");
 	let showCopied = $state(false);
+	let hideCopiedTimeout;
 
 	onMount(async () => {
 		htmlContent = await codeToHtml(code, {
@@ -51,7 +52,8 @@
 					console.error("Error copying code:", error);
 				}
 				showCopied = true;
-				setTimeout(() => (showCopied = false), 1500);
+				clearTimeout(hideCopiedTimeout);
+				hideCopiedTimeout = setTimeout(() => (showCopied = false), 1500);
 			}}
 		>
 			{#if showCopied}
