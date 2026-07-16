@@ -101,15 +101,23 @@ export default class PlaySocket {
      * Register an event callback
      * @param {string} event - Event name
      * @param {Function} callback - Callback function
+     * @returns {Function} - Unsubscribe
      */
     onEvent(event, callback) {
         const validEvents = ["status", "error", "moved", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientJoined", "clientLeft"];
         if (!validEvents.includes(event)) {
             console.warn(WARNING_PREFIX + `Invalid event type "${event}".`);
-            return;
+            return () => { };
         };
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
+
+        return () => {
+            const removeIndex = this.#callbacks.get(event)?.indexOf(callback) ?? -1;
+            if (removeIndex === -1) return;
+            this.#callbacks.get(event).splice(removeIndex, 1);
+            if (!this.#callbacks.get(event).length) this.#callbacks.delete(event);
+        }
     }
 
     /**
@@ -119,7 +127,8 @@ export default class PlaySocket {
      */
     #triggerEvent(event, ...args) {
         const callbacks = this.#callbacks.get(event);
-        callbacks?.forEach(callback => {
+        if (!callbacks) return;
+        [...callbacks].forEach(callback => {
             try {
                 callback(...args);
             } catch (error) {

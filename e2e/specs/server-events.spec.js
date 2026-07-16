@@ -417,4 +417,39 @@ test.describe("Server events", () => {
         expect(id).toBe("te1");
         ts.close();
     });
+
+    test("unsubscribe stops the callback, double-call is a safe no-op", async () => {
+        const ts = await createTestServer();
+        const unsubLog = [], keptLog = [];
+        let resolveKept;
+        const unsubscribe = ts.server.onEvent("roomCreated", (roomId) => { unsubLog.push(roomId); });
+        ts.server.onEvent("roomCreated", (roomId) => { keptLog.push(roomId); resolveKept(); });
+
+        let keptFired = new Promise(r => { resolveKept = r; });
+        const room1 = ts.server.createRoom({});
+        await keptFired;
+        unsubscribe();
+        unsubscribe(); // Second call must not remove other listeners
+        keptFired = new Promise(r => { resolveKept = r; });
+        const room2 = ts.server.createRoom({});
+        await keptFired;
+
+        expect(unsubLog).toEqual([room1.id]);
+        expect(keptLog).toEqual([room1.id, room2.id]);
+        ts.close();
+    });
+
+    test("callback that unsubscribes itself does not skip other listeners", async () => {
+        const ts = await createTestServer();
+        const order = [];
+        let resolve;
+        const bothFired = new Promise(r => { resolve = r; });
+        const unsub = ts.server.onEvent("roomCreated", () => { order.push("first"); unsub(); });
+        ts.server.onEvent("roomCreated", () => { order.push("second"); resolve(); });
+
+        ts.server.createRoom({});
+        await bothFired;
+        expect(order).toEqual(["first", "second"]);
+        ts.close();
+    });
 });

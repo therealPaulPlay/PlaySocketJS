@@ -463,15 +463,44 @@ export default class PlaySocketServer {
      * Register an event callback
      * @param {string} event - Event name
      * @param {Function} callback - Callback function
+     * @returns {Function} - Unsubscribe
      */
     onEvent(event, callback) {
         const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "clientLeftRoom", "clientJoinRequested", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
         if (!validEvents.includes(event)) {
             console.warn(`Invalid PlaySocket event type "${event}"`);
-            return;
+            return () => { };
         };
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []);
         this.#callbacks.get(event).push(callback);
+
+        return () => {
+            const removeIndex = this.#callbacks.get(event)?.indexOf(callback) ?? -1;
+            if (removeIndex === -1) return;
+            this.#callbacks.get(event).splice(removeIndex, 1);
+            if (!this.#callbacks.get(event).length) this.#callbacks.delete(event);
+        }
+    }
+
+    /**
+     * Trigger an event to registered callbacks
+     * @param {string} event - Event name
+     * @param {...*} args - Arguments
+     * @returns {Promise<any>} - Undefined if no callbacks, true if all callbacks ran, what the first callback with a return statement returns if present
+     */
+    async #triggerEvent(event, ...args) {
+        const callbacks = this.#callbacks.get(event);
+        if (!callbacks) return;
+
+        for (const callback of [...callbacks]) {
+            try {
+                const result = await callback(...args);
+                if (result != null) return result; // Return any non-null/undefined result
+            } catch (error) {
+                console.error(`PlaySocket ${event} callback error:`, error);
+            }
+        }
+        return true;
     }
 
     /**
@@ -506,27 +535,6 @@ export default class PlaySocketServer {
         if (oldRoom.host === clientId) this.#migrateHost(oldRoomId, clientId);
         this.#leaveRoom(clientId, oldRoomId);
         this.#joinRoom(clientId, roomId);
-    }
-
-    /**
-     * Trigger an event to registered callbacks
-     * @param {string} event - Event name
-     * @param {...*} args - Arguments
-     * @returns {Promise<any>} - Undefined if no callbacks, true if all callbacks ran, what the first callback with a return statement returns if present
-     */
-    async #triggerEvent(event, ...args) {
-        const callbacks = this.#callbacks.get(event);
-        if (!callbacks) return;
-
-        for (const callback of callbacks) {
-            try {
-                const result = await callback(...args);
-                if (result != null) return result; // Return any non-null/undefined result
-            } catch (error) {
-                console.error(`PlaySocket ${event} callback error:`, error);
-            }
-        }
-        return true;
     }
 
     /**

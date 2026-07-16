@@ -348,4 +348,37 @@ test.describe("Client events", () => {
 
         await p1.close(); await p2.close();
     });
+
+    // Unsubscribe tests ----------------
+
+    test("unsubscribe stops the callback, double-call is a safe no-op", async ({ page }) => {
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("un1", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => {
+            window.__count = 0;
+            window.__unsub = window.onEvent("un1", "storageUpdated", () => window.__count++);
+        });
+        await page.evaluate(() => window.createRoom("un1", { x: 0 }));
+        await page.waitForFunction(() => window.__count > 0, null, { timeout: 2_000 });
+
+        const count = await page.evaluate(() => { window.__unsub(); window.__unsub(); return window.__count; });
+        await page.evaluate(() => window.updateStorage("un1", "x", "set", 2));
+        await page.waitForFunction(() => window.getEvents("un1").storageUpdated.some(s => s.x === 2), null, { timeout: 2_000 });
+
+        // Unsubscribed callback stopped firing, remaining listener still received the update
+        expect(await page.evaluate(() => window.__count)).toBe(count);
+    });
+
+    test("callback that unsubscribes itself does not skip other listeners", async ({ page }) => {
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("un2", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => {
+            window.__order = [];
+            const unsub = window.onEvent("un2", "storageUpdated", () => { window.__order.push("first"); unsub(); });
+            window.onEvent("un2", "storageUpdated", () => window.__order.push("second"));
+        });
+        await page.evaluate(() => window.createRoom("un2", { x: 0 }));
+        await page.waitForFunction(() => window.__order.includes("second"), null, { timeout: 2_000 });
+        expect(await page.evaluate(() => window.__order.slice(0, 2))).toEqual(["first", "second"]);
+    });
 });
