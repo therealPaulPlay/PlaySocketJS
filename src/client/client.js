@@ -213,7 +213,6 @@ export default class PlaySocket {
                         break;
 
                     case "join_accepted":
-                        // Connected to room
                         if (this.#debug) console.log(LOG_PREFIX + "State received for join:", message.state);
                         this.#inRoom = true;
                         this.#crdtManager.importState(message.state);
@@ -231,13 +230,11 @@ export default class PlaySocket {
                         break;
 
                     case "join_rejected":
-                        // Connection to room failed
                         this.#triggerEvent("status", "Failed to join room: " + (message.reason || "No reason provided."));
                         if (this.#pendingJoin) this.#pendingJoin.reject(new Error("Failed to join room: " + (message.reason || "No reason provided.")));
                         break;
 
                     case "reconnected":
-                        // Successfully reconnected
                         this.#isReconnecting = false;
                         this.#reconnectCount = 0;
                         if (message.roomData) {
@@ -286,9 +283,9 @@ export default class PlaySocket {
                         break;
 
                     case "property_update_rejected":
-                        this.#triggerEvent("error", "Property update rejected, re-syncing: " + (message.reason || "No reason provided."));
-                        this.#crdtManager.importState(message.state);
-                        this.#triggerEvent("storageUpdated", this.storage);
+                        this.#triggerEvent("error", "Property update rejected, reverting: " + (message.reason || "No reason provided."));
+                        this.#crdtManager.revertPropertyUpdate(message.update);
+                        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
                         break;
 
                     case "kicked":

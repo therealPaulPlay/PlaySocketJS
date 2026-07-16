@@ -313,6 +313,39 @@ test.describe("CRDTManager", () => {
         expect(crdt2.propertyStore.extraKey).toBeUndefined();
     });
 
+    test("revertPropertyUpdate reverts local updates and preserves cross-replica convergence", () => {
+        const a = new CRDTManager();
+        const b = new CRDTManager();
+
+        // Shared baseline
+        const init = a.updateProperty("list", "set", []);
+        b.importPropertyUpdate(init);
+
+        // Reverting an optimistic update preserves later ones (and leaves a gap in A's vector clock)
+        const rejected = a.updateProperty("list", "array-add", "bad");
+        const fromA = a.updateProperty("list", "array-add", "fromA");
+        a.revertPropertyUpdate(rejected);
+        expect(a.propertyStore.list).toEqual(["fromA"]);
+
+        // Reverting the only update of a key removes the key entirely
+        const single = a.updateProperty("fresh", "set", 1);
+        a.revertPropertyUpdate(single);
+        expect(a.propertyStore.fresh).toBeUndefined();
+
+        // A concurrent update from B exchanged after the revert converges on both replicas
+        const fromB = b.updateProperty("list", "array-add", "fromB");
+        a.importPropertyUpdate(fromB);
+        b.importPropertyUpdate(fromA);
+        expect(a.propertyStore.list).toEqual(b.propertyStore.list);
+        expect(a.propertyStore.list.sort()).toEqual(["fromA", "fromB"]);
+
+        // A causally later update from B still counts as newest on both replicas
+        const overwrite = b.updateProperty("list", "set", ["done"]);
+        a.importPropertyUpdate(overwrite);
+        expect(a.propertyStore.list).toEqual(["done"]);
+        expect(b.propertyStore.list).toEqual(["done"]);
+    });
+
     test("vector clock merging takes max of each replica counter", () => {
         const crdt1 = new CRDTManager();
         const crdt2 = new CRDTManager();

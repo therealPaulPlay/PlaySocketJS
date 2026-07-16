@@ -331,7 +331,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `roomDestroyed` | `roomId: string` | Room was destroyed. | - |
 | `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` or rejection reason `string` to block. |
 | `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
-| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` or rejection reason `string` to block the update. |
+| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` or rejection reason `string` to block the update. Callback must be synchronous. |
 | `requestReceived` | `{clientId: string, roomId?: string, name: string, data?: any}` | Request from client. | - |
 
 #### Properties

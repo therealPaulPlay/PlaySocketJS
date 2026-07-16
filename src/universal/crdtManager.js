@@ -105,15 +105,15 @@ export default class CRDTManager {
 
     /**
      * Import property update
-     * @param {PropertyUpdate} data - Property update data
+     * @param {PropertyUpdate} update - Property update
      */
-    importPropertyUpdate(data) {
+    importPropertyUpdate(update) {
         try {
-            const { key, operation: rawOperation, vectorClock } = data;
+            const { key, operation: rawOperation, vectorClock } = update;
             const operation = /** @type {Operation} */ (this.#sanitizeValue(rawOperation));
-            if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
+            if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", update); // Debug
 
-            // Check key limit to afeguard against too many keys
+            // Check key limit to safeguard against too many keys
             if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error("Key limit exceeded!");
 
             // Get COPY of current ops (or empty array if none yet)
@@ -146,6 +146,34 @@ export default class CRDTManager {
     }
 
     /**
+     * Revert a local property update by removing the operation and recomputing the affected key
+     * Should NOT be used on the server or for synced ops, only for reverting local optimistic updates
+     * @param {PropertyUpdate} update - Property update
+     */
+    revertPropertyUpdate(update) {
+        try {
+            const key = update.key;
+            const opUuid = update.operation.uuid;
+
+            const currentOps = this.#keyOperations.get(key);
+            if (!currentOps?.some(op => op.uuid === opUuid)) return; // Operation not found
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Removing operation ${opUuid} for key ${key} as part of property update reversion.`);
+
+            // The own vector clock entry isn't decremented because later ops may already embed the incremented counter
+            // and reusing a counter value would corrupt operation ordering (while a gap is harmless)
+            const remainingOps = currentOps.filter(op => op.uuid !== opUuid);
+            this.#opUuidTimestamp.delete(opUuid);
+
+            if (remainingOps.length) this.#keyOperations.set(key, remainingOps);
+            else this.#keyOperations.delete(key); // This was the only operation for this key, remove key
+            this.#processLocalProperty(key);
+
+        } catch (error) {
+            console.error(CONSOLE_PREFIX + "Failed to revert property update:", error);
+        }
+    }
+
+    /**
      * Update a property
      * @param {string} key - Storage key
      * @param {PropertyUpdateType} type - Operation type
@@ -166,7 +194,7 @@ export default class CRDTManager {
             const counter = this.#vectorClock.get(this.#replicaId) || 0;
             this.#vectorClock.set(this.#replicaId, counter + 1);
 
-            // Assign shallow COPY of currennt ops or fall back to empty array
+            // Assign shallow copy of current ops or fall back to empty array
             const currentOps = [...(this.#keyOperations.get(key) || [])];
 
             // Add operation
@@ -184,7 +212,7 @@ export default class CRDTManager {
             };
 
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
+            console.error(CONSOLE_PREFIX + `Failed to add operation for key ${key}:`, error);
         }
     }
 
@@ -268,7 +296,10 @@ export default class CRDTManager {
     #processLocalProperty(key) {
         try {
             const ops = this.#keyOperations.get(key);
-            if (!ops?.length) return;
+            if (!ops?.length) {
+                delete this.#propertyStore[key]; // Delete empty key
+                return;
+            }
 
             // Apply all operations in order
             let value = null;

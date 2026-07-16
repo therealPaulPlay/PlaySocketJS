@@ -303,7 +303,7 @@ export default class PlaySocketServer {
                             ws.send(encode({
                                 type: "property_update_rejected",
                                 reason: typeof updateAllowed === "string" ? updateAllowed : null,
-                                state: room.crdtManager.state
+                                update: data.update
                             }), { binary: true });
                             return;
                         }
@@ -489,12 +489,20 @@ export default class PlaySocketServer {
      * @returns {Promise<any>} - Undefined if no callbacks, true if all callbacks ran, what the first callback with a return statement returns if present
      */
     async #triggerEvent(event, ...args) {
+        const syncOnlyEvents = ["storageUpdateRequested"]; // Async storage validation could mess up GC and would lead to potentially poor UX (slow sync)
         const callbacks = this.#callbacks.get(event);
         if (!callbacks) return;
 
         for (const callback of [...callbacks]) {
             try {
-                const result = await callback(...args);
+                let result = callback(...args);
+                if (typeof result?.then === "function") {
+                    if (syncOnlyEvents.includes(event)) {
+                        result.catch(() => { });
+                        console.error(`PlaySocket ${event} callbacks must be synchronous.`);
+                        return `${event} callback must be synchronous.`; // Return rejection string to explicitly block this practice
+                    } else result = await result;
+                }
                 if (result != null) return result; // Return any non-null/undefined result
             } catch (error) {
                 console.error(`PlaySocket ${event} callback error:`, error);

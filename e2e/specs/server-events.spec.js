@@ -325,7 +325,7 @@ test.describe("Server events", () => {
         ts.close();
     });
 
-    test("storageUpdateRequested returns false - update rejected and state re-synced", async ({ page }) => {
+    test("storageUpdateRequested returns false - update rejected and reverted", async ({ page }) => {
         const ts = await createTestServer({
             eventHandlers: { storageUpdateRequested: () => false }
         });
@@ -336,7 +336,7 @@ test.describe("Server events", () => {
         await page.evaluate(() => window.updateStorage("sur1", "val", "set", "hacked"));
         await page.waitForFunction(() => window.getEvents("sur1").error.some(e => e.includes("rejected")), null, { timeout: 2_000 });
 
-        // Client should be re-synced to original value
+        // Client should have reverted to the original value
         const events = await page.evaluate(() => window.getEvents("sur1"));
         expect(events.error.some(e => e.includes("rejected"))).toBe(true);
         const storage = await page.evaluate(() => window.storage("sur1"));
@@ -355,9 +355,29 @@ test.describe("Server events", () => {
         await page.evaluate(() => window.updateStorage("sur2", "val", "set", "hacked"));
         await page.waitForFunction(() => window.getEvents("sur2").error.some(e => e.includes("Storage update not allowed")), null, { timeout: 2_000 });
 
-        // Client should be re-synced to original value
+        // Client should have reverted to the original value
         const storage = await page.evaluate(() => window.storage("sur2"));
         expect(storage.val).toBe("original");
+        ts.close();
+    });
+
+    test("async storageUpdateRequested callback - update auto-rejected as async is not allowed for it", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: {
+                storageUpdateRequested: async () => true // Async validation is not allowed, even when it approves
+            }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("sur3", wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await page.evaluate(() => window.createRoom("sur3", { val: "original" }));
+
+        await page.evaluate(() => window.updateStorage("sur3", "val", "set", "hacked"));
+        await page.waitForFunction(() => window.getEvents("sur3").error.some(e => e.includes("synchronous")), null, { timeout: 2_000 });
+
+        // Update is reverted on the client and was never applied on the server
+        const storage = await page.evaluate(() => window.storage("sur3"));
+        expect(storage.val).toBe("original");
+        expect(ts.server.getRoomStorage(roomId).val).toBe("original");
         ts.close();
     });
 
