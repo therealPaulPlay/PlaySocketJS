@@ -113,6 +113,20 @@ test.describe("Server events", () => {
         ts.close();
     });
 
+    test("roomCreationRequested returns string - custom rejection reason", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { roomCreationRequested: () => "Room not allowed" }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rcd2", wsUrl), { wsUrl: ts.wsUrl });
+        const err = await page.evaluate(async () => {
+            try { await window.createRoom("rcd2", {}); return null; }
+            catch (e) { return e.message; }
+        });
+        expect(err).toContain("Room not allowed");
+        ts.close();
+    });
+
     test("roomCreated fires with roomId", async ({ page }) => {
         const log = [];
         const ts = await createTestServer({
@@ -141,7 +155,7 @@ test.describe("Server events", () => {
             try { await window.joinRoom("jd2", roomId); return null; }
             catch (e) { return e.message; }
         }, { roomId });
-        expect(err).toContain("Denied");
+        expect(err).toContain("No reason provided");
 
         await p1.close(); await p2.close();
         ts.close();
@@ -326,6 +340,23 @@ test.describe("Server events", () => {
         const events = await page.evaluate(() => window.getEvents("sur1"));
         expect(events.error.some(e => e.includes("rejected"))).toBe(true);
         const storage = await page.evaluate(() => window.storage("sur1"));
+        expect(storage.val).toBe("original");
+        ts.close();
+    });
+
+    test("storageUpdateRequested returns string - update rejected with custom reason", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { storageUpdateRequested: () => "Storage update not allowed" }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("sur2", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("sur2", { val: "original" }));
+
+        await page.evaluate(() => window.updateStorage("sur2", "val", "set", "hacked"));
+        await page.waitForFunction(() => window.getEvents("sur2").error.some(e => e.includes("Storage update not allowed")), null, { timeout: 2_000 });
+
+        // Client should be re-synced to original value
+        const storage = await page.evaluate(() => window.storage("sur2"));
         expect(storage.val).toBe("original");
         ts.close();
     });

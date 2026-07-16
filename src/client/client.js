@@ -192,8 +192,8 @@ export default class PlaySocket {
 
                 switch (message.type) {
                     case "registration_failed":
-                        this.#triggerEvent("error", "Failed to register: " + message.reason);
-                        if (this.#pendingRegistration) this.#pendingRegistration.reject(new Error("Failed to register: " + message.reason));
+                        this.#triggerEvent("error", "Failed to register: " + (message.reason || "No reason provided."));
+                        if (this.#pendingRegistration) this.#pendingRegistration.reject(new Error("Failed to register: " + (message.reason || "No reason provided.")));
                         break;
 
                     case "registered":
@@ -223,8 +223,8 @@ export default class PlaySocket {
 
                     case "join_rejected":
                         // Connection to room failed
-                        this.#triggerEvent("status", "Failed to join room: " + message.reason);
-                        if (this.#pendingJoin) this.#pendingJoin.reject(new Error("Failed to join room: " + message.reason));
+                        this.#triggerEvent("status", "Failed to join room: " + (message.reason || "No reason provided."));
+                        if (this.#pendingJoin) this.#pendingJoin.reject(new Error("Failed to join room: " + (message.reason || "No reason provided.")));
                         break;
 
                     case "reconnected":
@@ -261,8 +261,8 @@ export default class PlaySocket {
                         break;
 
                     case "room_creation_failed":
-                        this.#triggerEvent("error", "Failed to create room: " + message.reason);
-                        if (this.#pendingCreate) this.#pendingCreate.reject(new Error("Failed to create room: " + message.reason));
+                        this.#triggerEvent("error", "Failed to create room: " + (message.reason || "No reason provided."));
+                        if (this.#pendingCreate) this.#pendingCreate.reject(new Error("Failed to create room: " + (message.reason || "No reason provided.")));
                         break;
 
                     case "property_updated":
@@ -277,7 +277,7 @@ export default class PlaySocket {
                         break;
 
                     case "property_update_rejected":
-                        this.#triggerEvent("error", "Property update rejected. Re-syncing state.");
+                        this.#triggerEvent("error", "Property update rejected, re-syncing: " + (message.reason || "No reason provided."));
                         this.#crdtManager.importState(message.state);
                         this.#triggerEvent("storageUpdated", this.storage);
                         break;

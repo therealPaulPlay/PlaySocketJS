@@ -329,9 +329,9 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `clientLeftRoom` | `clientId: string, roomId: string` | Client left a room. | - |
 | `roomCreated` | `roomId: string` | Room was created. | - |
 | `roomDestroyed` | `roomId: string` | Room was destroyed. | - |
-| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` to block. |
+| `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` or rejection reason `string` to block. |
 | `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
-| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` to block the update. |
+| `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` or rejection reason `string` to block the update. |
 | `requestReceived` | `{clientId: string, roomId?: string, name: string, data?: any}` | Request from client. | - |
 
 #### Properties

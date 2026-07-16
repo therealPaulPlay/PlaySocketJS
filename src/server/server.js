@@ -171,7 +171,7 @@ export default class PlaySocketServer {
                     if (registrationAllowed === false || typeof registrationAllowed === "string") {
                         ws.send(encode({
                             type: "registration_failed",
-                            reason: typeof registrationAllowed === "string" ? registrationAllowed : "Denied."
+                            reason: typeof registrationAllowed === "string" ? registrationAllowed : null
                         }), { binary: true });
                         return;
                     }
@@ -237,20 +237,22 @@ export default class PlaySocketServer {
                         return;
                     }
 
+                    // Event callback with potential initial storage modifications
+                    const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
+                    if (typeof reviewedStorage === "object") data.initialStorage = reviewedStorage;
+                    if (reviewedStorage === false || typeof reviewedStorage === "string") {
+                        ws.send(encode({ type: "room_creation_failed", reason: typeof reviewedStorage === "string" ? reviewedStorage : null }), { binary: true });
+                        return;
+                    }
+
                     try {
-                        // Event callback with potential initial storage modifications
-                        const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
-                        if (typeof reviewedStorage === "object") data.initialStorage = reviewedStorage;
-                        if (reviewedStorage === false) throw new Error("Room creation request denied.");
-
-                        const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
-
                         // Verify client is still connected and abort if not
                         if (!this.#clients.has(ws.clientId)) {
-                            this.destroyRoom(newRoom.id);
                             if (this.#debug) console.log(`Room creation cancelled - client ${ws.clientId} disconnected during event callback.`);
                             return;
                         }
+
+                        const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
 
                         this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
                         this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
@@ -273,7 +275,7 @@ export default class PlaySocketServer {
 
                     // Event callback
                     const joinAllowed = await this.#triggerEvent("clientJoinRequested", ws.clientId, roomId);
-                    if (joinAllowed === false || typeof joinAllowed === "string") return rejectJoin(typeof joinAllowed === "string" ? joinAllowed : "Denied.");
+                    if (joinAllowed === false || typeof joinAllowed === "string") return rejectJoin(typeof joinAllowed === "string" ? joinAllowed : null);
 
                     // Verify client is still connected and abort if not
                     if (!this.#clients.has(ws.clientId)) {
@@ -297,9 +299,10 @@ export default class PlaySocketServer {
                     if (room && data.update) {
                         // Check if update is allowed via event callback (provide clone to ensure update integrity)
                         const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId) });
-                        if (updateAllowed === false) {
+                        if (updateAllowed === false || typeof updateAllowed === "string") {
                             ws.send(encode({
                                 type: "property_update_rejected",
+                                reason: typeof updateAllowed === "string" ? updateAllowed : null,
                                 state: room.crdtManager.state
                             }), { binary: true });
                             return;
@@ -476,7 +479,7 @@ export default class PlaySocketServer {
      * @param {string} clientId - Client ID
      * @param {string} [reason] - Optional reason
      */
-    kick(clientId, reason) {
+    kick(clientId, reason = null) {
         const client = this.#clients.get(clientId);
         if (!client) return; // Client not connected, skip
         client.willfulDisconnect = true;
