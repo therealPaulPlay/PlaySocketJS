@@ -288,8 +288,9 @@ const server = new PlaySocketServer({
     server: httpServer,
     path: "/socket",
     verifyClient: (info, callback) => {
-        const ip = info.req.headers["x-forwarded-for"];
-        if (isRateLimited(ip)) { 
+        const forwarded = info.req.headers["x-forwarded-for"];
+        const ip = forwarded ? forwarded.split(",")[0].trim() : info.req.socket.remoteAddress;
+        if (isRateLimited(ip)) {
             return callback(false, 429, "Too Many Requests");
         }
         callback(true);
