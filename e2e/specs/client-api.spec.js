@@ -243,6 +243,17 @@ test.describe("Client API", () => {
         expect(err).toContain("Not initialized");
     });
 
+    test("sendRequest before init rejects", async ({ page }) => {
+        await openPage(page, ts.httpUrl, "test-client.html");
+        const err = await page.evaluate(async ({ wsUrl }) => {
+            const { default: PlaySocket } = await import("/src/client/client.js");
+            const client = new PlaySocket("noInit3", { endpoint: wsUrl });
+            try { await client.sendRequest("someRequest"); return null; }
+            catch (e) { return e.message; }
+        }, { wsUrl: ts.wsUrl });
+        expect(err).toContain("Not initialized");
+    });
+
     test("destroy() during pending createRoom rejects the promise", async ({ page }) => {
         await openPage(page, ts.httpUrl, "test-client.html");
         await page.evaluate(({ wsUrl }) => window.initClient("dp1", wsUrl), { wsUrl: ts.wsUrl });

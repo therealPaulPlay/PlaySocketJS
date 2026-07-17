@@ -20,7 +20,7 @@ const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
  * @property {string} type - Message type
  */
 
-/** @typedef {{ resolve: (value?: any) => void, reject: (reason?: any) => void }} PendingRequest */
+/** @typedef {{ resolve: (value?: any) => void, reject: (reason?: any) => void }} PendingPromise */
 
 /**
  * PlaySocket Client
@@ -53,16 +53,18 @@ export default class PlaySocket {
     #callbacks = new Map(); // Event callbacks
 
     // Async server operations
-    /** @type {PendingRequest | null} */
+    /** @type {PendingPromise | null} */
     #pendingJoin = null;
-    /** @type {PendingRequest | null} */
+    /** @type {PendingPromise | null} */
     #pendingCreate = null;
-    /** @type {PendingRequest | null} */
+    /** @type {PendingPromise | null} */
     #pendingRegistration = null;
-    /** @type {Pick<PendingRequest, "reject"> | null} */
+    /** @type {Pick<PendingPromise, "reject"> | null} */
     #pendingConnect = null;
-    /** @type {PendingRequest | null} */
+    /** @type {PendingPromise | null} */
     #pendingReconnect = null;
+    /** @type {Map<string, PendingPromise>} */
+    #pendingRequests = new Map();
 
     // Timeouts or intervals
     /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -142,8 +144,8 @@ export default class PlaySocket {
      * @returns {Promise<string>} Resolves with the client ID when the connection is established
      */
     async init() {
-        if (this.#initialized) return Promise.reject(new Error("Already initialized!"));
-        if (!this.#endpoint) return Promise.reject(new Error("No websocket endpoint provided!"));
+        if (this.#initialized) throw new Error("Already initialized!");
+        if (!this.#endpoint) throw new Error("No websocket endpoint provided!");
         this.#triggerEvent("status", "Initializing...");
 
         // Connect to WS server
@@ -308,6 +310,14 @@ export default class PlaySocket {
                         this.#triggerEvent("clientJoined", message.client);
                         this.#triggerEvent("status", `Client ${message.client} connected.`);
                         break;
+
+                    case "request_succeeded":
+                        this.#pendingRequests.get(message.request.uuid)?.resolve();
+                        break;
+
+                    case "request_failed":
+                        this.#pendingRequests.get(message.request.uuid)?.reject(new Error(message.reason || "No reason provided."));
+                        break;
                 }
             } catch (error) {
                 console.error(ERROR_PREFIX + "Error handling message:", error);
@@ -401,7 +411,7 @@ export default class PlaySocket {
     async createRoom(initialStorage = {}, size) {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Failed to create room - not initialized");
-            return Promise.reject(new Error("Not initialized!"));
+            throw new Error("Not initialized!");
         }
 
         return /** @type {Promise<string>} */ (Promise.race([
@@ -428,7 +438,7 @@ export default class PlaySocket {
     async joinRoom(roomId) {
         if (!this.#initialized) {
             this.#triggerEvent("error", "Failed to join room - not initialized");
-            return Promise.reject(new Error("Not initialized!"));
+            throw new Error("Not initialized!");
         }
 
         return /** @type {Promise<void>} */ (Promise.race([
@@ -473,13 +483,28 @@ export default class PlaySocket {
      * Send a custom request to the server
      * @param {string} name - Name of the request
      * @param {*} [data] - Custom data
+     * @returns {Promise<void>} - Request promise
      */
-    sendRequest(name, data) {
+    async sendRequest(name, data) {
+        if (!this.#initialized) {
+            this.#triggerEvent("error", "Failed to send request - not initialized");
+            throw new Error("Not initialized!");
+        }
         if (this.#debug) console.log(LOG_PREFIX + `Server request with name ${name} and data:`, data);
-        this.#sendToServer({
-            type: "request",
-            request: { name, data }
-        });
+        const uuid = crypto.randomUUID();
+        return /** @type {Promise<void>} */ (Promise.race([
+            new Promise((resolve, reject) => {
+                this.#pendingRequests.set(uuid, { resolve, reject });
+
+                this.#sendToServer({
+                    type: "request",
+                    request: { name, data, uuid }
+                });
+            }),
+            this.#createTimeout("Request")
+        ]).finally(() => {
+            this.#pendingRequests.delete(uuid);
+        }));
     }
 
     /**
@@ -511,12 +536,15 @@ export default class PlaySocket {
         this.#reconnectCount = 0;
         this.#roomVersion = 0;
 
-        // Reject timeouts if currently active
-        if (this.#pendingJoin) this.#pendingJoin.reject();
-        if (this.#pendingCreate) this.#pendingCreate.reject();
-        if (this.#pendingRegistration) this.#pendingRegistration.reject();
-        if (this.#pendingConnect) this.#pendingConnect.reject();
-        if (this.#pendingReconnect) this.#pendingReconnect.reject();
+        // Reject pending promises if currently active
+        if (this.#pendingJoin) this.#pendingJoin.reject(new Error("Destroyed."));
+        if (this.#pendingCreate) this.#pendingCreate.reject(new Error("Destroyed."));
+        if (this.#pendingRegistration) this.#pendingRegistration.reject(new Error("Destroyed."));
+        if (this.#pendingConnect) this.#pendingConnect.reject(new Error("Destroyed."));
+        if (this.#pendingReconnect) this.#pendingReconnect.reject(new Error("Destroyed."));
+        this.#pendingRequests.forEach((request) => {
+            request.reject(new Error("Destroyed."));
+        });
     }
 
     // Public getters

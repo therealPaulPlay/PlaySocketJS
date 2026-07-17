@@ -98,10 +98,10 @@ socket.updateStorage("playerInfo", "object-set-key", "color", "red")
 console.log(socket.storage.players); // Log players array
 ```
 
-Sometimes it's convenient to send a traditional request to the server. For example, when you want to opt out of optimistic updates, or when
+Sometimes it's convenient to send a traditional request to the server. For example, when you want to opt out of optimistic updates for asynchronous work, or when
 the validation logic would be too complex otherwise:
 ```javascript
-socket.sendRequest("my-request-name", { fact: "You can build traditional client-server logic like this." })
+await socket.sendRequest("my-request-name", { fact: "You can build traditional client-server logic like this." })
 ```
 
 ### API
@@ -130,7 +130,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room. |
 | `destroy()` | - | `void` | Leave room, close the connection, and destroy the instance. |
 | `updateStorage()` | `key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage. |
-| `sendRequest()` | `name: string, data?: any` | `void` | Send a request to the server with optional attached data. |
+| `sendRequest()` | `name: string, data?: any` | `Promise<void>` | Send a request to the server with optional attached data. |
 | `onEvent()` | `event: string, callback: Function` | `() => void` | Register an event callback. Returns unsubscribe function. |
 
 #### Events
@@ -233,7 +233,10 @@ const server = new PlaySocketServer();
 server.onEvent("requestReceived", async ({ roomId, clientId, name, data }) => {
     if (name === "add-player-request") {
         const players = server.getRoomStorage(roomId)?.players || [];
-        if (players.find(p => p.id === clientId)) return; // Already added this client
+
+        // Returning false or string rejects sendRequest() on the client
+        if (players.find(p => p.id === clientId)) return "Player already added!";
+
         server.updateRoomStorage(roomId, "players", "array-add", { id: clientId, timestamp: Date.now() });
     }
 });
@@ -332,7 +335,9 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` or rejection reason `string` to block. |
 | `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
 | `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` or rejection reason `string` to block the update. Callback must be synchronous. |
-| `requestReceived` | `{clientId: string, roomId?: string, name: string, data?: any}` | Request from client. | - |
+| `requestReceived` | `{clientId: string, roomId?: string, name: string, data?: any}` | Request from client. | Return `false` or rejection reason `string` to block. |
+
+When multiple callbacks are registered for an event, all of them run, and for events that respond to a return value, the first non-null return value is used. A callback that throws counts as returning `false`.
 
 #### Properties
 

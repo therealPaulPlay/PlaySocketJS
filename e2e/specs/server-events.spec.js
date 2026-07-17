@@ -325,6 +325,94 @@ test.describe("Server events", () => {
         ts.close();
     });
 
+    test("requestReceived returns string - sendRequest rejects with custom reason", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { requestReceived: () => "Request not allowed" }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr2", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr2", {}));
+
+        const err = await page.evaluate(async () => {
+            try { await window.sendRequest("rr2", "blockedAction"); return null; }
+            catch (e) { return e.message; }
+        });
+        expect(err).toContain("Request not allowed");
+        ts.close();
+    });
+
+    test("requestReceived returns false - sendRequest rejects", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { requestReceived: () => false }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr3", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr3", {}));
+
+        const err = await page.evaluate(async () => {
+            try { await window.sendRequest("rr3", "blockedAction"); return null; }
+            catch (e) { return e.message; }
+        });
+        expect(err).toContain("No reason provided");
+        ts.close();
+    });
+
+    test("throwing requestReceived callback - sendRequest rejects instead of approving", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { requestReceived: () => { throw new Error("Test error!"); } }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr4", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr4", {}));
+
+        const err = await page.evaluate(async () => {
+            try { await window.sendRequest("rr4", "crashAction"); return null; }
+            catch (e) { return e.message; }
+        });
+        expect(err).toContain("No reason provided");
+        ts.close();
+    });
+
+    test("multiple requestReceived callbacks all run - first return value wins", async ({ page }) => {
+        const ts = await createTestServer({
+            eventHandlers: { requestReceived: () => "First reason" }
+        });
+        const secondLog = [];
+        ts.server.onEvent("requestReceived", ({ name }) => { secondLog.push(name); return "Second reason"; });
+
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr5", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr5", {}));
+
+        const err = await page.evaluate(async () => {
+            try { await window.sendRequest("rr5", "multiAction"); return null; }
+            catch (e) { return e.message; }
+        });
+        expect(err).toContain("First reason");
+        expect(secondLog).toEqual(["multiAction"]);
+        ts.close();
+    });
+
+    test("requestReceived callback without return value does not mask a later callback's rejection", async ({ page }) => {
+        const log = [];
+        const ts = await createTestServer({
+            eventHandlers: { requestReceived: ({ name }) => { log.push(name); } }
+        });
+        ts.server.onEvent("requestReceived", () => "Validator reason");
+
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr6", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr6", {}));
+
+        const err = await page.evaluate(async () => {
+            try { await window.sendRequest("rr6", "loggedAction"); return null; }
+            catch (e) { return e.message; }
+        });
+        expect(err).toContain("Validator reason");
+        expect(log).toEqual(["loggedAction"]);
+        ts.close();
+    });
+
     test("storageUpdateRequested returns false - update rejected and reverted", async ({ page }) => {
         const ts = await createTestServer({
             eventHandlers: { storageUpdateRequested: () => false }

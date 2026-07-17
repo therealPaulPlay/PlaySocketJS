@@ -98,7 +98,7 @@ export default class PlaySocketServer {
 
         // Set up ws event handlers
         this.#wss.on("connection", ws => {
-            ws.connectionId = crypto.randomUUID();
+            ws.uuid = crypto.randomUUID();
             ws.isAlive = true;
             ws.on("pong", () => { ws.isAlive = true; });
             ws.on("message", msg => this.#handleMessage(ws, msg));
@@ -134,11 +134,11 @@ export default class PlaySocketServer {
             const data = /** @type {ClientMessage & Record<string, any>} */ (decode(/** @type {Uint8Array} */(message)));
 
             // Apply rate limiting to all connections (including unregistered)
-            if (!this.#checkRateLimit(ws.connectionId, data.type)) {
+            if (!this.#checkRateLimit(ws.uuid, data.type)) {
                 if (!ws.isTerminating) {
                     ws.isTerminating = true; // Prevent multiple terminate calls (it is async)
                     ws.terminate();
-                    console.error(`PlaySocket connection ${ws.connectionId} terminated due to rate limit violations.`);
+                    console.error(`PlaySocket connection ${ws.uuid} terminated due to rate limit violations.`);
                     return;
                 }
             }
@@ -334,7 +334,9 @@ export default class PlaySocketServer {
                 case "request": {
                     if (!ws.clientId) return;
                     const roomId = this.#clientRooms.get(ws.clientId) || null;
-                    this.#triggerEvent("requestReceived", { roomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
+                    const requestSuccess = await this.#triggerEvent("requestReceived", { roomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
+                    if (requestSuccess === false || typeof requestSuccess === "string") ws.send(encode({ type: "request_failed", request: data.request, reason: typeof requestSuccess === "string" ? requestSuccess : null }), { binary: true });
+                    else ws.send(encode({ type: "request_succeeded", request: data.request }), { binary: true });
                     break;
                 }
 
@@ -394,19 +396,19 @@ export default class PlaySocketServer {
 
     /**
      * Check rate limit using token bucket algorithm
-     * @param {string} connectionId - Random connection UUID which is different from the client ID
+     * @param {string} connUuid - Connection UUID (which is different from the client ID)
      * @param {string} actionType - A string describing the action
      * @returns {boolean} - Whether or not the action can be allowed, true means allowed, false means limited
      */
-    #checkRateLimit(connectionId, actionType) {
+    #checkRateLimit(connUuid, actionType) {
         const now = Date.now();
 
-        if (!this.#rateLimits.has(connectionId)) {
-            this.#rateLimits.set(connectionId, { points: this.#rateLimitMaxPoints, lastReset: now });
+        if (!this.#rateLimits.has(connUuid)) {
+            this.#rateLimits.set(connUuid, { points: this.#rateLimitMaxPoints, lastReset: now });
             return true;
         }
 
-        const limit = this.#rateLimits.get(connectionId);
+        const limit = this.#rateLimits.get(connUuid);
 
         // Reset points if interval has passed (1s)
         if (now - limit.lastReset > 1000) {
@@ -426,7 +428,7 @@ export default class PlaySocketServer {
      * @param {WebSocket} ws - WebSocket client
      */
     #handleDisconnection(ws) {
-        this.#rateLimits.delete(ws.connectionId);
+        this.#rateLimits.delete(ws.uuid);
 
         if (ws.clientId) {
             this.#clients.delete(ws.clientId); // Immediately remove from active clients (otherwise, server would try to message this client)
@@ -486,13 +488,14 @@ export default class PlaySocketServer {
      * Trigger an event to registered callbacks
      * @param {string} event - Event name
      * @param {...*} args - Arguments
-     * @returns {Promise<any>} - Undefined if no callbacks, true if all callbacks ran, what the first callback with a return statement returns if present
+     * @returns {Promise<any>} - The first non-null callback return value if present (all callbacks run, a throwing callback counts as returning false), otherwise true
      */
     async #triggerEvent(event, ...args) {
         const syncOnlyEvents = ["storageUpdateRequested"]; // Async storage validation could mess up GC and would lead to potentially poor UX (slow sync)
         const callbacks = this.#callbacks.get(event);
         if (!callbacks) return;
 
+        let firstResult;
         for (const callback of [...callbacks]) {
             try {
                 let result = callback(...args);
@@ -500,15 +503,16 @@ export default class PlaySocketServer {
                     if (syncOnlyEvents.includes(event)) {
                         result.catch(() => { });
                         console.error(`PlaySocket ${event} callbacks must be synchronous.`);
-                        return `${event} callback must be synchronous.`; // Return rejection string to explicitly block this practice
+                        result = `${event} callback must be synchronous.`; // Rejection string to explicitly block this practice
                     } else result = await result;
                 }
-                if (result != null) return result; // Return any non-null/undefined result
+                if (firstResult == null && result != null) firstResult = result;
             } catch (error) {
                 console.error(`PlaySocket ${event} callback error:`, error);
+                if (firstResult == null) firstResult = false; // Fail closed (false blocks for most events)
             }
         }
-        return true;
+        return firstResult ?? true;
     }
 
     /**

@@ -4,7 +4,7 @@ import "ws";
 
 declare module "ws" {
     interface WebSocket {
-        connectionId: string;
+        uuid: string;
         isAlive: boolean;
         clientId?: string;
         isTerminating?: boolean;
