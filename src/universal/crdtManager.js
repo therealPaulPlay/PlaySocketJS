@@ -490,9 +490,9 @@ export default class CRDTManager {
 /**
  * Get the operation details from a property update
  * @param {PropertyUpdate} update - Property update
- * @returns {{type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
+ * @returns {{key: string | undefined, type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
  */
 export function getUpdateDetails(update) {
     const data = update?.operation?.data;
-    return { type: data?.type, value: data?.value, secondValue: data?.secondValue };
+    return { key: update?.key, type: data?.type, value: data?.value, secondValue: data?.secondValue };
 }

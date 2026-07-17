@@ -214,11 +214,12 @@ Validating an incoming storage update:
 const server = new PlaySocketServer();
 
 server.onEvent("storageUpdateRequested", ({ roomId, clientId, update, storage }) => {
-    // Block updates on all keys except for "players" and "chats"
-    if (!["players", "chats"].includes(update.key)) return false;
+    const { key, type, value, secondValue } = server.getUpdateDetails(update);
 
-    if (update.key === "chats") {
-        const { type, value, secondValue } = server.getUpdateDetails(update);
+    // Block updates on all keys except for "players" and "chats"
+    if (!["players", "chats"].includes(key)) return false;
+
+    if (key === "chats") {
         if (type !== "array-add") return false; // Only allow adding chats
         if (typeof value !== "string") return false; // Only allow strings
     }
@@ -315,7 +316,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room. |
 | `onEvent()` | `event: string, callback: Function` | `() => void` | Register a server-side event callback. Returns unsubscribe function. |
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage. |
-| `getUpdateDetails()` | `update: object` | `object` | Get the details (`type`, `value` and `secondValue`) of a storage update for building validation logic. |
+| `getUpdateDetails()` | `update: object` | `object` | Get the details (`key`, `type`, `value` and `secondValue`) of a storage update for building validation logic. |
 | `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage of a room. |
 | `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state).|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants. |

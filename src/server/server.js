@@ -562,7 +562,7 @@ export default class PlaySocketServer {
     /**
      * Get the operation details from a storage update (e.g. in the "storageUpdateRequested" event)
      * @param {PropertyUpdate} update - Property update
-     * @returns {{type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
+     * @returns {{key: string | undefined, type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
      */
     getUpdateDetails(update) {
         return getUpdateDetails(update);

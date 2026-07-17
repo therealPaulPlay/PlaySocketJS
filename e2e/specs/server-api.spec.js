@@ -45,7 +45,7 @@ test.describe("Server API", () => {
 
         await page.evaluate(() => window.updateStorage("sr5", "settings", "object-set-key", "volume", 11));
 
-        await expect.poll(() => details, { timeout: 5_000 }).toEqual({ type: "object-set-key", value: "volume", secondValue: 11 });
+        await expect.poll(() => details, { timeout: 5_000 }).toEqual({ key: "settings", type: "object-set-key", value: "volume", secondValue: 11 });
         ts.close();
     });
 

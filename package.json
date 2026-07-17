@@ -1,6 +1,6 @@
 {
   "name": "playsocketjs",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "WebSocket wrapper for creating simple multiplayer systems with ease.",
   "type": "module",
   "module": "./src/client/client.js",
