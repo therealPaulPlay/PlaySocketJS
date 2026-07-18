@@ -9,7 +9,13 @@
 	onMount(init);
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<link rel="icon" href={favicon} />
+	<meta
+		name="description"
+		content="PlaySocket is a WebSocket synchronization library that handles optimistic updates for you."
+	/>
+</svelte:head>
 
 <main class="max-w-2xl mx-auto w-[calc(100%-2rem)] my-4">
 	{@render children()}
