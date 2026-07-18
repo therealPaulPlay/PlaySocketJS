@@ -13,7 +13,7 @@
 <img
 	alt="artwork"
 	src={asset("/images/clear-connection-wassily-kandinsky.jpg")}
-	class="w-full h-auto mb-2 object-contain object-left sm:max-h-[calc(100dvh-275px)]"
+	class="w-full sm:mt-14 h-auto mb-2 object-contain object-left sm:max-h-[55dvh] sm:min-h-100"
 />
 
 <article class="prose prose-h1:mt-14 prose-h1:mb-4 mb-20">
