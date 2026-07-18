@@ -33,16 +33,14 @@
 	</p>
 	<p>
 		Moreover, the library enables <span class="bg-border rounded px-0.5">rapid prototyping</span>, as complete
-		multiplayer logic can be client-only during active development with server-side validation added later. Validating
-		client input is made easy through callbacks and helpers.
+		multiplayer logic can be client-only during active development with server-side validation added later.
 	</p>
 	<p>
 		Security and reliability are top priorities of PlaySocket. Out of the box, it protects against XSS attacks and
 		includes message rate limiting and automatic reconnection handling.
 	</p>
 	<p>
-		The library is <span class="bg-border rounded px-0.5">lightweight</span>, relying only on two dependencies:
-		MessagePack and WS.
+		The library is <span class="bg-border rounded px-0.5">lightweight</span>, relying only on WS and MessagePack.
 	</p>
 
 	<h2>The problem</h2>
