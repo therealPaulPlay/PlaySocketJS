@@ -10,6 +10,7 @@
 </script>
 
 <svelte:head>
+	<title>PlaySocket</title>
 	<link rel="icon" href={favicon} />
 	<meta
 		name="description"
