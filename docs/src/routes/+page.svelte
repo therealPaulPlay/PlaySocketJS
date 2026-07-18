@@ -34,14 +34,14 @@
 	<p>
 		Moreover, the library enables <span class="bg-border rounded px-0.5">rapid prototyping</span>, as complete
 		multiplayer logic can be client-only during active development with server-side validation added later. Validating
-		client input is made easy through callbacks and helper functions.
+		client input is made easy through callbacks and helpers.
 	</p>
 	<p>
-		Security is a top priority of PlaySocket. Out of the box, it protects against XSS attacks and comes with WebSocket
-		message rate limiting.
+		Security and reliability are top priorities of PlaySocket. Out of the box, it protects against XSS attacks and
+		includes message rate limiting and automatic reconnection handling.
 	</p>
 	<p>
-		The library is also <span class="bg-border rounded px-0.5">lightweight</span>, relying only on two dependencies:
+		The library is <span class="bg-border rounded px-0.5">lightweight</span>, relying only on two dependencies:
 		MessagePack and WS.
 	</p>
 
@@ -146,5 +146,7 @@
 	<Button href={resolve("/documentation")} class="no-underline"
 		>Documentation <HugeiconsIcon icon={ArrowRight} strokeWidth={2} /></Button
 	>
-	<Button variant="link" target="_blank" href="https://github.com/therealPaulPlay/PlaySocketJS">GitHub repository <HugeiconsIcon icon={Github} strokeWidth={2} /></Button>
+	<Button variant="link" target="_blank" href="https://github.com/therealPaulPlay/PlaySocketJS"
+		>GitHub repository <HugeiconsIcon icon={Github} strokeWidth={2} /></Button
+	>
 </article>
