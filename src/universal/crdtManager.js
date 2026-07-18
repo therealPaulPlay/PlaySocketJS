@@ -436,12 +436,14 @@ export default class CRDTManager {
      * @returns {*} - Sanitized value
      */
     #sanitizeValue(value) {
+        if (value === undefined) return null; // Normalize undefined to null to avoid divergence in transport
+
         // Check total serialized size
         const jsonString = JSON.stringify(value);
         if (jsonString?.length > 50000) throw new Error("Value too large!"); // 50KB limit
 
         if (typeof value === "string") return (value.includes("<") || value.includes(">")) ? value.replace(/[<>]/g, "") : value;
-        if (Array.isArray(value)) return value.map(item => this.#sanitizeValue(item));
+        if (Array.isArray(value)) return Array.from(value, item => this.#sanitizeValue(item));
         if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
         return value;
     }

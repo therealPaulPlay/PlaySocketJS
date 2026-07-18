@@ -134,6 +134,35 @@ test.describe("Storage sync", () => {
         expect(s.score).toBe(7);
     });
 
+    // Undefined normalization -----------
+
+    test("undefined values normalize to null on sender and receiver alike", async () => {
+        // MessagePack encodes undefined as nil (null), so the sender must also store null locally to avoid divergence
+        await page1.evaluate(({ id }) => {
+            window.updateStorage(id, "config", "set", undefined);
+            window.updateStorage(id, "items", "array-add", undefined);
+            window.updateStorage(id, "meta", "object-set-key", "field", undefined);
+            window.updateStorage(id, "nested", "set", { inner: undefined, arr: [1, undefined] });
+            const sparse = [1]; sparse[2] = 2; // Sparse array with a hole at index 1, which must normalize to null too
+            window.updateStorage(id, "sparse", "set", sparse);
+        }, { id: page1.__cid });
+        await page2.waitForFunction(({ id }) => window.storage(id)?.meta?.field === null && window.storage(id)?.sparse?.length === 3, { id: page2.__cid });
+
+        // Serialize with a marker that survives JSON.stringify (which would otherwise mask undefined)
+        const serialize = ({ id }) => JSON.stringify(window.storage(id), (_k, v) => v === undefined ? "<<undefined>>" : v);
+        const s1 = await page1.evaluate(serialize, { id: page1.__cid });
+        const s2 = await page2.evaluate(serialize, { id: page2.__cid });
+
+        expect(s1).not.toContain("<<undefined>>"); // Sender holds null, not undefined
+        expect(s1).toBe(s2); // Sender and receiver states are identical
+        const s = JSON.parse(s1);
+        expect(s.config).toBe(null);
+        expect(s.items).toEqual([null]);
+        expect(s.meta).toEqual({ field: null });
+        expect(s.nested).toEqual({ inner: null, arr: [1, null] });
+        expect(s.sparse).toEqual([1, null, 2]);
+    });
+
     // Multi-client sync and convergence ----------------------
 
     test("3 clients all converge to same state", async ({ context }) => {
