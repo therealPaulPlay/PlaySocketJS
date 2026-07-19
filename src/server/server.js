@@ -2,8 +2,7 @@ import { WebSocketServer } from "ws";
 import { createServer } from "node:http";
 import { encode, decode } from "@msgpack/msgpack";
 import CRDTManager, { getUpdateDetails } from "../universal/crdtManager.js";
-import packageData from "../../package.json" with { type: "json" };
-import { HEARTBEAT_INTERVAL } from "../universal/constants.js";
+import { HEARTBEAT_INTERVAL, VERSION } from "../universal/constants.js";
 
 const MAX_ROOM_SIZE = 500;
 export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
@@ -147,8 +146,8 @@ export default class PlaySocketServer {
             switch (data.type) {
                 case "register": {
                     // Ensure client uses the same version as server
-                    if (data.version !== packageData.version) {
-                        ws.send(encode({ type: "registration_failed", reason: `Version mismatch (client ${data.version ? "v" + data.version : "legacy"}, server v${packageData.version}). Please reload the page, an update may have been released.` }), { binary: true });
+                    if (data.version !== VERSION) {
+                        ws.send(encode({ type: "registration_failed", reason: `Version mismatch (client ${data.version ? "v" + data.version : "legacy"}, server v${VERSION}). Please reload the page, an update may have been released.` }), { binary: true });
                         return;
                     }
 

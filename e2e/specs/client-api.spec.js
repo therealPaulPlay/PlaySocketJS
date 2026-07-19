@@ -4,6 +4,7 @@ import { openPage } from "../helpers/playwright-helpers.js";
 import WebSocket from "ws";
 import { encode, decode } from "@msgpack/msgpack";
 import packageData from "../../package.json" with { type: "json" };
+import { VERSION } from "../../src/universal/constants.js";
 
 let ts;
 
@@ -218,6 +219,9 @@ test.describe("Client API", () => {
     });
 
     test("registration with mismatched or missing client version is rejected", async () => {
+        // Guard against the handshake constant diverging from the published version
+        expect(VERSION).toBe(packageData.version);
+
         // The real client always sends its own version, so forge registers over a raw WebSocket
         const register = (payload) => new Promise((resolve) => {
             const ws = new WebSocket(ts.wsUrl);

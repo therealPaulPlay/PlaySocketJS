@@ -5,3 +5,8 @@
  * be desynced as a result of gc
  */
 export const HEARTBEAT_INTERVAL = 5000;
+
+/**
+ * Library version, must match package.json
+ */
+export const VERSION = "4.2.1";
