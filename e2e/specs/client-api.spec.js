@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { createTestServer } from "../helpers/test-server.js";
 import { openPage } from "../helpers/playwright-helpers.js";
+import WebSocket from "ws";
+import { encode, decode } from "@msgpack/msgpack";
+import packageData from "../../package.json" with { type: "json" };
 
 let ts;
 
@@ -212,6 +215,30 @@ test.describe("Client API", () => {
             catch (e) { return e.message; }
         }, { wsUrl: ts.wsUrl });
         expect(err).toContain("ID is taken");
+    });
+
+    test("registration with mismatched or missing client version is rejected", async () => {
+        // The real client always sends its own version, so forge registers over a raw WebSocket
+        const register = (payload) => new Promise((resolve) => {
+            const ws = new WebSocket(ts.wsUrl);
+            ws.binaryType = "arraybuffer";
+            ws.on("open", () => ws.send(encode({ type: "register", ...payload })));
+            ws.on("message", (data) => { resolve(decode(data)); ws.close(); });
+            setTimeout(() => { resolve(null); ws.close(); }, 3000);
+        });
+
+        const mismatch = await register({ id: "ver1", version: "0.0.1" });
+        expect(mismatch.type).toBe("registration_failed");
+        expect(mismatch.reason).toContain("Version mismatch");
+        expect(mismatch.reason).toContain("v0.0.1");
+
+        const legacy = await register({ id: "ver2" });
+        expect(legacy.type).toBe("registration_failed");
+        expect(legacy.reason).toContain("legacy");
+
+        const match = await register({ id: "ver3", version: packageData.version });
+        expect(match.type).toBe("registered");
+        expect(match.id).toBe("ver3");
     });
 
     test("updateStorage when not in room triggers error", async ({ page }) => {

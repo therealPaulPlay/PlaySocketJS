@@ -7,7 +7,7 @@ import PlaySocketServer from "../../src/server/server.js";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..", "..");
 
-const CONTENT_TYPES = { ".html": "text/html", ".js": "application/javascript", ".mjs": "application/javascript" };
+const CONTENT_TYPES = { ".html": "text/html", ".js": "application/javascript", ".mjs": "application/javascript", ".json": "application/json" };
 
 let nextPort = 9000;
 
@@ -36,7 +36,7 @@ export async function createTestServer(options = {}) {
         httpServer.on("request", async (req, res) => {
             const pathname = req.url?.split("?")[0];
             let filePath;
-            if (pathname?.startsWith("/src/") || pathname?.startsWith("/node_modules/")) filePath = join(PROJECT_ROOT, pathname);
+            if (pathname?.startsWith("/src/") || pathname?.startsWith("/node_modules/") || pathname === "/package.json") filePath = join(PROJECT_ROOT, pathname);
             else if (pathname?.endsWith(".html")) filePath = join(__dirname, pathname.split("/").pop());
             else return res.writeHead(404).end();
 

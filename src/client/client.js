@@ -1,5 +1,6 @@
 import { encode, decode } from "@msgpack/msgpack";
 import CRDTManager from "../universal/crdtManager.js";
+import packageData from "../../package.json" with { type: "json" };
 
 const ERROR_PREFIX = "PlaySocket error: ";
 const WARNING_PREFIX = "PlaySocket warning: ";
@@ -160,6 +161,7 @@ export default class PlaySocket {
                 this.#sendToServer({
                     type: "register",
                     id: this.#id,
+                    version: packageData.version,
                     customData: this.#customData || undefined
                 });
             }),
