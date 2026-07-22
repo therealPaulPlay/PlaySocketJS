@@ -14,7 +14,7 @@ test.describe("Server API", () => {
 
         await page.waitForFunction(() => {
             const ev = window.getEvents("sr3");
-            return ev.error.some(e => e.includes("Kicked") && e.includes("Cheating detected"));
+            return ev.instanceDestroyed.some(r => r?.includes("Kicked") && r?.includes("Cheating detected"));
         }, null, { timeout: 5_000 });
         ts.close();
     });
@@ -108,8 +108,7 @@ test.describe("Server API", () => {
         // Client should detect disconnection
         await page.waitForFunction(() => {
             const ev = window.getEvents("st1");
-            return ev.error.some(e => e.includes("Kicked") && e.includes("Server restart")) &&
-                   ev.instanceDestroyed.length > 0;
+            return ev.instanceDestroyed.some(r => r?.includes("Kicked") && r?.includes("Server restart"));
         }, null, { timeout: 5_000 });
         ts.httpServer.close();
     });
@@ -168,8 +167,8 @@ test.describe("Server API", () => {
         ts.server.destroyRoom(roomId);
 
         // Both clients should be kicked
-        await p1.waitForFunction(() => window.getEvents("dr1").error.some(e => e.includes("Kicked")), null, { timeout: 2_000 });
-        await p2.waitForFunction(() => window.getEvents("dr2").error.some(e => e.includes("Kicked")), null, { timeout: 2_000 });
+        await p1.waitForFunction(() => window.getEvents("dr1").instanceDestroyed.some(r => r?.includes("Kicked")), null, { timeout: 2_000 });
+        await p2.waitForFunction(() => window.getEvents("dr2").instanceDestroyed.some(r => r?.includes("Kicked")), null, { timeout: 2_000 });
 
         // Room should be gone
         expect(ts.server.rooms[roomId]).toBeUndefined();

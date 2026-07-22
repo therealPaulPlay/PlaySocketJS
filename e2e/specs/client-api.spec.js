@@ -245,11 +245,14 @@ test.describe("Client API", () => {
         expect(match.id).toBe("ver3");
     });
 
-    test("updateStorage when not in room triggers error", async ({ page }) => {
+    test("updateStorage when not in room logs an error", async ({ page }) => {
+        const consoleErrors = [];
+        page.on("console", msg => { if (msg.type() === "error") consoleErrors.push(msg.text()); });
+
         await openPage(page, ts.httpUrl, "test-client.html");
         await page.evaluate(({ wsUrl }) => window.initClient("ec5", wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(() => window.updateStorage("ec5", "x", "set", 1));
-        await page.waitForFunction(() => window.getEvents("ec5").error.some(e => e.includes("not in a room")), null, { timeout: 2_000 });
+        await expect.poll(() => consoleErrors.some(e => e.includes("not in a room")), { timeout: 2_000 }).toBe(true);
     });
 
     test("createRoom before init rejects", async ({ page }) => {

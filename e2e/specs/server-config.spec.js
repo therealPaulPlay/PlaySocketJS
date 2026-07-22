@@ -47,7 +47,7 @@ test.describe("Server configuration", () => {
         // Wait for disconnect
         await page.waitForFunction(() => {
             const ev = window.getEvents("rl1");
-            return ev.error.length > 0 || ev.instanceDestroyed.length > 0 || ev.status.some(s => s.includes("Disconnected"));
+            return ev.instanceDestroyed.length > 0 || ev.status.some(s => s.includes("Disconnected"));
         }, null, { timeout: 5_000 });
         ts.close();
     });

@@ -9,4 +9,11 @@ export const HEARTBEAT_INTERVAL = 5000;
 /**
  * Library version, must match package.json
  */
-export const VERSION = "4.2.1";
+export const VERSION = "4.3.0";
+
+/**
+ * Logging prefixes
+ */
+export const ERROR_PREFIX = "PlaySocket error: ";
+export const WARNING_PREFIX = "PlaySocket warning: ";
+export const LOG_PREFIX = "PlaySocket log: ";

@@ -15,7 +15,7 @@ test.describe("Client events", () => {
         await page.evaluate(() => window.createRoom("stat", {}));
 
         const events = await page.evaluate(() => window.getEvents("stat"));
-        expect(events.status).toContain("Initializing...");
+        expect(events.status).toContain("Initializing.");
         expect(events.status).toContain("Connected to server.");
         expect(events.status).toContain("Room created.");
     });

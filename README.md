@@ -43,8 +43,7 @@ const socket = new PlaySocket("unique-client-id", {
 
 // Set up the event handlers you need
 socket.onEvent("status", status => console.log(status));
-socket.onEvent("error", error => console.error(error));
-...
+socket.onEvent("storageUpdated", storage => { /* ... */ });
 
 const clientId = await socket.init(); // Connect
 ```
@@ -128,7 +127,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `init()` | - | `Promise<string>` | Initialize the WebSocket connection, resolves with the client ID. |
 | `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room, resolves with the room ID. Max. 500 participants. |
 | `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room. |
-| `destroy()` | - | `void` | Leave room, close the connection, and destroy the instance. |
+| `destroy()` | `reason?: string` | `void` | Leave room, close the connection, and destroy the instance. |
 | `updateStorage()` | `key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage. |
 | `sendRequest()` | `name: string, data?: any` | `Promise<void>` | Send a request to the server with optional attached data. |
 | `onEvent()` | `event: string, callback: Function` | `() => void` | Register an event callback. Returns unsubscribe function. |
@@ -137,10 +136,9 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 
 | Event | Callback parameter | Description |
 |-------|-------------------|-------------|
-| `status` | `status: string` | Connection or room status updated. |
-| `error` | `error: string` | Error occurred. |
+| `status` | `status: string` | Connection or room status changed, e.g. display in UI during joining or room creation. |
 | `moved` | `roomId: string` | Moved to different room. |
-| `instanceDestroyed` | - | Instance destroyed through `destroy()` or fatal error. |
+| `instanceDestroyed` | `reason: string` | Instance destroyed through `destroy()` or error. |
 | `storageUpdated` | `storage: object` | Storage state changed. Does not trigger on no-op updates. |
 | `hostMigrated` | `roomId: string` | Host was changed. |
 | `clientJoined` | `clientId: string` | New client joined the room. |
@@ -196,7 +194,7 @@ const playSocketServer = new PlaySocketServer({
 
 // Start the server
 httpServer.listen(3000, () => {
-  console.log("Server running on port 3000");
+  console.log("Server running on port 3000.");
 });
 
 function shutdown() {
@@ -236,7 +234,7 @@ server.onEvent("requestReceived", async ({ roomId, clientId, name, data }) => {
         const players = server.getRoomStorage(roomId)?.players || [];
 
         // Returning false or string rejects sendRequest() on the client
-        if (players.find(p => p.id === clientId)) return "Player already added!";
+        if (players.find(p => p.id === clientId)) return "Player already added";
 
         server.updateRoomStorage(roomId, "players", "array-add", { id: clientId, timestamp: Date.now() });
     }
@@ -255,7 +253,7 @@ server.onEvent("clientRegistrationRequested", async (clientId, data) => {
         // For example, data could contain a token
         authedClients.push(clientId);
     } catch (error) {
-        return "Error occurred during auth."; // Blocks the registration
+        return "Error occurred during auth"; // Blocks the registration
     }
 });
 
@@ -295,7 +293,7 @@ const server = new PlaySocketServer({
         const forwarded = info.req.headers["x-forwarded-for"];
         const ip = forwarded ? forwarded.split(",")[0].trim() : info.req.socket.remoteAddress;
         if (isRateLimited(ip)) {
-            return callback(false, 429, "Too Many Requests");
+            return callback(false, 429, "Too many requests");
         }
         callback(true);
     }

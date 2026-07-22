@@ -414,6 +414,9 @@ test.describe("Server events", () => {
     });
 
     test("storageUpdateRequested returns false - update rejected and reverted", async ({ page }) => {
+        const consoleWarnings = [];
+        page.on("console", msg => { if (msg.type() === "warning") consoleWarnings.push(msg.text()); });
+
         const ts = await createTestServer({
             eventHandlers: { storageUpdateRequested: () => false }
         });
@@ -422,17 +425,18 @@ test.describe("Server events", () => {
         await page.evaluate(() => window.createRoom("sur1", { val: "original" }));
 
         await page.evaluate(() => window.updateStorage("sur1", "val", "set", "hacked"));
-        await page.waitForFunction(() => window.getEvents("sur1").error.some(e => e.includes("rejected")), null, { timeout: 2_000 });
+        await expect.poll(() => consoleWarnings.some(w => w.includes("rejected")), { timeout: 2_000 }).toBe(true);
 
         // Client should have reverted to the original value
-        const events = await page.evaluate(() => window.getEvents("sur1"));
-        expect(events.error.some(e => e.includes("rejected"))).toBe(true);
         const storage = await page.evaluate(() => window.storage("sur1"));
         expect(storage.val).toBe("original");
         ts.close();
     });
 
     test("storageUpdateRequested returns string - update rejected with custom reason", async ({ page }) => {
+        const consoleWarnings = [];
+        page.on("console", msg => { if (msg.type() === "warning") consoleWarnings.push(msg.text()); });
+
         const ts = await createTestServer({
             eventHandlers: { storageUpdateRequested: () => "Storage update not allowed" }
         });
@@ -441,7 +445,7 @@ test.describe("Server events", () => {
         await page.evaluate(() => window.createRoom("sur2", { val: "original" }));
 
         await page.evaluate(() => window.updateStorage("sur2", "val", "set", "hacked"));
-        await page.waitForFunction(() => window.getEvents("sur2").error.some(e => e.includes("Storage update not allowed")), null, { timeout: 2_000 });
+        await expect.poll(() => consoleWarnings.some(w => w.includes("Storage update not allowed")), { timeout: 2_000 }).toBe(true);
 
         // Client should have reverted to the original value
         const storage = await page.evaluate(() => window.storage("sur2"));
@@ -450,6 +454,9 @@ test.describe("Server events", () => {
     });
 
     test("async storageUpdateRequested callback - update auto-rejected as async is not allowed for it", async ({ page }) => {
+        const consoleWarnings = [];
+        page.on("console", msg => { if (msg.type() === "warning") consoleWarnings.push(msg.text()); });
+
         const ts = await createTestServer({
             eventHandlers: {
                 storageUpdateRequested: async () => true // Async validation is not allowed, even when it approves
@@ -460,7 +467,7 @@ test.describe("Server events", () => {
         const roomId = await page.evaluate(() => window.createRoom("sur3", { val: "original" }));
 
         await page.evaluate(() => window.updateStorage("sur3", "val", "set", "hacked"));
-        await page.waitForFunction(() => window.getEvents("sur3").error.some(e => e.includes("synchronous")), null, { timeout: 2_000 });
+        await expect.poll(() => consoleWarnings.some(w => w.includes("synchronous")), { timeout: 2_000 }).toBe(true);
 
         // Update is reverted on the client and was never applied on the server
         const storage = await page.evaluate(() => window.storage("sur3"));

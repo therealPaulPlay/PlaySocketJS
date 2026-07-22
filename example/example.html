@@ -62,7 +62,7 @@
             socket = new PlaySocket(id, { endpoint: "ws://localhost:3000", debug: true });
             socket.onEvent('status', status => console.log('Status:', status));
             socket.onEvent('hostMigrated', newHost => console.log('Host migrated:', newHost));
-            socket.onEvent('error', error => console.log('Error:', error));
+            socket.onEvent('instanceDestroyed', reason => console.log('Instance destroyed:', reason));
             socket.onEvent('storageUpdated', (storage) => {
                 const messages = document.getElementById('messages');
                 messages.innerHTML = storage.messages?.map(msg =>

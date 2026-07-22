@@ -29,11 +29,10 @@
         }
 
         function trackEvents(id, client) {
-            events[id] = { status: [], error: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientJoined: [], clientLeft: [], moved: [] };
+            events[id] = { status: [], instanceDestroyed: [], storageUpdated: [], hostMigrated: [], clientJoined: [], clientLeft: [], moved: [] };
             client.onEvent('status', msg => events[id].status.push(msg));
-            client.onEvent('error', msg => events[id].error.push(msg));
             client.onEvent('moved', roomId => events[id].moved.push(roomId));
-            client.onEvent('instanceDestroyed', () => events[id].instanceDestroyed.push(Date.now()));
+            client.onEvent('instanceDestroyed', reason => events[id].instanceDestroyed.push(reason));
             client.onEvent('storageUpdated', storage => events[id].storageUpdated.push(storage));
             client.onEvent('hostMigrated', newHost => events[id].hostMigrated.push(newHost));
             client.onEvent('clientJoined', cid => events[id].clientJoined.push(cid));

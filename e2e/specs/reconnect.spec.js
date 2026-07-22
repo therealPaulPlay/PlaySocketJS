@@ -115,7 +115,7 @@ test.describe("Reconnection", () => {
         // Wait for instance to be destroyed (max 9 retries * 500ms + timeouts)
         await page.waitForFunction(() => {
             const ev = window.getEvents("rc3");
-            return ev.instanceDestroyed.length > 0 && ev.error.some(e => e.includes("Disconnected from server"));
+            return ev.instanceDestroyed.some(r => r?.includes("Disconnected, reconnection failed"));
         }, null, { timeout: 30_000 });
 
         await page.evaluate(() => window.unblockNetwork());
@@ -145,7 +145,7 @@ test.describe("Reconnection", () => {
 
         await page.waitForFunction(() => {
             const ev = window.getEvents("rd1");
-            return ev.instanceDestroyed.length > 0 && ev.error.some(e => e.includes("room no longer exists"));
+            return ev.instanceDestroyed.some(r => r?.includes("room no longer exists"));
         }, null, { timeout: 10_000 });
     });
 
@@ -174,7 +174,7 @@ test.describe("Reconnection", () => {
 
         await page.waitForFunction(() => {
             const ev = window.getEvents("gp1");
-            return ev.instanceDestroyed.length > 0 && ev.error.some(e => e.includes("Disconnected from server"));
+            return ev.instanceDestroyed.some(r => r?.includes("Disconnected, reconnection failed"));
         }, null, { timeout: 20_000 });
     });
 
