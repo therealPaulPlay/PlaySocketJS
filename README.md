@@ -293,7 +293,7 @@ const server = new PlaySocketServer({
         const forwarded = info.req.headers["x-forwarded-for"];
         const ip = forwarded ? forwarded.split(",")[0].trim() : info.req.socket.remoteAddress;
         if (isRateLimited(ip)) {
-            return callback(false, 429, "Too many requests");
+            return callback(false, 429, "Too Many Requests");
         }
         callback(true);
     }
