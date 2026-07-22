@@ -114,7 +114,7 @@ export default class CRDTManager {
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", update); // Debug
 
             // Check key limit to safeguard against too many keys
-            if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error("Key limit exceeded!");
+            if (this.#keyOperations.size >= 100 && !this.#keyOperations.has(key)) throw new Error("Key limit exceeded");
 
             // Get COPY of current ops (or empty array if none yet)
             const currentOps = [...(this.#keyOperations.get(key) || [])];
@@ -157,7 +157,7 @@ export default class CRDTManager {
 
             const currentOps = this.#keyOperations.get(key);
             if (!currentOps?.some(op => op.uuid === opUuid)) return; // Operation not found
-            if (this.#debug) console.log(CONSOLE_PREFIX + `Removing operation ${opUuid} for key ${key} as part of property update reversion.`);
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Removing operation ${opUuid} for key ${key} as part of property update reversion`);
 
             // The own vector clock entry isn't decremented because later ops may already embed the incremented counter
             // and reusing a counter value would corrupt operation ordering (while a gap is harmless)
@@ -188,7 +188,7 @@ export default class CRDTManager {
             secondValue = this.#sanitizeValue(secondValue);
 
             // Debug log
-            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and secondValue ${secondValue}.`);
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and secondValue ${secondValue}`);
 
             // Increment vector clock
             const counter = this.#vectorClock.get(this.#replicaId) || 0;
@@ -440,7 +440,7 @@ export default class CRDTManager {
 
         // Check total serialized size
         const jsonString = JSON.stringify(value);
-        if (jsonString?.length > 50000) throw new Error("Value too large!"); // 50KB limit
+        if (jsonString?.length > 50000) throw new Error("Value too large"); // 50KB limit
 
         if (typeof value === "string") return (value.includes("<") || value.includes(">")) ? value.replace(/[<>]/g, "") : value;
         if (Array.isArray(value)) return Array.from(value, item => this.#sanitizeValue(item));
