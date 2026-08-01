@@ -152,7 +152,7 @@ export default class PlaySocketServer {
                     }
 
                     // Register client ID if provided & check for a duplicate
-                    if (data.id && (this.#clients.get(data.id) || data.id === "server")) {
+                    if (data.id && (this.#clients.get(data.id) || this.#pendingDisconnects.has(data.id) || data.id === "server")) {
                         ws.send(encode({ type: "registration_failed", reason: "ID is taken" }), { binary: true });
                         return;
                     }
@@ -161,7 +161,7 @@ export default class PlaySocketServer {
                     if (!data.id) {
                         for (let i = 0; i < 50; i++) {
                             const id = this.#generateId();
-                            if (!this.#clients.get(id)) {
+                            if (!this.#clients.get(id) && !this.#pendingDisconnects.has(id)) {
                                 data.id = id;
                                 break;
                             }

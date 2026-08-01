@@ -106,6 +106,35 @@ test.describe("Security", () => {
         expect(msg.reason).toContain("token");
     });
 
+    test("registering with an id that is awaiting reconnection is rejected", async ({ context }) => {
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, "test-client.html?intercept-ws");
+        await openPage(p2, ts.httpUrl, "test-client.html");
+
+        await p1.evaluate(({ wsUrl }) => window.initClient("pd1", wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await p1.evaluate(() => window.createRoom("pd1", { x: 1 }));
+
+        // Drop the first client so its id enters the pending disconnect state
+        // Block network so it stays in its reconnect loop instead of reclaiming the id
+        await p1.evaluate(() => {
+            window.blockNetwork();
+            window.simulateDisconnect("pd1");
+        });
+        await sleep(200);
+
+        // A second client must not be able to claim the id while it is still held for reconnection
+        const err = await p2.evaluate(async ({ wsUrl }) => {
+            try { await window.initClient("pd1", wsUrl); return null; }
+            catch (e) { return e.message; }
+        }, { wsUrl: ts.wsUrl });
+        expect(err).toContain("ID is taken");
+
+        // The room seat is still held for the original client, not inherited by the second one
+        expect(ts.server.rooms[roomId]?.participants).toContain("pd1");
+
+        await p1.close(); await p2.close();
+    });
+
     test("nested objects and arrays are recursively sanitized", async ({ page }) => {
         await openPage(page, ts.httpUrl, "test-client.html");
         await page.evaluate(({ wsUrl }) => window.initClient("ns1", wsUrl), { wsUrl: ts.wsUrl });
