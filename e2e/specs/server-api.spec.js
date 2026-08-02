@@ -131,6 +131,21 @@ test.describe("Server API", () => {
         ts.close();
     });
 
+    test("server createRoom always sets host to server, extra arguments are ignored", async ({ page }) => {
+        const ts = await createTestServer();
+        // A third argument must not be able to assign an arbitrary host
+        const room = ts.server.createRoom({ val: 1 }, 10, "some-client");
+        expect(ts.server.rooms[room.id].host).toBe("server");
+
+        // A joining client does not become the host either
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("sh1", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(({ roomId }) => window.joinRoom("sh1", roomId), { roomId: room.id });
+        expect(await page.evaluate(() => window.isHost("sh1"))).toBe(false);
+        expect(ts.server.rooms[room.id].host).toBe("server");
+        ts.close();
+    });
+
     test("server-created room persists when all clients leave", async ({ page }) => {
         const ts = await createTestServer();
         const room = ts.server.createRoom({ persistent: true });

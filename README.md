@@ -305,7 +305,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 #### Methods
 
 > [!IMPORTANT]
-> Rooms created by the server default to host ID "server". If that host string is used, the room will not be auto-deleted when all participants have left and you need to take care of its lifecycle.
+> Rooms created by the server are always owned by the host ID "server". Such rooms are not auto-deleted when all participants have left, so you need to take care of their lifecycle.
 
 | Name | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
@@ -316,7 +316,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage. |
 | `getUpdateDetails()` | `update: object` | `object` | Get the details (`key`, `type`, `value` and `secondValue`) of a storage update for building validation logic. |
 | `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage of a room. |
-| `createRoom()` | `initialStorage?: object, size?: number, host?: string` | `object` | Create a room (returns object containing room ID and state).|
+| `createRoom()` | `initialStorage?: object, size?: number` | `object` | Create a server-owned room (returns object containing room ID and state).|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants. |
 
 #### Events

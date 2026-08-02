@@ -258,7 +258,7 @@ export default class PlaySocketServer {
                             return;
                         }
 
-                        const newRoom = this.createRoom(data.initialStorage, data.size, ws.clientId); // Create room
+                        const newRoom = this.#createRoom(ws.clientId, data.initialStorage, data.size); // Create room
 
                         this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
                         this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
@@ -605,13 +605,23 @@ export default class PlaySocketServer {
     }
 
     /**
-     * Create a room
+     * Create a server-owned room 
      * @param {object} [initialStorage] - Optional initial storage object
      * @param {number} [size] - Max. room size, up to 500
-     * @param {string} [host] - Host ID, defaults to "server" (when set to "server", room will not be deleted if all clients leave)
      * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
      */
-    createRoom(initialStorage, size, host = "server") {
+    createRoom(initialStorage, size) {
+        return this.#createRoom("server", initialStorage, size);
+    }
+
+    /**
+     * Create a room
+     * @param {string} host - Host ID (when set to "server", room will not be deleted if all clients leave)
+     * @param {object} [initialStorage] - Optional initial storage object
+     * @param {number} [size] - Max. room size, up to 500
+     * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
+     */
+    #createRoom(host, initialStorage, size) {
         let newRoomId;
 
         for (let i = 0; i < 100; i++) {
