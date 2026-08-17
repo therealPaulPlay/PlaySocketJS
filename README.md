@@ -2,6 +2,8 @@
 
 An optimistic-first WebSocket synchronization library. Built for creating multiplayer games & collaborative experiences with reactive web frameworks.
 
+For an introduction to PlaySocket, visit the [PlaySocket website](https://therealpaulplay.github.io/PlaySocketJS/).
+
 ## Why use PlaySocket?
 
 PlaySocket makes developing shared experiences a breeze:
