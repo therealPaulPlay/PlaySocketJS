@@ -31,6 +31,25 @@ export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
  * @property {CRDTManager} crdtManager - CRDT manager holding the room storage
  */
 
+/** @typedef {boolean | string | void} RejectViaStringOrBool */
+
+/**
+ * Event callback types
+ * @typedef {object} ServerEventMap
+ * @property {(clientId: string, customData: any) => RejectViaStringOrBool | Promise<RejectViaStringOrBool>} clientRegistrationRequested
+ * @property {(clientId: string, customData: any) => void} clientRegistered
+ * @property {(clientId: string) => void} clientDisconnected
+ * @property {(clientId: string, roomId: string) => void} clientJoinedRoom
+ * @property {(clientId: string, roomId: string) => void} clientLeftRoom
+ * @property {(clientId: string, roomId: string) => RejectViaStringOrBool | Promise<RejectViaStringOrBool>} clientJoinRequested
+ * @property {(roomId: string) => void} roomCreated
+ * @property {(roomId: string) => void} roomDestroyed
+ * @property {(payload: { clientId: string, initialStorage: Record<string, any> }) => Record<string, any> | RejectViaStringOrBool | Promise<Record<string, any> | RejectViaStringOrBool>} roomCreationRequested
+ * @property {(payload: { roomId: string | null, clientId: string, name: string, data: unknown }) => RejectViaStringOrBool | Promise<RejectViaStringOrBool>} requestReceived
+ * @property {(payload: { roomId: string, clientId: string, update: PropertyUpdate, storage: Record<string, any> | undefined }) => RejectViaStringOrBool} storageUpdateRequested
+ * @property {(payload: { roomId: string, clientId: string | null, update: PropertyUpdate, storage: Record<string, any> | undefined }) => void} storageUpdated
+ */
+
 /**
  * PlaySocket Server
  */
@@ -358,7 +377,7 @@ export default class PlaySocketServer {
 
     /**
      * Generate a readable, 6 digit ID
-     * @returns {string} - Id
+     * @returns {string} Id
      */
     #generateId() {
         const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789";
@@ -392,7 +411,7 @@ export default class PlaySocketServer {
 
     /**
      * Generate a random token to prevent malicious reconnect attempts
-     * @returns {string} - Token
+     * @returns {string} Token
      */
     #generateSessionToken() {
         let token = "";
@@ -404,7 +423,7 @@ export default class PlaySocketServer {
      * Check rate limit using token bucket algorithm
      * @param {string} connUuid - Connection UUID (which is different from the client ID)
      * @param {string} actionType - A string describing the action
-     * @returns {boolean} - Whether or not the action can be allowed, true means allowed, false means limited
+     * @returns {boolean} Whether or not the action can be allowed, true means allowed, false means limited
      */
     #checkRateLimit(connUuid, actionType) {
         const now = Date.now();
@@ -469,9 +488,10 @@ export default class PlaySocketServer {
 
     /**
      * Register an event callback
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function
-     * @returns {Function} - Unsubscribe
+     * @template {keyof ServerEventMap} E
+     * @param {E} event - Event name
+     * @param {ServerEventMap[E]} callback - Callback function
+     * @returns {Function} Unsubscribe
      */
     onEvent(event, callback) {
         const validEvents = ["clientRegistered", "clientRegistrationRequested", "clientDisconnected", "clientJoinedRoom", "clientLeftRoom", "clientJoinRequested", "roomCreated", "roomCreationRequested", "requestReceived", "storageUpdated", "storageUpdateRequested", "roomDestroyed"];
@@ -494,7 +514,7 @@ export default class PlaySocketServer {
      * Trigger an event to registered callbacks
      * @param {string} event - Event name
      * @param {...*} args - Arguments
-     * @returns {Promise<any>} - The first non-null callback return value if present (all callbacks run, a throwing callback counts as returning false), otherwise true
+     * @returns {Promise<any>} The first non-null callback return value if present (all callbacks run, a throwing callback counts as returning false), otherwise true
      */
     async #triggerEvent(event, ...args) {
         const syncOnlyEvents = ["storageUpdateRequested"]; // Async storage validation could mess up GC and would lead to potentially poor UX (slow sync)
@@ -558,7 +578,7 @@ export default class PlaySocketServer {
     /**
      * Get snapshot of a room's storage
      * @param {string} roomId - ID of the room to get the storage from
-     * @returns {Record<string, any> | undefined} - Storage object or undefined if the room doesn't exist
+     * @returns {Record<string, any> | undefined} Storage object or undefined if the room doesn't exist
      */
     getRoomStorage(roomId) {
         const room = this.#rooms[roomId];
@@ -568,7 +588,7 @@ export default class PlaySocketServer {
     /**
      * Get the operation details from a storage update (e.g. in the "storageUpdateRequested" event)
      * @param {PropertyUpdate} update - Property update
-     * @returns {{key: string | undefined, type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
+     * @returns {{key: string | undefined, type: PropertyUpdateType | undefined, value: *, secondValue: *}} Operation details
      */
     getUpdateDetails(update) {
         return getUpdateDetails(update);
@@ -606,7 +626,7 @@ export default class PlaySocketServer {
 
     /**
      * Create a server-owned room 
-     * @param {object} [initialStorage] - Optional initial storage object
+     * @param {object | null} [initialStorage] - Optional initial storage object
      * @param {number} [size] - Max. room size, up to 500
      * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
      */
@@ -617,7 +637,7 @@ export default class PlaySocketServer {
     /**
      * Create a room
      * @param {string} host - Host ID (when set to "server", room will not be deleted if all clients leave)
-     * @param {object} [initialStorage] - Optional initial storage object
+     * @param {object | null} [initialStorage] - Optional initial storage object
      * @param {number} [size] - Max. room size, up to 500
      * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
      */

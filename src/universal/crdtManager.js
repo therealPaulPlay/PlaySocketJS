@@ -179,7 +179,7 @@ export default class CRDTManager {
      * @param {PropertyUpdateType} type - Operation type
      * @param {*} value - Value
      * @param {*} [secondValue] - Second value (needed for some operations)
-     * @returns {PropertyUpdate | undefined} - Returns the property update
+     * @returns {PropertyUpdate | undefined} Returns the property update
      */
     updateProperty(key, type, value, secondValue) {
         try {
@@ -276,7 +276,7 @@ export default class CRDTManager {
      * Create an operation object
      * @param {OperationData} data - Operation data, consists of type, value and secondValue
      * @param {VectorClockEntries} vectorClock - Vector clock of the replica/client
-     * @returns {Operation} - Operation object
+     * @returns {Operation} Operation object
      */
     #createOperation(data, vectorClock) {
         const newOperation = {
@@ -323,7 +323,7 @@ export default class CRDTManager {
     /**
      * Sort operations by vector clock (causal order)
      * @param {Operation[]} operations - Full operations that include vector clocks, data and a source
-     * @returns {Operation[]} - Sorted operations
+     * @returns {Operation[]} Sorted operations
      */
     #sortByVectorClock(operations) {
         return [...operations].sort((a, b) => {
@@ -362,7 +362,7 @@ export default class CRDTManager {
      * @param {PropertyUpdateType} type - Operation type
      * @param {*} value - Value
      * @param {*} [secondValue] - Second value (needed for some operations)
-     * @returns {*} - Value after the operation
+     * @returns {*} Value after the operation
      */
     #handleOperation(curValue, type, value, secondValue) {
         try {
@@ -433,7 +433,7 @@ export default class CRDTManager {
     /**
      * Remove HTML to prevent XSS and enforce size limits
      * @param {*} value - Value to sanitize
-     * @returns {*} - Sanitized value
+     * @returns {*} Sanitized value
      */
     #sanitizeValue(value) {
         if (value === undefined) return null; // Normalize undefined to null to avoid divergence in transport
@@ -450,7 +450,7 @@ export default class CRDTManager {
 
     /**
      * Get property store
-     * @returns {Record<string, any>} - Object with key value pairs
+     * @returns {Record<string, any>} Object with key value pairs
      */
     get propertyStore() {
         try {
@@ -463,7 +463,7 @@ export default class CRDTManager {
 
     /**
      * Check for changes in the local property store
-     * @returns {boolean} - Check if any values changed going from the last to the current property update
+     * @returns {boolean} Check if any values changed going from the last to the current property update
      */
     get didPropertiesChange() {
         try {
@@ -479,7 +479,7 @@ export default class CRDTManager {
 
     /**
      * Export state (can be imported using importState, converts the maps to arrays for serialization)
-     * @returns {CRDTState} - State
+     * @returns {CRDTState} State
      */
     get state() {
         return {
@@ -492,7 +492,7 @@ export default class CRDTManager {
 /**
  * Get the operation details from a property update
  * @param {PropertyUpdate} update - Property update
- * @returns {{key: string | undefined, type: PropertyUpdateType | undefined, value: *, secondValue: *}} - Operation details
+ * @returns {{key: string | undefined, type: PropertyUpdateType | undefined, value: *, secondValue: *}} Operation details
  */
 export function getUpdateDetails(update) {
     const data = update?.operation?.data;

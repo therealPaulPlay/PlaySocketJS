@@ -142,9 +142,9 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | `moved` | `roomId: string` | Moved to different room. |
 | `instanceDestroyed` | `reason: string` | Instance destroyed through `destroy()` or error. |
 | `storageUpdated` | `storage: object` | Storage state changed. Does not trigger on no-op updates. |
-| `hostMigrated` | `roomId: string` | Host was changed. |
+| `hostMigrated` | `hostId: string` | Host was changed. |
 | `clientJoined` | `clientId: string` | New client joined the room. |
-| `clientLeft` | `clientId: string, roomId?: string` | A client left the room. |
+| `clientLeft` | `clientId: string` | A client left the room. |
 
 #### Properties
 

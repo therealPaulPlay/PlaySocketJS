@@ -21,6 +21,18 @@ const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
 /** @typedef {{ resolve: (value?: any) => void, reject: (reason?: any) => void }} PendingPromise */
 
 /**
+ * Event callback types
+ * @typedef {object} ClientEventMap
+ * @property {(message: string) => void} status
+ * @property {(roomId: string) => void} moved
+ * @property {(reason: string | undefined) => void} instanceDestroyed
+ * @property {(storage: Record<string, any>) => void} storageUpdated
+ * @property {(hostId: string) => void} hostMigrated
+ * @property {(clientId: string) => void} clientJoined
+ * @property {(clientId: string) => void} clientLeft
+ */
+
+/**
  * PlaySocket Client
  */
 export default class PlaySocket {
@@ -75,11 +87,11 @@ export default class PlaySocket {
 
     /**
      * Create a new PlaySocket instance
-     * @param {string} [id] - Unique identifier for this client (assigned by the server if omitted)
+     * @param {string | null} [id] - Unique identifier for this client (assigned by the server if omitted or null)
      * @param {PlaySocketOptions} options - Connection options
      */
     constructor(id, options = /** @type {PlaySocketOptions} */ ({})) {
-        this.#id = id;
+        this.#id = id ?? undefined;
         if (options.endpoint) this.#endpoint = options.endpoint;
         if (options.customData) this.#customData = { ...options.customData };
         if (options.debug) this.#debug = true; // Enabling extra logging
@@ -89,7 +101,7 @@ export default class PlaySocket {
     /**
      * Helper to create timeout promises for create room, join room etc.
      * @param {string} name - Name of the timeout
-     * @returns {Promise<never>} - Promise that rejects after the timeout
+     * @returns {Promise<never>} Promise that rejects after the timeout
      */
     #createTimeout(name) {
         return new Promise((_, reject) =>
@@ -99,9 +111,10 @@ export default class PlaySocket {
 
     /**
      * Register an event callback
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function
-     * @returns {Function} - Unsubscribe
+     * @template {keyof ClientEventMap} E
+     * @param {E} event - Event name
+     * @param {ClientEventMap[E]} callback - Callback function
+     * @returns {Function} Unsubscribe
      */
     onEvent(event, callback) {
         const validEvents = ["status", "moved", "instanceDestroyed", "storageUpdated", "hostMigrated", "clientJoined", "clientLeft"];
@@ -396,11 +409,11 @@ export default class PlaySocket {
 
     /**
      * Create a new room and become host
-     * @param {object} [initialStorage] - Initial state
+     * @param {object | null} [initialStorage] - Initial state
      * @param {number} [size] - Max number of participants
      * @returns {Promise<string>} Resolves with room ID
      */
-    async createRoom(initialStorage = {}, size) {
+    async createRoom(initialStorage, size) {
         if (!this.#initialized) throw new Error("Not initialized");
 
         return /** @type {Promise<string>} */ (Promise.race([
@@ -422,7 +435,7 @@ export default class PlaySocket {
     /**
      * Join an existing room
      * @param {string} roomId - ID of the room
-     * @returns {Promise<void>} - Resolves when connected
+     * @returns {Promise<void>} Resolves when connected
      */
     async joinRoom(roomId) {
         if (!this.#initialized) throw new Error("Not initialized");
@@ -469,7 +482,7 @@ export default class PlaySocket {
      * Send a custom request to the server
      * @param {string} name - Name of the request
      * @param {*} [data] - Custom data
-     * @returns {Promise<void>} - Request promise
+     * @returns {Promise<void>} Request promise
      */
     async sendRequest(name, data) {
         if (!this.#initialized) throw new Error("Not initialized");
