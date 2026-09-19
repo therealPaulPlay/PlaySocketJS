@@ -207,6 +207,22 @@ test.describe("CRDTManager", () => {
         expect(store2.data.nested.value).toBe(1); // original unaffected
     });
 
+    test("rawPropertyStore returns the live store without cloning", () => {
+        const crdt = new CRDTManager();
+        crdt.updateProperty("data", "set", { nested: { value: 1 } });
+
+        const raw1 = crdt.rawPropertyStore;
+        const raw2 = crdt.rawPropertyStore;
+        expect(raw1).toBe(raw2); // same reference, no clone
+        expect(raw1.data.nested.value).toBe(1);
+        expect(raw1).not.toBe(crdt.propertyStore); // the cloning getter still clones
+
+        // Identity is stable, so reference comparisons keep working
+        crdt.updateProperty("list", "set", [{ id: "a" }, { id: "b" }]);
+        const list = crdt.rawPropertyStore.list;
+        expect(list.filter(i => i.id === "b").every(i => list.includes(i))).toBe(true);
+    });
+
     test("vector clock sorting produces deterministic order", () => {
         const crdt1 = new CRDTManager();
         const crdt2 = new CRDTManager();

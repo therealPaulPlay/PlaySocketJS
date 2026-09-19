@@ -576,13 +576,15 @@ export default class PlaySocketServer {
     }
 
     /**
-     * Get snapshot of a room's storage
+     * Get a snapshot of a room's storage
      * @param {string} roomId - ID of the room to get the storage from
+     * @param {object} [options] - Options
+     * @param {boolean} [options.dangerouslySkipCloning=false] - Return uncloned store (faster, but allows illegal mutation)
      * @returns {Record<string, any> | undefined} Storage object or undefined if the room doesn't exist
      */
-    getRoomStorage(roomId) {
+    getRoomStorage(roomId, { dangerouslySkipCloning = false } = {}) {
         const room = this.#rooms[roomId];
-        if (room) return room.crdtManager.propertyStore;
+        if (room) return dangerouslySkipCloning ? room.crdtManager.rawPropertyStore : room.crdtManager.propertyStore;
     }
 
     /**

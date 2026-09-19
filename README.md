@@ -315,7 +315,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their client ID. |
 | `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room. |
 | `onEvent()` | `event: string, callback: Function` | `() => void` | Register a server-side event callback. Returns unsubscribe function. |
-| `getRoomStorage()` | `roomId: string` | `object` | Get a snapshot of the current room storage. |
+| `getRoomStorage()` | `roomId: string, options?: { dangerouslySkipCloning?: boolean }` | `object` | Get a snapshot of the current room storage. Pass `dangerouslySkipCloning: true` to get the uncloned store for performance reasons. |
 | `getUpdateDetails()` | `update: object` | `object` | Get the details (`key`, `type`, `value` and `secondValue`) of a storage update for building validation logic. |
 | `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage of a room. |
 | `createRoom()` | `initialStorage?: object, size?: number` | `object` | Create a server-owned room (returns object containing room ID and state).|

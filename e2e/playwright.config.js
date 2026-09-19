@@ -14,6 +14,6 @@ export default defineConfig({
         trace: "on-first-retry",
     },
     projects: [
-        { name: "firefox", use: { browserName: "firefox" } },
+        { name: "chromium", use: { browserName: "chromium" } },
     ],
 });

@@ -366,11 +366,11 @@ export default class CRDTManager {
      */
     #handleOperation(curValue, type, value, secondValue) {
         try {
+            // Set operation (before the structured clone since for set we don't care about curValue anyway)
+            if (type === "set") return value;
+
             // Deep copy to avoid reference issues in case value is or contains object(s)
             curValue = structuredClone(curValue);
-
-            // Set operation
-            if (type === "set") return value;
 
             // Number increment operation
             if (type === "number-increment") {
@@ -459,6 +459,14 @@ export default class CRDTManager {
             console.error(CONSOLE_PREFIX + "Failed to parse property store")
             return {}
         }
+    }
+
+    /**
+     * Get uncloned property store
+     * @returns {Record<string, any>} Object with key value pairs
+     */
+    get rawPropertyStore() {
+        return this.#propertyStore;
     }
 
     /**
