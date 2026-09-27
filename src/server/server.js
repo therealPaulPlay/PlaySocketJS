@@ -192,12 +192,20 @@ export default class PlaySocketServer {
                     }
 
                     // Event callback
+                    const requestedCustomId = !!data.id; // Track whether the client tried to claim a self-chosen ID
                     const registrationAllowed = await this.#triggerEvent("clientRegistrationRequested", data.id, data.customData);
                     if (registrationAllowed === false || typeof registrationAllowed === "string") {
                         ws.send(encode({
                             type: "registration_failed",
                             reason: typeof registrationAllowed === "string" ? registrationAllowed : null
                         }), { binary: true });
+                        return;
+                    }
+
+                    // Client-chosen IDs are unauthenticated by default (anyone could squat/impersonate an ID before its
+                    // legitimate owner connects), so they must be explicitly authorized by a "clientRegistrationRequested" handler
+                    if (requestedCustomId && registrationAllowed !== true) {
+                        ws.send(encode({ type: "registration_failed", reason: "Custom client IDs require explicit server-side authorization" }), { binary: true });
                         return;
                     }
 
