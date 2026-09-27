@@ -36,7 +36,7 @@
 		multiplayer logic can be client-only during active development with server-side validation added later.
 	</p>
 	<p>
-		Security and reliability are top priorities of PlaySocket. Out of the box, it protects against XSS attacks and
+		Security and reliability are top priorities of PlaySocket. Out of the box, it protects against large payloads and
 		includes message rate limiting and automatic reconnection handling.
 	</p>
 	<p>

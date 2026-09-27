@@ -11,29 +11,6 @@ test.afterAll(() => { ts.close(); });
 
 test.describe("Security", () => {
 
-    test("HTML tags are stripped from string values", async ({ context }) => {
-        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
-        await openPage(p1, ts.httpUrl, "test-client.html");
-        await openPage(p2, ts.httpUrl, "test-client.html");
-
-        await p1.evaluate(({ wsUrl }) => window.initClient("xss1", wsUrl), { wsUrl: ts.wsUrl });
-        const roomId = await p1.evaluate(() => window.createRoom("xss1", { msg: "" }));
-        await p2.evaluate(({ wsUrl }) => window.initClient("xss2", wsUrl), { wsUrl: ts.wsUrl });
-        await p2.evaluate(({ roomId }) => window.joinRoom("xss2", roomId), { roomId });
-        await p1.waitForFunction(() => window.participantCount("xss1") === 2, null, { timeout: 2_000 });
-
-        await p1.evaluate(() => window.updateStorage("xss1", "msg", "set", "<script>alert(\"xss\")</script>"));
-        await p2.waitForFunction(() => window.storage("xss2")?.msg?.length > 0, null, { timeout: 2_000 });
-
-        const s1 = await p1.evaluate(() => window.storage("xss1"));
-        const s2 = await p2.evaluate(() => window.storage("xss2"));
-        expect(s1.msg).not.toContain("<");
-        expect(s1.msg).not.toContain(">");
-        expect(s2.msg).not.toContain("<");
-
-        await p1.close(); await p2.close();
-    });
-
     test("large value payloads exceeding 50KB are rejected", async ({ page }) => {
         await openPage(page, ts.httpUrl, "test-client.html");
         await page.evaluate(({ wsUrl }) => window.initClient("lv1", wsUrl), { wsUrl: ts.wsUrl });
@@ -133,25 +110,5 @@ test.describe("Security", () => {
         expect(ts.server.rooms[roomId]?.participants).toContain("pd1");
 
         await p1.close(); await p2.close();
-    });
-
-    test("nested objects and arrays are recursively sanitized", async ({ page }) => {
-        await openPage(page, ts.httpUrl, "test-client.html");
-        await page.evaluate(({ wsUrl }) => window.initClient("ns1", wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(() => window.createRoom("ns1", {}));
-
-        await page.evaluate(() => {
-            window.updateStorage("ns1", "data", "set", {
-                text: "<img src=x onerror=alert(1)>",
-                arr: ["<div>test</div>", { inner: "<b>bold</b>" }]
-            });
-        });
-        await page.waitForFunction(() => window.storage("ns1")?.data?.text != null, null, { timeout: 2_000 });
-
-        const storage = await page.evaluate(() => window.storage("ns1"));
-        expect(storage.data.text).not.toContain("<");
-        expect(storage.data.text).not.toContain(">");
-        expect(storage.data.arr[0]).not.toContain("<");
-        expect(storage.data.arr[1].inner).not.toContain("<");
     });
 });

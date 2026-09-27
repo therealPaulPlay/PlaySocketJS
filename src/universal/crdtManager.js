@@ -110,7 +110,7 @@ export default class CRDTManager {
     importPropertyUpdate(update) {
         try {
             const { key, operation: rawOperation, vectorClock } = update;
-            const operation = /** @type {Operation} */ (this.#sanitizeValue(rawOperation));
+            const operation = /** @type {Operation} */ (this.#normalizeAndCopy(rawOperation));
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", update); // Debug
 
             // Check key limit to safeguard against too many keys
@@ -183,9 +183,9 @@ export default class CRDTManager {
      */
     updateProperty(key, type, value, secondValue) {
         try {
-            // Sanitize inputs
-            value = this.#sanitizeValue(value);
-            secondValue = this.#sanitizeValue(secondValue);
+            // Normalize inputs
+            value = this.#normalizeAndCopy(value);
+            secondValue = this.#normalizeAndCopy(secondValue);
 
             // Debug log
             if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and secondValue ${secondValue}`);
@@ -431,20 +431,15 @@ export default class CRDTManager {
     }
 
     /**
-     * Remove HTML to prevent XSS and enforce size limits
-     * @param {*} value - Value to sanitize
-     * @returns {*} Sanitized value
+     * Enforce size limit, normalize undefined to null, and return deep copy
+     * @param {*} value - Value to normalize
+     * @returns {*} Normalized value
      */
-    #sanitizeValue(value) {
-        if (value === undefined) return null; // Normalize undefined to null to avoid divergence in transport
-
-        // Check total serialized size
-        const jsonString = JSON.stringify(value);
-        if (jsonString?.length > 50000) throw new Error("Value too large"); // 50KB limit
-
-        if (typeof value === "string") return (value.includes("<") || value.includes(">")) ? value.replace(/[<>]/g, "") : value;
-        if (Array.isArray(value)) return Array.from(value, item => this.#sanitizeValue(item));
-        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+    #normalizeAndCopy(value) {
+        if (value === undefined) return null;
+        if (JSON.stringify(value)?.length > 50_000) throw new Error("Value too large"); // 50KB limit
+        if (Array.isArray(value)) return Array.from(value, item => this.#normalizeAndCopy(item));
+        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#normalizeAndCopy(v)]));
         return value;
     }
 

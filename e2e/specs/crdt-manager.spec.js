@@ -288,30 +288,12 @@ test.describe("CRDTManager", () => {
         expect(opsAfter.length).toBe(4);
     });
 
-    test("sanitization strips HTML tags from strings", () => {
-        const crdt = new CRDTManager();
-        crdt.updateProperty("msg", "set", "<script>alert(\"xss\")</script>");
-        expect(crdt.propertyStore.msg).toBe("scriptalert(\"xss\")/script");
-    });
-
     test("sanitization enforces 50KB value limit", () => {
         const crdt = new CRDTManager();
         const largeValue = "x".repeat(60000);
         // Should throw or fail silently - value should not be stored
         crdt.updateProperty("big", "set", largeValue);
         expect(crdt.propertyStore.big).toBeUndefined();
-    });
-
-    test("sanitization handles nested objects and arrays", () => {
-        const crdt = new CRDTManager();
-        crdt.updateProperty("nested", "set", {
-            text: "<b>bold</b>",
-            arr: ["<i>italic</i>", { inner: "<div>test</div>" }]
-        });
-        const result = crdt.propertyStore.nested;
-        expect(result.text).toBe("bbold/b");
-        expect(result.arr[0]).toBe("iitalic/i");
-        expect(result.arr[1].inner).toBe("divtest/div");
     });
 
     test("key limit of 100 is enforced on importPropertyUpdate", () => {
