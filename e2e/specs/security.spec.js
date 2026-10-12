@@ -111,4 +111,19 @@ test.describe("Security", () => {
 
         await p1.close(); await p2.close();
     });
+
+    test("messages larger than maxPayload close the connection", async () => {
+        // Sends one message from a raw socket, resolves with "answered" once the server replies or with the close code
+        const send = (payload) => new Promise((resolve) => {
+            const ws = new WebSocket(ts.wsUrl);
+            ws.on("open", () => ws.send(payload));
+            ws.on("message", () => { resolve("answered"); ws.close(); });
+            ws.on("close", (code) => resolve(code));
+            ws.on("error", () => { });
+        });
+
+        // Default limit is 6 MiB, a message just below it is read (wrong version always gets a registration_failed reply)
+        expect(await send(encode({ type: "register", version: "0", padding: "x".repeat(6_000_000) }))).toBe("answered");
+        expect(await send(Buffer.alloc(7 * 1024 * 1024))).toBe(1009); // Message too big
+    });
 });

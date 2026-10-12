@@ -282,6 +282,7 @@ new PlaySocketServer(options?: PlaySocketServerOptions)
 | `path` | `string` | No | "/" | WebSocket endpoint path. |
 | `server` | `http.Server` | No | - | Existing http server. |
 | `rateLimit` | `number` | No | 20 | Messages/second rate limit. |
+| `maxPayload` | `number` | No | 6291456 | Max. size of a single incoming message in bytes. |
 | `debug` | `boolean` | No | false | Enable debug logging. |
 | `verifyClient` | `function` | No | - | Callback to verify connections before WebSocket upgrade. |
 
