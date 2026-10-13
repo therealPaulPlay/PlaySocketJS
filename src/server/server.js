@@ -213,9 +213,11 @@ export default class PlaySocketServer {
                 }
 
                 case "reconnect": {
-                    // If user is pending disconnect, respond (otherwise it's too late)
-                    const pd = this.#pendingDisconnects.get(data.id);
-                    if (pd && data.sessionToken) {
+                    // If user is pending disconnect or still on a dropped connection, respond (otherwise it's too late)
+                    const pendingDisconnect = this.#pendingDisconnects.get(data.id);
+                    const staleSocket = this.#clients.get(data.id); // Client requests reconnect even though the server thinks they are still connected
+
+                    if ((pendingDisconnect || staleSocket) && data.sessionToken) {
                         if (data.sessionToken !== this.#clientTokens.get(data.id)) {
                             ws.send(encode({
                                 type: "reconnection_failed",
@@ -223,8 +225,14 @@ export default class PlaySocketServer {
                             }), { binary: true });
                             return;
                         }
-                        clearTimeout(pd.timeout);
+                        clearTimeout(pendingDisconnect?.timeout);
                         this.#pendingDisconnects.delete(data.id);
+
+                        // Only terminate if it's a different connection sending the reconnect
+                        if (staleSocket && staleSocket !== ws) {
+                            staleSocket.clientId = null; // So the close skips disconnection (handleDisconnection exits if the client ID is falsy)
+                            staleSocket.terminate();
+                        }
 
                         // Re-assign old client ID to the new ws connection
                         ws.clientId = data.id;
@@ -416,9 +424,7 @@ export default class PlaySocketServer {
      * @returns {string} Token
      */
     #generateSessionToken() {
-        let token = "";
-        for (let i = 0; i < 16; i++) token += Math.floor(Math.random() * 16).toString(16);
-        return token;
+        return crypto.randomUUID();
     }
 
     /**

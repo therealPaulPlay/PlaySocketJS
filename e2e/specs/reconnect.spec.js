@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { createTestServer } from "../helpers/test-server.js";
+import { createServer as createTcpServer, connect } from "node:net";
+import { createTestServer, getNextPort } from "../helpers/test-server.js";
 import { openPage, sleep } from "../helpers/playwright-helpers.js";
 import { RECONNECT_GRACE_PERIOD } from "../../src/server/server.js";
 
@@ -272,5 +273,33 @@ test.describe("Reconnection", () => {
         }, null, { timeout: 10_000 });
 
         await page.waitForFunction(() => window.isHost("rch") === true, null, { timeout: 2_000 });
+    });
+
+    test("connection dropped without the server noticing - client still reconnects", async ({ page }) => {
+        // Relay that can cut the connection on the client side only, like a dropped network the server only notices on its next heartbeat
+        const relayPort = getNextPort();
+        const clientSockets = [];
+        const relay = createTcpServer((client) => {
+            const upstream = connect(ts.port);
+            clientSockets.push(client);
+            client.on("error", () => { });
+            upstream.on("error", () => { });
+            client.pipe(upstream).pipe(client);
+        });
+        await new Promise(resolve => relay.listen(relayPort, resolve));
+
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("ho1", wsUrl), { wsUrl: `ws://localhost:${relayPort}/ws` });
+        const roomId = await page.evaluate(() => window.createRoom("ho1", { score: 7 }));
+
+        clientSockets.forEach(socket => socket.resetAndDestroy());
+
+        await page.waitForFunction(() => window.getEvents("ho1").status.some(s => s.includes("Reconnected")), null, { timeout: 10_000 });
+
+        // The old connection closing later must not disconnect the reconnected client
+        await sleep(RECONNECT_GRACE_PERIOD + 500);
+        expect(ts.server.rooms[roomId]?.participants).toEqual(["ho1"]);
+        expect(await page.evaluate(() => window.storage("ho1").score)).toBe(7);
+        relay.close();
     });
 });
