@@ -17,7 +17,7 @@ test.describe("Reconnection", () => {
         await page.evaluate(() => window.createRoom("rc1", { score: 42 }));
 
         // Simulate disconnect
-        await page.evaluate(() => window.simulateDisconnect("rc1"));
+        await page.evaluate(() => window.closeSocket("rc1"));
 
         // Wait for reconnection
         await page.waitForFunction(() => {
@@ -34,7 +34,7 @@ test.describe("Reconnection", () => {
         await page.evaluate(({ wsUrl }) => window.initClient("rc2", wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(() => window.createRoom("rc2", { val: "initial" }));
 
-        await page.evaluate(() => window.simulateDisconnect("rc2"));
+        await page.evaluate(() => window.closeSocket("rc2"));
         await page.waitForFunction(() => {
             const ev = window.getEvents("rc2");
             return ev.status.some(s => s.includes("Reconnected"));
@@ -56,7 +56,7 @@ test.describe("Reconnection", () => {
         await p1.waitForFunction(() => window.participantCount("rs1") === 2, null, { timeout: 2_000 });
 
         // Client 1 disconnects
-        await p1.evaluate(() => window.simulateDisconnect("rs1"));
+        await p1.evaluate(() => window.closeSocket("rs1"));
 
         // Client 2 adds data while client 1 is disconnected
         await p2.evaluate(() => window.updateStorage("rs2", "items", "array-add", "while-offline"));
@@ -87,7 +87,7 @@ test.describe("Reconnection", () => {
         // Block network, disconnect, then make local updates that should be discarded
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("lo1");
+            window.closeSocket("lo1");
             window.updateStorage("lo1", "counter", "set", 999);
         });
 
@@ -110,7 +110,7 @@ test.describe("Reconnection", () => {
         // Block network and disconnect
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("rc3");
+            window.closeSocket("rc3");
         });
 
         // Wait for instance to be destroyed (max 9 retries * 500ms + timeouts)
@@ -132,7 +132,7 @@ test.describe("Reconnection", () => {
         // Block network and disconnect (client is still known to server within grace period)
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("rd1");
+            window.closeSocket("rd1");
         });
 
         // Wait for server to register the disconnect and set up the pending reconnect entry
@@ -161,7 +161,7 @@ test.describe("Reconnection", () => {
         // Block network and disconnect
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("gp1");
+            window.closeSocket("gp1");
         });
 
         // Wait for grace period to expire
@@ -194,7 +194,7 @@ test.describe("Reconnection", () => {
 
         // Rapid updates that might cause version issues
         // Client 1 blocks network then client 2 makes updates
-        await p1.evaluate(() => window.simulateDisconnect("vm1"));
+        await p1.evaluate(() => window.closeSocket("vm1"));
 
         // While vm1 is disconnected, vm2 makes updates
         for (let i = 0; i < 5; i++) {
@@ -231,7 +231,7 @@ test.describe("Reconnection", () => {
         // Block p1's network so it can't auto-reconnect before p2 joins
         await p1.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("hmr1");
+            window.closeSocket("hmr1");
         });
         await sleep(200);
 
@@ -264,7 +264,7 @@ test.describe("Reconnection", () => {
         expect(await page.evaluate(() => window.isHost("rch"))).toBe(true);
 
         // Simulate disconnect (non-willful)
-        await page.evaluate(() => window.simulateDisconnect("rch"));
+        await page.evaluate(() => window.closeSocket("rch"));
 
         // Wait for reconnect
         await page.waitForFunction(() => {

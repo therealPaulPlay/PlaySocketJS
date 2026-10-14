@@ -79,20 +79,19 @@ test.describe("Server configuration", () => {
         httpServer.close();
     });
 
-    test("ping/heartbeat terminates unresponsive clients", async ({ page }) => {
+    test("client gives up after failed reconnect attempts", async ({ page }) => {
         const ts = await createTestServer();
         await openPage(page, ts.httpUrl, "test-client.html?intercept-ws");
         await page.evaluate(({ wsUrl }) => window.initClient("hb1", wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(() => window.createRoom("hb1", {}));
 
-        // Block network so client can't reconnect, then simulate disconnect
-        // Server's heartbeat should detect this within 2 heartbeat cycles
+        // Block network so client can't reconnect, then close the socket
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("hb1");
+            window.closeSocket("hb1");
         });
 
-        // Wait for instanceDestroyed event (fires when client is terminated)
+        // Wait for instanceDestroyed event (fires when the client runs out of reconnect attempts)
         await page.waitForFunction(
             () => window.getEvents("hb1").instanceDestroyed.length > 0,
             null,

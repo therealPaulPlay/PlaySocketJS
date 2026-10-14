@@ -60,7 +60,7 @@ test.describe("Security", () => {
         // Block network so the client doesn't auto-reconnect before our forged attempt
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("tk1");
+            window.closeSocket("tk1");
         });
         await sleep(200);
 
@@ -95,7 +95,7 @@ test.describe("Security", () => {
         // Block network so it stays in its reconnect loop instead of reclaiming the id
         await p1.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("pd1");
+            window.closeSocket("pd1");
         });
         await sleep(200);
 

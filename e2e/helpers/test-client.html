@@ -69,7 +69,7 @@
         window.onEvent = (id, event, callback) => clients[id].onEvent(event, callback);
 
         // Network simulation (only functional when ?intercept-ws is set)
-        window.simulateDisconnect = (id) => { if (capturedSockets[id]) capturedSockets[id].close(); };
+        window.closeSocket = (id) => { if (capturedSockets[id]) capturedSockets[id].close(); };
         window.blockNetwork = () => { networkDown = true; };
         window.unblockNetwork = () => { networkDown = false; };
 

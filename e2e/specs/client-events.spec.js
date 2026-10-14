@@ -233,7 +233,7 @@ test.describe("Client events", () => {
         // Block network so host can't reconnect
         await p1.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("eh1");
+            window.closeSocket("eh1");
         });
         await new Promise(r => setTimeout(r, 200));
 

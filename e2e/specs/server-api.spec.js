@@ -457,7 +457,7 @@ test.describe("Server API", () => {
         // Client disconnects non-willfully (network drop), enters pending disconnect state
         await page.evaluate(() => {
             window.blockNetwork();
-            window.simulateDisconnect("pdc1");
+            window.closeSocket("pdc1");
         });
         await sleep(200);
 
