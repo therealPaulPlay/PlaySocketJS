@@ -451,8 +451,8 @@ export default class CRDTManager {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
-            console.error(CONSOLE_PREFIX + "Failed to parse property store")
-            return {}
+            console.error(CONSOLE_PREFIX + "Failed to parse property store");
+            return {};
         }
     }
 
@@ -475,7 +475,7 @@ export default class CRDTManager {
                 return true;
             }
         } catch {
-            console.error(CONSOLE_PREFIX + "Failed to stringify and compare property stores")
+            console.error(CONSOLE_PREFIX + "Failed to stringify and compare property stores");
         }
         return false;
     }
