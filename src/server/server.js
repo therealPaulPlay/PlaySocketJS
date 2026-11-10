@@ -333,7 +333,8 @@ export default class PlaySocketServer {
 
                     if (room && data.update) {
                         // Check if update is allowed via event callback (provide clone to ensure update integrity)
-                        const updateAllowed = await this.#triggerEvent("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId) });
+                        // Must be synchronous so that messages that follow in the same read from the socket (which can flush multiple at once) get processed reliably in order (await would schedule to a new microtask, so the order can fall apart)
+                        const updateAllowed = this.#triggerEventSync("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId) });
                         if (updateAllowed === false || typeof updateAllowed === "string") {
                             ws.send(encode({
                                 type: "property_update_rejected",
@@ -525,20 +526,41 @@ export default class PlaySocketServer {
      * @returns {Promise<any>} The first non-null callback return value if present (all callbacks run, a throwing callback counts as returning false), otherwise true
      */
     async #triggerEvent(event, ...args) {
-        const syncOnlyEvents = ["storageUpdateRequested"]; // Async storage validation could mess up GC and would lead to potentially poor UX (slow sync)
         const callbacks = this.#callbacks.get(event);
-        if (!callbacks) return;
+        if (!callbacks) return true;
+
+        let firstResult;
+        for (const callback of [...callbacks]) {
+            try {
+                let result = callback(...args);
+                if (typeof result?.then === "function") result = await result;
+                if (firstResult == null && result != null) firstResult = result;
+            } catch (error) {
+                console.error(ERROR_PREFIX + `${event} callback error:`, error);
+                if (firstResult == null) firstResult = false; // Fail closed (false blocks for most events)
+            }
+        }
+        return firstResult ?? true;
+    }
+
+    /**
+     * Trigger an event to registered synchronous callbacks (e.g. storage validation, async validation could mess up GC and lead to poor UX)
+     * @param {string} event - Event name
+     * @param {...*} args - Arguments
+     * @returns {any} The first non-null callback return value if present (all callbacks run, a throwing callback counts as returning false, an async one as a rejection), otherwise true
+     */
+    #triggerEventSync(event, ...args) {
+        const callbacks = this.#callbacks.get(event);
+        if (!callbacks) return true;
 
         let firstResult;
         for (const callback of [...callbacks]) {
             try {
                 let result = callback(...args);
                 if (typeof result?.then === "function") {
-                    if (syncOnlyEvents.includes(event)) {
-                        result.catch(() => { });
-                        console.error(ERROR_PREFIX + `${event} callbacks must be synchronous`);
-                        result = `${event} callback must be synchronous.`; // Rejection string to explicitly block this practice
-                    } else result = await result;
+                    result.catch(() => { });
+                    console.error(ERROR_PREFIX + `${event} callbacks must be synchronous`);
+                    result = `${event} callback must be synchronous`; // Rejection string to explicitly block this practice
                 }
                 if (firstResult == null && result != null) firstResult = result;
             } catch (error) {

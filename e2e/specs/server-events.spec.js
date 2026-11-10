@@ -325,6 +325,33 @@ test.describe("Server events", () => {
         ts.close();
     });
 
+    test("requestReceived sees storage updates the client sent right before it", async ({ page }) => {
+        const seen = [];
+        const ts = await createTestServer({
+            rateLimit: 100,
+            eventHandlers: {
+                requestReceived: ({ roomId, data }) => { seen.push({ expected: data, actual: ts.server.getRoomStorage(roomId).count }); }
+            }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr-order", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr-order", { count: 0 }));
+
+        // Send update & request pairs back to back, so several messages arrive in the same read on the server
+        await page.evaluate(async () => {
+            const requests = [];
+            for (let i = 1; i <= 20; i++) {
+                window.updateStorage("rr-order", "count", "number-increment", 1);
+                requests.push(window.sendRequest("rr-order", "check", i));
+            }
+            await Promise.all(requests);
+        });
+
+        expect(seen).toHaveLength(20);
+        for (const { expected, actual } of seen) expect(actual).toBe(expected);
+        ts.close();
+    });
+
     test("requestReceived returns string - sendRequest rejects with custom reason", async ({ page }) => {
         const ts = await createTestServer({
             eventHandlers: { requestReceived: () => "Request not allowed" }
