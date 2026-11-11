@@ -43,6 +43,20 @@ test.describe("Server events", () => {
         ts.close();
     });
 
+    test("clientRegistrationRequested returns object - overrides customData passed to clientRegistered", async ({ page }) => {
+        const log = [];
+        const ts = await createTestServer({
+            eventHandlers: {
+                clientRegistrationRequested: (id, customData) => ({ ...customData, verified: true }),
+                clientRegistered: (id, customData) => { log.push(customData); }
+            }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("regobj", wsUrl, { name: "Alice" }), { wsUrl: ts.wsUrl });
+        expect(log).toEqual([{ name: "Alice", verified: true }]);
+        ts.close();
+    });
+
     test("clientRegistered fires with clientId and customData", async ({ page }) => {
         const log = [];
         const ts = await createTestServer({

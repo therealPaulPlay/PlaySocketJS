@@ -34,7 +34,7 @@ export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
 /**
  * Event callback types
  * @typedef {object} ServerEventMap
- * @property {(clientId: string, customData: any) => RejectViaStringOrBool | Promise<RejectViaStringOrBool>} clientRegistrationRequested
+ * @property {(clientId: string, customData: any) => Record<string, any> | RejectViaStringOrBool | Promise<Record<string, any> | RejectViaStringOrBool>} clientRegistrationRequested
  * @property {(clientId: string, customData: any) => void} clientRegistered
  * @property {(clientId: string) => void} clientDisconnected
  * @property {(clientId: string, roomId: string) => void} clientJoinedRoom
@@ -183,8 +183,9 @@ export default class PlaySocketServer {
                         }
                     }
 
-                    // Event callback
-                    const registrationAllowed = await this.#triggerEvent("clientRegistrationRequested", data.id, data.customData);
+                    // Event callback with potential customData modifications
+                    const registrationAllowed = await this.#triggerEvent("clientRegistrationRequested", data.id, structuredClone(data.customData));
+                    if (typeof registrationAllowed === "object") data.customData = registrationAllowed;
                     if (registrationAllowed === false || typeof registrationAllowed === "string") {
                         ws.send(encode({
                             type: "registration_failed",

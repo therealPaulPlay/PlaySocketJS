@@ -119,7 +119,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
 | `endpoint` | `string` | Yes | `undefined` | WebSocket server endpoint (e.g., wss://example.com/socket). |
-| `customData` | `object` | No | `{}` | Arbitrary data to pass to the "clientRegistered" server event. |
+| `customData` | `object` | No | `{}` | Arbitrary data to pass to the "clientRegistrationRequested" and "clientRegistered" server events. |
 | `debug` | `boolean` | No | `false` | Set to true to enable extra logging. |
 
 #### Methods
@@ -341,7 +341,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | Event | Callback parameters | Description | Return for action |
 |-------|-------------------|-------------|--------------|
 | `clientRegistered` | `clientId: string, customData: object` | Client registered with the server. | - |
-| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requested to register. | Return `false` or rejection reason `string` to block. |
+| `clientRegistrationRequested` | `clientId: string, customData: object` | Client requested to register. | Return `object` to override the custom data, `false` or rejection reason `string` to block. |
 | `clientDisconnected` | `clientId: string` | Client disconnected. | - |
 | `clientJoinedRoom` | `clientId: string, roomId: string` | Client joined a room. | - |
 | `clientJoinRequested` | `clientId: string, roomId: string` | Client requested to join a room. | Return `false` or rejection reason `string` to block. |
