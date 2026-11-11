@@ -6,7 +6,7 @@ declare module "ws" {
     interface WebSocket {
         uuid: string;
         isAlive: boolean;
-        clientId?: string;
+        clientId?: string | null;
         isTerminating?: boolean;
         willfulDisconnect?: boolean;
     }

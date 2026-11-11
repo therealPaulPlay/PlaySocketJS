@@ -4,7 +4,6 @@ import { encode, decode } from "@msgpack/msgpack";
 import CRDTManager, { getUpdateDetails } from "../universal/crdtManager.js";
 import { HEARTBEAT_INTERVAL, VERSION, ERROR_PREFIX, WARNING_PREFIX, LOG_PREFIX } from "../universal/constants.js";
 
-const MAX_ROOM_SIZE = 500;
 export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
 
 /**
@@ -26,8 +25,7 @@ export const RECONNECT_GRACE_PERIOD = 5000; // Exported for use in tests
 /**
  * @typedef {object} Room
  * @property {string[]} participants - Client IDs of the room participants
- * @property {string | null} host - Client ID of the room host ("server" for server-owned rooms, null if the room currently has no host)
- * @property {number} size - Max. number of participants
+ * @property {string | null} host - Client ID of the room host (null for server-created rooms)
  * @property {CRDTManager} crdtManager - CRDT manager holding the room storage
  */
 
@@ -70,12 +68,10 @@ export default class PlaySocketServer {
     /** @type {Map<string, Function[]>} */
     #callbacks = new Map(); // Event -> [callback functions]
     #heartbeatInterval;
-    /** @type {Map<string, { timeout: ReturnType<typeof setTimeout> }>} */
-    #pendingDisconnects = new Map(); // ClientId -> {timeout}
+    /** @type {Map<string, { timeout: ReturnType<typeof setTimeout>, onTimeout: () => void }>} */
+    #pendingDisconnects = new Map(); // ClientId -> {timeout, onTimeout}
     /** @type {Map<string, string>} */
     #clientTokens = new Map(); // ClientId -> Token
-    /** @type {Map<string, number>} */
-    #roomVersions = new Map(); // RoomId -> Version
 
     // Debug
     #debug = false;
@@ -172,12 +168,6 @@ export default class PlaySocketServer {
                         return;
                     }
 
-                    // Register client ID if provided & check for a duplicate
-                    if (data.id && (this.#clients.get(data.id) || this.#pendingDisconnects.has(data.id) || data.id === "server")) {
-                        ws.send(encode({ type: "registration_failed", reason: "ID is taken" }), { binary: true });
-                        return;
-                    }
-
                     // Generate client ID if none provided
                     if (!data.id) {
                         for (let i = 0; i < 50; i++) {
@@ -203,6 +193,15 @@ export default class PlaySocketServer {
                         return;
                     }
 
+                    // Silently abort if the socket closed or if that same socket has already registered (e.g. duplicate registration message)
+                    if (ws.readyState !== ws.OPEN || ws.clientId) return;
+
+                    // Abort if the ID is taken (or was taken during the async event callback)
+                    if (this.#clients.has(data.id) || this.#pendingDisconnects.has(data.id)) {
+                        ws.send(encode({ type: "registration_failed", reason: "ID is taken" }), { binary: true });
+                        return;
+                    }
+
                     ws.clientId = data.id; // Adds the provided id to the ws object as clientId
                     this.#clients.set(data.id, ws);
                     const sessionToken = this.#generateSessionToken();
@@ -213,6 +212,8 @@ export default class PlaySocketServer {
                 }
 
                 case "reconnect": {
+                    if (ws.clientId) return; // Clients must reconnect with a fresh, unregistered socket
+
                     // If user is pending disconnect or still on a dropped connection, respond (otherwise it's too late)
                     const pendingDisconnect = this.#pendingDisconnects.get(data.id);
                     const staleSocket = this.#clients.get(data.id); // Client requests reconnect even though the server thinks they are still connected
@@ -228,9 +229,8 @@ export default class PlaySocketServer {
                         clearTimeout(pendingDisconnect?.timeout);
                         this.#pendingDisconnects.delete(data.id);
 
-                        // Only terminate if it's a different connection sending the reconnect
-                        if (staleSocket && staleSocket !== ws) {
-                            staleSocket.clientId = null; // So the close skips disconnection (handleDisconnection exits if the client ID is falsy)
+                        if (staleSocket) {
+                            staleSocket.clientId = null; // To skip handleDisconnection() on socket "close"
                             staleSocket.terminate();
                         }
 
@@ -243,18 +243,19 @@ export default class PlaySocketServer {
                         const formerRoomId = this.#clientRooms.get(data.id);
                         const formerRoom = this.#rooms[formerRoomId];
                         if (formerRoom) {
-                            // If the room has no host (they were the only one and disconnected), restore them as host
-                            if (formerRoom.host === null) formerRoom.host = data.id;
                             if (this.#debug) console.log(LOG_PREFIX + `State sent for reconnection for room ${formerRoomId}:`, formerRoom.crdtManager.state);
                             roomData = {
+                                roomId: formerRoomId,
                                 state: formerRoom.crdtManager.state,
                                 participantCount: formerRoom.participants.length,
-                                host: formerRoom.host,
-                                version: this.#roomVersions.get(formerRoomId)
+                                host: formerRoom.host
                             }
                         }
 
                         ws.send(encode({ type: "reconnected", roomData }), { binary: true });
+
+                        // If the host has disconnected or is pending disconnect, migrate host (after reconnected so hostMigrated event fires correctly on client)
+                        if (formerRoom && formerRoom.host !== null && !this.#clients.has(formerRoom.host)) this.#migrateHost(formerRoomId, formerRoom.host);
                     } else {
                         ws.send(encode({ type: "reconnection_failed", reason: "Client unknown to server" }), { binary: true });
                     }
@@ -264,37 +265,39 @@ export default class PlaySocketServer {
                 case "create_room": {
                     if (!ws.clientId) return;
 
-                    if (this.#clientRooms.get(ws.clientId)) {
-                        ws.send(encode({
-                            type: "room_creation_failed",
-                            reason: "Already in a room"
-                        }), { binary: true });
-                        return;
-                    }
-
                     // Event callback with potential initial storage modifications
                     const reviewedStorage = await this.#triggerEvent("roomCreationRequested", { clientId: ws.clientId, initialStorage: structuredClone({ ...data.initialStorage }) });
                     if (typeof reviewedStorage === "object") data.initialStorage = reviewedStorage;
+
+                    // Verify client is still connected and abort if not
+                    if (!this.#getClient(ws.clientId)) {
+                        if (this.#debug) console.log(LOG_PREFIX + `Room creation cancelled, client ${ws.clientId} disconnected during event callback`);
+                        return;
+                    }
+
                     if (reviewedStorage === false || typeof reviewedStorage === "string") {
-                        ws.send(encode({ type: "room_creation_failed", reason: typeof reviewedStorage === "string" ? reviewedStorage : null }), { binary: true });
+                        this.#getClient(ws.clientId)?.send(encode({ type: "room_creation_failed", reason: typeof reviewedStorage === "string" ? reviewedStorage : null }), { binary: true });
                         return;
                     }
 
                     try {
-                        // Verify client is still connected and abort if not
-                        if (!this.#clients.has(ws.clientId)) {
-                            if (this.#debug) console.log(LOG_PREFIX + `Room creation cancelled, client ${ws.clientId} disconnected during event callback`);
+                        // Ensure client isn't already in another room (after the async event callback)
+                        if (this.#clientRooms.get(ws.clientId)) {
+                            this.#getClient(ws.clientId)?.send(encode({
+                                type: "room_creation_failed",
+                                reason: "Already in a room"
+                            }), { binary: true });
                             return;
                         }
 
-                        const newRoom = this.#createRoom(ws.clientId, data.initialStorage, data.size); // Create room
+                        const newRoom = this.#createRoom(ws.clientId, data.initialStorage); // Create room
 
                         this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
                         this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
-                        ws.send(encode({ type: "room_created", state: newRoom.state, roomId: newRoom.id, participantCount: this.#rooms[newRoom.id].participants.length }), { binary: true });
+                        this.#getClient(ws.clientId)?.send(encode({ type: "room_created", state: newRoom.state, roomId: newRoom.id, participantCount: this.#rooms[newRoom.id].participants.length }), { binary: true });
                     } catch (error) {
                         console.error(ERROR_PREFIX + "Error creating room:", error);
-                        ws.send(encode({ type: "room_creation_failed", reason: error.message }), { binary: true });
+                        this.#getClient(ws.clientId)?.send(encode({ type: "room_creation_failed", reason: error.message }), { binary: true });
                     }
                     break;
                 }
@@ -305,15 +308,17 @@ export default class PlaySocketServer {
 
                     /** @param {string} reason */
                     const rejectJoin = (reason) => {
-                        ws.send(encode({ type: "join_rejected", reason }), { binary: true });
+                        this.#getClient(ws.clientId)?.send(encode({ type: "join_rejected", reason }), { binary: true });
                     };
+
+                    if (!this.#rooms[roomId]) return rejectJoin("Invalid room ID");
 
                     // Event callback
                     const joinAllowed = await this.#triggerEvent("clientJoinRequested", ws.clientId, roomId);
                     if (joinAllowed === false || typeof joinAllowed === "string") return rejectJoin(typeof joinAllowed === "string" ? joinAllowed : null);
 
                     // Verify client is still connected and abort if not
-                    if (!this.#clients.has(ws.clientId)) {
+                    if (!this.#getClient(ws.clientId)) {
                         if (this.#debug) console.log(LOG_PREFIX + `Room join cancelled, client ${ws.clientId} disconnected during event callback`);
                         return;
                     }
@@ -329,14 +334,14 @@ export default class PlaySocketServer {
 
                 case "update_property": {
                     const roomId = this.#clientRooms.get(ws.clientId);
-                    const room = roomId ? this.#rooms[roomId] : null;
+                    const room = this.#rooms[roomId];
 
                     if (room && data.update) {
                         // Check if update is allowed via event callback (provide clone to ensure update integrity)
                         // Must be synchronous so that messages that follow in the same read from the socket (which can flush multiple at once) get processed reliably in order (await would schedule to a new microtask, so the order can fall apart)
                         const updateAllowed = this.#triggerEventSync("storageUpdateRequested", { roomId, clientId: ws.clientId, update: structuredClone(data.update), storage: this.getRoomStorage(roomId) });
                         if (updateAllowed === false || typeof updateAllowed === "string") {
-                            ws.send(encode({
+                            this.#getClient(ws.clientId)?.send(encode({
                                 type: "property_update_rejected",
                                 reason: typeof updateAllowed === "string" ? updateAllowed : null,
                                 update: data.update
@@ -346,17 +351,12 @@ export default class PlaySocketServer {
 
                         room.crdtManager.importPropertyUpdate(data.update); // Import update into server state
 
-                        // Increment version for this room
-                        const currentVersion = this.#roomVersions.get(roomId) + 1;
-                        this.#roomVersions.set(roomId, currentVersion);
-
-                        room.participants?.forEach(p => {
+                        room.participants.forEach(p => {
                             const client = this.#clients.get(p);
                             if (client) {
                                 client.send(encode({
                                     type: "property_updated",
-                                    update: data.update,
-                                    version: currentVersion
+                                    update: data.update
                                 }), { binary: true });
                             }
                         });
@@ -371,8 +371,8 @@ export default class PlaySocketServer {
                     if (!ws.clientId) return;
                     const roomId = this.#clientRooms.get(ws.clientId) || null;
                     const requestSuccess = await this.#triggerEvent("requestReceived", { roomId, clientId: ws.clientId, name: data.request.name, data: data.request.data });
-                    if (requestSuccess === false || typeof requestSuccess === "string") ws.send(encode({ type: "request_failed", request: data.request, reason: typeof requestSuccess === "string" ? requestSuccess : null }), { binary: true });
-                    else ws.send(encode({ type: "request_succeeded", request: data.request }), { binary: true });
+                    if (requestSuccess === false || typeof requestSuccess === "string") this.#getClient(ws.clientId)?.send(encode({ type: "request_failed", request: data.request, reason: typeof requestSuccess === "string" ? requestSuccess : null }), { binary: true });
+                    else this.#getClient(ws.clientId)?.send(encode({ type: "request_succeeded", request: data.request }), { binary: true });
                     break;
                 }
 
@@ -396,36 +396,20 @@ export default class PlaySocketServer {
     }
 
     /**
-     * Migrate the host role to another participant
-     * @param {string} roomId - ID of the room
-     * @param {string} clientId - ID of the current host
-     */
-    #migrateHost(roomId, clientId) {
-        const room = this.#rooms[roomId];
-        if (!room) throw new Error("Room not found");
-        if (room.host !== clientId) throw new Error("Client is not the host");
-
-        const remainingParticipants = room.participants.filter(p => p !== clientId);
-
-        if (remainingParticipants.length >= 1) {
-            // Inform all participants about the new host
-            room.host = remainingParticipants[0];
-            remainingParticipants.forEach(p => {
-                const client = this.#clients.get(p);
-                if (client) client.send(encode({
-                    type: "host_migrated",
-                    newHost: room.host,
-                }), { binary: true });
-            });
-        } else room.host = null; // The next person to join will become the host
-    }
-
-    /**
      * Generate a random token to prevent malicious reconnect attempts
      * @returns {string} Token
      */
     #generateSessionToken() {
         return crypto.randomUUID();
+    }
+
+    /**
+     * Get the latest socket (It can change through reconnect, relevant when event callbacks are awaited in handlers)
+     * @param {string} clientId - Client ID
+     * @returns {WebSocket | undefined} Socket
+     */
+    #getClient(clientId) {
+        return this.#clients.get(clientId);
     }
 
     /**
@@ -458,6 +442,33 @@ export default class PlaySocketServer {
     }
 
     /**
+     * Migrate the host role to another participant
+     * @param {string} roomId - ID of the room
+     * @param {string} clientId - ID of the current host
+     */
+    #migrateHost(roomId, clientId) {
+        const room = this.#rooms[roomId];
+        if (!room) throw new Error("Room not found");
+        if (room.host !== clientId) throw new Error("Client is not the host");
+
+        const remainingParticipants = room.participants.filter(p => p !== clientId);
+
+        if (remainingParticipants.length >= 1) {
+            // Change host (prefer connected participants over ones pending disconnect)
+            room.host = remainingParticipants.find(p => this.#clients.has(p)) ?? remainingParticipants[0];
+
+            // Inform all participants about the new host
+            remainingParticipants.forEach(p => {
+                const client = this.#clients.get(p);
+                if (client) client.send(encode({
+                    type: "host_migrated",
+                    newHost: room.host,
+                }), { binary: true });
+            });
+        }
+    }
+
+    /**
      * Handle client disconnection
      * @param {WebSocket} ws - WebSocket client
      */
@@ -469,30 +480,27 @@ export default class PlaySocketServer {
 
             // If client was in a room, check if they were the host & migrate
             const roomId = this.#clientRooms.get(ws.clientId);
-            if (roomId != null && this.#rooms[roomId]?.host === ws.clientId) this.#migrateHost(roomId, ws.clientId);
+            if (roomId && this.#rooms[roomId].host === ws.clientId) this.#migrateHost(roomId, ws.clientId);
 
-            if (ws.willfulDisconnect) this.#disconnectClient(ws); // Immediate disconnection
+            if (ws.willfulDisconnect) this.#disconnectClient(ws.clientId); // Immediate disconnection
             else {
                 // Pending complete disconnection with 5s grace period to allow for reconnections
-                this.#pendingDisconnects.set(ws.clientId, {
-                    timeout: setTimeout(() => {
-                        this.#disconnectClient(ws);
-                    }, RECONNECT_GRACE_PERIOD)
-                });
+                const onTimeout = () => this.#disconnectClient(ws.clientId);
+                this.#pendingDisconnects.set(ws.clientId, { timeout: setTimeout(onTimeout, RECONNECT_GRACE_PERIOD), onTimeout });
             }
         }
     }
 
     /**
      * Disconnect a client
-     * @param {WebSocket} ws - WebSocket client
+     * @param {string} clientId - Client ID
      */
-    #disconnectClient(ws) {
-        this.#pendingDisconnects.delete(ws.clientId);
-        this.#clientTokens.delete(ws.clientId);
-        const roomId = this.#clientRooms.get(ws.clientId);
-        if (roomId && this.#rooms[roomId]) this.#leaveRoom(ws.clientId, roomId);
-        this.#triggerEvent("clientDisconnected", ws.clientId);
+    #disconnectClient(clientId) {
+        this.#pendingDisconnects.delete(clientId);
+        this.#clientTokens.delete(clientId);
+        const roomId = this.#clientRooms.get(clientId);
+        if (roomId) this.#leaveRoom(clientId, roomId);
+        this.#triggerEvent("clientDisconnected", clientId);
     }
 
     /**
@@ -575,13 +583,23 @@ export default class PlaySocketServer {
      * Kick a client from the server
      * @param {string} clientId - Client ID
      * @param {string} [reason] - Optional reason
+     * @param {boolean} [shutdown=false] - Skip the disconnection and events
      */
-    kick(clientId, reason = null) {
+    kick(clientId, reason = null, shutdown = false) {
         const client = this.#clients.get(clientId);
-        if (!client) return; // Client not connected, skip
-        client.willfulDisconnect = true;
-        client.send(encode({ type: "kicked", reason }), { binary: true });
-        client.close();
+
+        if (client) {
+            client.send(encode({ type: "kicked", reason }), { binary: true });
+            client.willfulDisconnect = true;
+            if (!shutdown) this.#handleDisconnection(client);
+            client.clientId = null; // Prevent handleDisconnection() from running on socket "close"
+            client.close();
+        } else if (this.#pendingDisconnects.has(clientId)) {
+            // Client is pending disconnect, fast-forward the grace period and fully disconnect
+            const { timeout, onTimeout } = this.#pendingDisconnects.get(clientId);
+            clearTimeout(timeout);
+            if (!shutdown) onTimeout();
+        }
     }
 
     /**
@@ -592,15 +610,12 @@ export default class PlaySocketServer {
     move(clientId, roomId) {
         const client = this.#clients.get(clientId);
         const oldRoomId = this.#clientRooms.get(clientId);
-        const oldRoom = this.#rooms[oldRoomId];
         const targetRoom = this.#rooms[roomId];
         if (!client && !this.#pendingDisconnects.has(clientId)) throw new Error("Client not found");
         if (!oldRoomId) throw new Error("Client is not in a room");
-        if (!oldRoom) throw new Error("Client room not found");
         if (oldRoomId === roomId) throw new Error("Client is already in target room");
         if (!targetRoom) throw new Error("Target room not found");
-        if (targetRoom.participants.length >= targetRoom.size) throw new Error("Target room is full");
-        if (oldRoom.host === clientId) this.#migrateHost(oldRoomId, clientId);
+        if (this.#rooms[oldRoomId].host === clientId) this.#migrateHost(oldRoomId, clientId);
         this.#leaveRoom(clientId, oldRoomId);
         this.#joinRoom(clientId, roomId);
     }
@@ -639,16 +654,13 @@ export default class PlaySocketServer {
         const room = this.#rooms[roomId];
         if (room) {
             const propertyUpdate = room.crdtManager.updateProperty(key, type, value, secondValue);
-            const currentVersion = this.#roomVersions.get(roomId) + 1;
-            this.#roomVersions.set(roomId, currentVersion); // Increment version for this room
 
-            room.participants?.forEach(p => {
+            room.participants.forEach(p => {
                 const client = this.#clients.get(p);
                 if (client) {
                     client.send(encode({
                         type: "property_updated",
-                        update: propertyUpdate,
-                        version: currentVersion
+                        update: propertyUpdate
                     }), { binary: true });
                 }
             });
@@ -659,21 +671,19 @@ export default class PlaySocketServer {
     /**
      * Create a server-owned room 
      * @param {object | null} [initialStorage] - Optional initial storage object
-     * @param {number} [size] - Max. room size, up to 500
      * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
      */
-    createRoom(initialStorage, size) {
-        return this.#createRoom("server", initialStorage, size);
+    createRoom(initialStorage) {
+        return this.#createRoom(null, initialStorage);
     }
 
     /**
      * Create a room
-     * @param {string} host - Host ID (when set to "server", room will not be deleted if all clients leave)
+     * @param {string | null} host - Host ID (when set to null, the room was created by the server & will not be deleted if all clients leave)
      * @param {object | null} [initialStorage] - Optional initial storage object
-     * @param {number} [size] - Max. room size, up to 500
      * @returns {{ state: CRDTState, id: string }} Object containing room state and room ID
      */
-    #createRoom(host, initialStorage, size) {
+    #createRoom(host, initialStorage) {
         let newRoomId;
 
         for (let i = 0; i < 100; i++) {
@@ -691,11 +701,9 @@ export default class PlaySocketServer {
             roomCrdtManager.updateProperty(key, "set", value);
         });
 
-        this.#roomVersions.set(newRoomId, 0);
         this.#rooms[newRoomId] = {
             participants: [],
             host,
-            size: Math.min(Number(size), MAX_ROOM_SIZE) || MAX_ROOM_SIZE,
             crdtManager: roomCrdtManager
         };
 
@@ -715,7 +723,6 @@ export default class PlaySocketServer {
         if (!room) throw new Error("Room not found");
         if (!client && !this.#pendingDisconnects.has(clientId)) throw new Error("Client not found");
         if (this.#clientRooms.get(clientId)) throw new Error("Already in a room");
-        if (room.participants.length >= room.size) throw new Error("Room full");
 
         room.participants.push(clientId);
         this.#clientRooms.set(clientId, roomId);
@@ -728,23 +735,12 @@ export default class PlaySocketServer {
                 roomId,
                 state: room.crdtManager.state,
                 participantCount: room.participants.length,
-                host: room.host,
-                version: this.#roomVersions.get(roomId)
+                host: room.host
             }), { binary: true });
         }
 
-        // If the room has no host (previous host disconnected and was the only participant), make joiner the host
-        // Set new host after join_accepted so hostMigrated event fires correctly on client
-        const becameHost = room.host === null;
-        if (becameHost) {
-            room.host = clientId; // Change host
-            if (client) {
-                client.send(encode({
-                    type: "host_migrated",
-                    newHost: room.host,
-                }), { binary: true });
-            }
-        }
+        // If the host has disconnected or is pending disconnect, migrate host (after join_accepted so hostMigrated event fires correctly on client)
+        if (room.host !== null && !this.#clients.has(room.host)) this.#migrateHost(roomId, room.host);
 
         // Notify existing participants
         room.participants.forEach(p => {
@@ -774,8 +770,8 @@ export default class PlaySocketServer {
         this.#clientRooms.delete(clientId);
         this.#triggerEvent("clientLeftRoom", clientId, roomId); // Before potential room destruction to allow for accessing its data in callback
 
-        if (room.participants.length === 0 && room.host !== "server") {
-            this.destroyRoom(roomId); // Destroy room if now empty & not by server
+        if (room.participants.length === 0 && room.host !== null) {
+            this.#deleteRoom(roomId); // Delete empty room that isn't server-created
         } else {
             // Notify remaining participants
             room.participants.forEach(p => {
@@ -797,15 +793,22 @@ export default class PlaySocketServer {
         const room = this.#rooms[roomId];
         if (!room) throw new Error("Room not found");
 
-        // Disconnect clients if still in room
-        const participants = room.participants;
-        participants.forEach((clientId) => {
-            this.kick(clientId, "Room destroyed by server");
-        });
+        room.participants.forEach((clientId) => this.kick(clientId, "Room destroyed by server"));
 
-        // Delete the room
+        // Server-created rooms aren't auto-deleted when all clients leave
+        if (room.host === null) this.#deleteRoom(roomId);
+    }
+
+    /**
+     * Delete a room
+     * @param {string} roomId - Room ID
+     */
+    #deleteRoom(roomId) {
+        const room = this.#rooms[roomId];
+        if (!room) throw new Error("Room not found");
+        if (room.participants.length > 0) throw new Error("Cannot delete non-empty room");
+
         delete this.#rooms[roomId];
-        this.#roomVersions.delete(roomId); // Delete room version (used to ensure all clients are up-2-date)
         this.#triggerEvent("roomDestroyed", roomId);
         if (this.#debug) console.log(LOG_PREFIX + "Deleted room with id " + roomId);
     }
@@ -815,14 +818,9 @@ export default class PlaySocketServer {
      */
     stop() {
         clearInterval(this.#heartbeatInterval);
-        if (this.#wss) {
-            this.#clients.forEach((client, clientId) => this.kick(clientId, "Server restart"));
-            this.#wss.close();
-        }
+        [...this.#clients.keys(), ...this.#pendingDisconnects.keys()].forEach((clientId) => this.kick(clientId, "Server restart", true));
+        this.#wss.close();
         if (this.#server && this.#ownsServer) this.#server.close(() => { console.log(LOG_PREFIX + "Server stopped"); });
-        this.#pendingDisconnects.forEach((data) => {
-            clearTimeout(data.timeout);
-        });
     }
 
     get rooms() { return structuredClone(this.#rooms) }

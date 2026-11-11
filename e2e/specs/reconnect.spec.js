@@ -122,7 +122,7 @@ test.describe("Reconnection", () => {
         await page.evaluate(() => window.unblockNetwork());
     });
 
-    test("room destroyed by server during reconnection phase - client reconnects but finds no room", async ({ page }) => {
+    test("room destroyed by server during reconnection phase - client is disconnected and fails to reconnect", async ({ page }) => {
         await openPage(page, ts.httpUrl, "test-client.html?intercept-ws");
         await page.evaluate(({ wsUrl }) => window.initClient("rd1", wsUrl), { wsUrl: ts.wsUrl });
         const roomId = await page.evaluate(() => window.createRoom("rd1", { data: 1 }));
@@ -141,13 +141,13 @@ test.describe("Reconnection", () => {
         // Server explicitly destroys the room while client is disconnected
         ts.server.destroyRoom(roomId);
 
-        // Unblock - client reconnects successfully but room is gone
+        // Unblock - client tries to reconnect, but was already disconnected (destroying the room kicks its participants, also pending ones)
         await page.evaluate(() => window.unblockNetwork());
 
         await page.waitForFunction(() => {
             const ev = window.getEvents("rd1");
-            return ev.instanceDestroyed.some(r => r?.includes("room no longer exists"));
-        }, null, { timeout: 10_000 });
+            return ev.instanceDestroyed.some(r => r?.includes("Disconnected, reconnection failed"));
+        }, null, { timeout: 20_000 });
     });
 
     test("grace period expires while disconnected - client and room cleaned up", async ({ page }) => {
@@ -177,44 +177,6 @@ test.describe("Reconnection", () => {
             const ev = window.getEvents("gp1");
             return ev.instanceDestroyed.some(r => r?.includes("Disconnected, reconnection failed"));
         }, null, { timeout: 20_000 });
-    });
-
-    test("room version mismatch forces reconnect", async ({ context }) => {
-        // This tests that the client detects skipped updates via version tracking
-        // We need to observe the behavior when versions don't match
-        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
-        await openPage(p1, ts.httpUrl, "test-client.html?intercept-ws");
-        await openPage(p2, ts.httpUrl, "test-client.html?intercept-ws");
-
-        await p1.evaluate(({ wsUrl }) => window.initClient("vm1", wsUrl), { wsUrl: ts.wsUrl });
-        const roomId = await p1.evaluate(() => window.createRoom("vm1", { counter: 0 }));
-        await p2.evaluate(({ wsUrl }) => window.initClient("vm2", wsUrl), { wsUrl: ts.wsUrl });
-        await p2.evaluate(({ roomId }) => window.joinRoom("vm2", roomId), { roomId });
-        await p1.waitForFunction(() => window.participantCount("vm1") === 2, null, { timeout: 2_000 });
-
-        // Rapid updates that might cause version issues
-        // Client 1 blocks network then client 2 makes updates
-        await p1.evaluate(() => window.closeSocket("vm1"));
-
-        // While vm1 is disconnected, vm2 makes updates
-        for (let i = 0; i < 5; i++) {
-            await p2.evaluate(({ i }) => window.updateStorage("vm2", "counter", "set", i), { i });
-        }
-
-        // vm1 should reconnect and get the correct state
-        await p1.waitForFunction(() => {
-            const ev = window.getEvents("vm1");
-            return ev.status.some(s => s.includes("Reconnected"));
-        }, null, { timeout: 10_000 });
-
-        await p1.waitForFunction(() => window.storage("vm1")?.counter != null, null, { timeout: 2_000 });
-        const s1 = await p1.evaluate(() => window.storage("vm1"));
-        const s2 = await p2.evaluate(() => window.storage("vm2"));
-
-        // Both should have the same state after resync
-        expect(s1.counter).toBe(s2.counter);
-
-        await p1.close(); await p2.close();
     });
 
     // Host migration during reconnection --------------

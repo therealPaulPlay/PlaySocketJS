@@ -55,7 +55,7 @@
         };
 
         // PlaySocket Client API passthrough
-        window.createRoom = async (id, ...args) => await clients[id].createRoom(args[0] || {}, args[1]);
+        window.createRoom = async (id, ...args) => await clients[id].createRoom(args[0] || {});
         window.joinRoom = async (id, ...args) => await clients[id].joinRoom(...args);
         window.updateStorage = (id, ...args) => clients[id].updateStorage(...args);
         window.sendRequest = (id, ...args) => clients[id].sendRequest(...args);

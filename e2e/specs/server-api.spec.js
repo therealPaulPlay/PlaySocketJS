@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createTestServer } from "../helpers/test-server.js";
 import { openPage, sleep } from "../helpers/playwright-helpers.js";
+import { RECONNECT_GRACE_PERIOD } from "../../src/server/server.js";
 
 test.describe("Server API", () => {
 
@@ -16,6 +17,62 @@ test.describe("Server API", () => {
             const ev = window.getEvents("sr3");
             return ev.instanceDestroyed.some(r => r?.includes("Kicked") && r?.includes("Cheating detected"));
         }, null, { timeout: 5_000 });
+        ts.close();
+    });
+
+    test("server kick is synchronous - client is fully disconnected when kick() returns", async ({ page }) => {
+        const events = [];
+        const ts = await createTestServer({
+            eventHandlers: {
+                clientLeftRoom: (clientId) => events.push(`left:${clientId}`),
+                clientDisconnected: (clientId) => events.push(`disconnected:${clientId}`)
+            }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("sk1", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("sk1", {}));
+
+        // Left the room & disconnected right away
+        ts.server.kick("sk1", "Bye");
+        expect(events).toEqual(["left:sk1", "disconnected:sk1"]);
+
+        // Client ID is free again (registering with it would fail with "ID is taken" otherwise), and the socket closing didn't disconnect it a second time
+        await page.evaluate(({ wsUrl }) => window.initClient("sk1", wsUrl), { wsUrl: ts.wsUrl });
+        expect(events).toEqual(["left:sk1", "disconnected:sk1"]);
+        ts.close();
+    });
+
+    test("server kick disconnects a client pending reconnect right away, so it can't reconnect", async ({ page }) => {
+        const events = [];
+        const ts = await createTestServer({
+            eventHandlers: {
+                clientLeftRoom: (clientId) => events.push(`left:${clientId}`),
+                clientDisconnected: (clientId) => events.push(`disconnected:${clientId}`)
+            }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html?intercept-ws");
+        await page.evaluate(({ wsUrl }) => window.initClient("kp1", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("kp1", {}));
+
+        // Drop the connection, so the client is pending reconnect
+        await page.evaluate(() => {
+            window.blockNetwork();
+            window.closeSocket("kp1");
+        });
+        await sleep(200);
+        expect(events).toEqual([]);
+
+        // Left the room & disconnected right away (instead of after the grace period)
+        ts.server.kick("kp1", "Bye");
+        expect(events).toEqual(["left:kp1", "disconnected:kp1"]);
+
+        // The grace period ending doesn't disconnect it a second time
+        await sleep(RECONNECT_GRACE_PERIOD + 200);
+        expect(events).toEqual(["left:kp1", "disconnected:kp1"]);
+
+        // Can't reconnect anymore
+        await page.evaluate(() => window.unblockNetwork());
+        await page.waitForFunction(() => window.getEvents("kp1").instanceDestroyed.some(r => r?.includes("Disconnected, reconnection failed")), null, { timeout: 20_000 });
         ts.close();
     });
 
@@ -97,25 +154,40 @@ test.describe("Server API", () => {
         ts.close();
     });
 
-    test("stop() closes all connections and server", async ({ page }) => {
-        const ts = await createTestServer();
-        await openPage(page, ts.httpUrl, "test-client.html");
-        await page.evaluate(({ wsUrl }) => window.initClient("st1", wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(() => window.createRoom("st1", {}));
+    test("stop() closes all connections and server without triggering events", async ({ context }) => {
+        const events = [];
+        const ts = await createTestServer({
+            eventHandlers: {
+                clientLeftRoom: (clientId) => events.push(`left:${clientId}`),
+                clientDisconnected: (clientId) => events.push(`disconnected:${clientId}`)
+            }
+        });
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, "test-client.html");
+        await openPage(p2, ts.httpUrl, "test-client.html?intercept-ws");
+        await p1.evaluate(({ wsUrl }) => window.initClient("st1", wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await p1.evaluate(() => window.createRoom("st1", {}));
+        await p2.evaluate(({ wsUrl }) => window.initClient("st2", wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ roomId }) => window.joinRoom("st2", roomId), { roomId });
+
+        // st2 goes pending disconnect
+        await p2.evaluate(() => { window.blockNetwork(); window.closeSocket("st2"); });
+        await sleep(200);
 
         ts.server.stop();
 
-        // Client should detect disconnection
-        await page.waitForFunction(() => {
+        // Connected client should detect disconnection, and no events should have fired (for the connected or the pending client)
+        await p1.waitForFunction(() => {
             const ev = window.getEvents("st1");
             return ev.instanceDestroyed.some(r => r?.includes("Kicked") && r?.includes("Server restart"));
         }, null, { timeout: 5_000 });
+        expect(events).toEqual([]);
         ts.httpServer.close();
     });
 
     test("server createRoom creates server-owned room that clients can join", async ({ page }) => {
         const ts = await createTestServer();
-        const room = ts.server.createRoom({ lobby: true }, 10);
+        const room = ts.server.createRoom({ lobby: true });
         expect(room.id).toBeTruthy();
         expect(room.id.length).toBe(6);
 
@@ -131,18 +203,18 @@ test.describe("Server API", () => {
         ts.close();
     });
 
-    test("server createRoom always sets host to server, extra arguments are ignored", async ({ page }) => {
+    test("server createRoom always sets host to null, extra arguments are ignored", async ({ page }) => {
         const ts = await createTestServer();
-        // A third argument must not be able to assign an arbitrary host
-        const room = ts.server.createRoom({ val: 1 }, 10, "some-client");
-        expect(ts.server.rooms[room.id].host).toBe("server");
+        // A second argument must not be able to assign an arbitrary host
+        const room = ts.server.createRoom({ val: 1 }, "some-client");
+        expect(ts.server.rooms[room.id].host).toBe(null);
 
         // A joining client does not become the host either
         await openPage(page, ts.httpUrl, "test-client.html");
         await page.evaluate(({ wsUrl }) => window.initClient("sh1", wsUrl), { wsUrl: ts.wsUrl });
         await page.evaluate(({ roomId }) => window.joinRoom("sh1", roomId), { roomId: room.id });
         expect(await page.evaluate(() => window.isHost("sh1"))).toBe(false);
-        expect(ts.server.rooms[room.id].host).toBe("server");
+        expect(ts.server.rooms[room.id].host).toBe(null);
         ts.close();
     });
 
@@ -168,7 +240,8 @@ test.describe("Server API", () => {
     });
 
     test("destroyRoom kicks all participants and removes room", async ({ context }) => {
-        const ts = await createTestServer();
+        let roomDestroyedCount = 0;
+        const ts = await createTestServer({ eventHandlers: { roomDestroyed: () => roomDestroyedCount++ } });
         const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
         await openPage(p1, ts.httpUrl, "test-client.html");
         await openPage(p2, ts.httpUrl, "test-client.html");
@@ -185,10 +258,25 @@ test.describe("Server API", () => {
         await p1.waitForFunction(() => window.getEvents("dr1").instanceDestroyed.some(r => r?.includes("Kicked")), null, { timeout: 2_000 });
         await p2.waitForFunction(() => window.getEvents("dr2").instanceDestroyed.some(r => r?.includes("Kicked")), null, { timeout: 2_000 });
 
-        // Room should be gone
+        // Room should be gone (and only destroyed once, even though kicking the participants empties it)
         expect(ts.server.rooms[roomId]).toBeUndefined();
+        expect(roomDestroyedCount).toBe(1);
 
         await p1.close(); await p2.close();
+        ts.close();
+    });
+
+    test("destroyRoom removes server-created room after kicking its participants", async ({ page }) => {
+        let roomDestroyedCount = 0;
+        const ts = await createTestServer({ eventHandlers: { roomDestroyed: () => roomDestroyedCount++ } });
+        const room = ts.server.createRoom({});
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("dsr1", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(({ roomId }) => window.joinRoom("dsr1", roomId), { roomId: room.id });
+
+        ts.server.destroyRoom(room.id);
+        expect(ts.server.rooms[room.id]).toBeUndefined();
+        expect(roomDestroyedCount).toBe(1);
         ts.close();
     });
 
@@ -287,26 +375,6 @@ test.describe("Server API", () => {
         await page.evaluate(({ roomId }) => window.joinRoom("badtarget", roomId), { roomId: room.id });
 
         expect(() => ts.server.move("badtarget", "NONEXISTENT")).toThrow("Target room not found");
-        ts.close();
-    });
-
-    test("move() throws when target room is full", async ({ page }) => {
-        const ts = await createTestServer();
-        await openPage(page, ts.httpUrl, "test-client.html");
-
-        const room1 = ts.server.createRoom({});
-        const room2 = ts.server.createRoom({}, 1); // size=1
-
-        await page.evaluate(({ wsUrl }) => window.initClient("full1", wsUrl), { wsUrl: ts.wsUrl });
-        await page.evaluate(({ roomId }) => window.joinRoom("full1", roomId), { roomId: room1.id });
-
-        // Fill room2
-        await page.evaluate(async ({ wsUrl, roomId }) => {
-            await window.initClient("full2", wsUrl);
-            await window.joinRoom("full2", roomId);
-        }, { wsUrl: ts.wsUrl, roomId: room2.id });
-
-        expect(() => ts.server.move("full1", room2.id)).toThrow("Target room is full");
         ts.close();
     });
 
@@ -468,12 +536,13 @@ test.describe("Server API", () => {
         expect(ts.server.rooms[roomId]).toBeUndefined();
         expect(ts.server.rooms[room2.id].participants).toContain("pdc1");
 
-        // Client reconnects and should receive room2's storage
+        // Client reconnects and should receive room2's storage & the moved event
         await page.evaluate(() => window.unblockNetwork());
         await page.waitForFunction(() => window.getEvents("pdc1").status.some(s => s.includes("Reconnected")));
 
         const storage = await page.evaluate(() => window.storage("pdc1"));
         expect(storage.data).toBe(2);
+        expect(await page.evaluate(() => window.getEvents("pdc1").moved)).toEqual([room2.id]);
 
         ts.close();
     });

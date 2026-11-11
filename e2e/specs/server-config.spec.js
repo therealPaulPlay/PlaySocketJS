@@ -100,34 +100,4 @@ test.describe("Server configuration", () => {
         ts.close();
     });
 
-    test("max room size enforcement", async ({ context }) => {
-        const ts = await createTestServer();
-        const pages = [];
-        for (let i = 0; i < 5; i++) {
-            pages.push(await context.newPage());
-            await openPage(pages[i], ts.httpUrl, "test-client.html");
-        }
-
-        // Create room with size=4
-        await pages[0].evaluate(({ wsUrl }) => window.initClient("ms0", wsUrl), { wsUrl: ts.wsUrl });
-        const roomId = await pages[0].evaluate(() => window.createRoom("ms0", {}, 4));
-
-        // 3 more clients join (total 4 including host)
-        for (let i = 1; i < 4; i++) {
-            await pages[i].evaluate(({ wsUrl, id }) => window.initClient(id, wsUrl), { wsUrl: ts.wsUrl, id: "ms" + i });
-            await pages[i].evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id: "ms" + i, roomId });
-        }
-        await pages[0].waitForFunction(() => window.participantCount("ms0") === 4, null, { timeout: 2_000 });
-
-        // 5th client should be rejected
-        await pages[4].evaluate(({ wsUrl }) => window.initClient("ms4", wsUrl), { wsUrl: ts.wsUrl });
-        const err = await pages[4].evaluate(async ({ roomId }) => {
-            try { await window.joinRoom("ms4", roomId); return null; }
-            catch (e) { return e.message; }
-        }, { roomId });
-        expect(err).toContain("Room full");
-
-        for (const p of pages) await p.close();
-        ts.close();
-    });
 });

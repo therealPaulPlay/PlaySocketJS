@@ -237,7 +237,7 @@ test.describe("Client events", () => {
         });
         await new Promise(r => setTimeout(r, 200));
 
-        // New client joins the room (host is null since sole participant disconnected)
+        // New client joins the room (host is pending disconnect since sole participant disconnected)
         await p2.evaluate(({ wsUrl }) => window.initClient("eh2", wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom("eh2", roomId), { roomId });
 
@@ -249,6 +249,57 @@ test.describe("Client events", () => {
         expect(ev.hostMigrated).toContain("eh2");
 
         await p1.close(); await p2.close();
+    });
+
+    test("host migrates to connected participant, not pending disconnect one - joiner doesn't take over", async ({ context }) => {
+        const [pA, pB, pC, pD] = await Promise.all([...Array(4)].map(() => context.newPage()));
+        for (const p of [pA, pC, pD]) await openPage(p, ts.httpUrl, "test-client.html");
+        await openPage(pB, ts.httpUrl, "test-client.html?intercept-ws");
+
+        await pA.evaluate(({ wsUrl }) => window.initClient("hpA", wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await pA.evaluate(() => window.createRoom("hpA", {}));
+        for (const [p, id] of [[pB, "hpB"], [pC, "hpC"]]) {
+            await p.evaluate(({ id, wsUrl }) => window.initClient(id, wsUrl), { id, wsUrl: ts.wsUrl });
+            await p.evaluate(({ id, roomId }) => window.joinRoom(id, roomId), { id, roomId });
+        }
+
+        // B goes pending disconnect, then host A leaves - C must become host, not B (who is next in line)
+        await pB.evaluate(() => { window.blockNetwork(); window.closeSocket("hpB"); });
+        await new Promise(r => setTimeout(r, 200));
+        await pA.evaluate(() => window.destroy("hpA"));
+        await pC.waitForFunction(() => window.isHost("hpC"), null, { timeout: 2_000 });
+        expect(ts.server.rooms[roomId].host).toBe("hpC");
+
+        // D joins - C stays host
+        await pD.evaluate(({ wsUrl }) => window.initClient("hpD", wsUrl), { wsUrl: ts.wsUrl });
+        await pD.evaluate(({ roomId }) => window.joinRoom("hpD", roomId), { roomId });
+        expect(await pD.evaluate(() => window.isHost("hpD"))).toBe(false);
+        expect(await pC.evaluate(() => window.isHost("hpC"))).toBe(true);
+        expect(ts.server.rooms[roomId].host).toBe("hpC");
+
+        await pA.close(); await pB.close(); await pC.close(); await pD.close();
+    });
+
+    test("client reconnecting while host is pending disconnect becomes host", async ({ context }) => {
+        const [pA, pB] = await Promise.all([context.newPage(), context.newPage()]);
+        for (const p of [pA, pB]) await openPage(p, ts.httpUrl, "test-client.html?intercept-ws");
+
+        await pA.evaluate(({ wsUrl }) => window.initClient("hrA", wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await pA.evaluate(() => window.createRoom("hrA", {}));
+        await pB.evaluate(({ wsUrl }) => window.initClient("hrB", wsUrl), { wsUrl: ts.wsUrl });
+        await pB.evaluate(({ roomId }) => window.joinRoom("hrB", roomId), { roomId });
+
+        // B goes pending disconnect, then host A drops - host migrates to pending B (the only one left)
+        await pB.evaluate(() => { window.blockNetwork(); window.closeSocket("hrB"); });
+        await new Promise(r => setTimeout(r, 200));
+        await pA.evaluate(() => window.closeSocket("hrA"));
+
+        // A reconnects while B is still disconnected - A must become host
+        await pA.waitForFunction(() => window.getEvents("hrA").status.includes("Reconnected."), null, { timeout: 10_000 });
+        await pA.waitForFunction(() => window.isHost("hrA"), null, { timeout: 2_000 });
+        expect(ts.server.rooms[roomId].host).toBe("hrA");
+
+        await pA.close(); await pB.close();
     });
 
     test("throwing inside client event handler is caught and does not crash client", async ({ page }) => {

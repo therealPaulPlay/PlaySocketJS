@@ -160,7 +160,7 @@ test.describe("Client API", () => {
             try { await window.joinRoom("ec1", "NONEXISTENT"); return null; }
             catch (e) { return e.message; }
         });
-        expect(err).toContain("Room not found");
+        expect(err).toContain("Invalid room ID");
     });
 
     test("creating room when already in one fails", async ({ page }) => {
@@ -207,15 +207,6 @@ test.describe("Client API", () => {
         expect(err).toContain("ID is taken");
 
         await p1.close(); await p2.close();
-    });
-
-    test("\"server\" as client ID is rejected", async ({ page }) => {
-        await openPage(page, ts.httpUrl, "test-client.html");
-        const err = await page.evaluate(async ({ wsUrl }) => {
-            try { await window.initClient("server", wsUrl); return null; }
-            catch (e) { return e.message; }
-        }, { wsUrl: ts.wsUrl });
-        expect(err).toContain("ID is taken");
     });
 
     test("registration with mismatched or missing client version is rejected", async () => {

@@ -303,6 +303,27 @@ test.describe("Server events", () => {
         ts.close();
     });
 
+    test("clientLeftRoom fires for every participant when room is destroyed", async ({ context }) => {
+        const leftRoom = [];
+        const ts = await createTestServer({
+            eventHandlers: { clientLeftRoom: (clientId, roomId) => { leftRoom.push({ clientId, roomId }); } }
+        });
+        const [p1, p2] = await Promise.all([context.newPage(), context.newPage()]);
+        await openPage(p1, ts.httpUrl, "test-client.html");
+        await openPage(p2, ts.httpUrl, "test-client.html");
+
+        await p1.evaluate(({ wsUrl }) => window.initClient("clr3", wsUrl), { wsUrl: ts.wsUrl });
+        const roomId = await p1.evaluate(() => window.createRoom("clr3", {}));
+        await p2.evaluate(({ wsUrl }) => window.initClient("clr4", wsUrl), { wsUrl: ts.wsUrl });
+        await p2.evaluate(({ roomId }) => window.joinRoom("clr4", roomId), { roomId });
+
+        ts.server.destroyRoom(roomId);
+        expect(leftRoom.sort((a, b) => a.clientId.localeCompare(b.clientId))).toEqual([{ clientId: "clr3", roomId }, { clientId: "clr4", roomId }]);
+
+        await p1.close(); await p2.close();
+        ts.close();
+    });
+
     test("requestReceived fires with correct data", async ({ page }) => {
         let resolveRequest;
         const requestPromise = new Promise(r => { resolveRequest = r; });
@@ -365,6 +386,33 @@ test.describe("Server events", () => {
             catch (e) { return e.message; }
         });
         expect(err).toContain("Request not allowed");
+        ts.close();
+    });
+
+    test("requestReceived - client reconnecting during async callback still receives the response", async ({ page }) => {
+        let releaseRequest, requestStarted;
+        const started = new Promise(r => { requestStarted = r; });
+        const ts = await createTestServer({
+            eventHandlers: {
+                requestReceived: async () => {
+                    requestStarted();
+                    await new Promise(r => { releaseRequest = r; });
+                }
+            }
+        });
+        await openPage(page, ts.httpUrl, "test-client.html?intercept-ws");
+        await page.evaluate(({ wsUrl }) => window.initClient("rr3", wsUrl), { wsUrl: ts.wsUrl });
+        await page.evaluate(() => window.createRoom("rr3", {}));
+
+        // Send request, then reconnect while the callback is still running
+        await page.evaluate(() => { window.requestResult = window.sendRequest("rr3", "slowAction").then(() => "ok", (e) => e.message); });
+        await started;
+        await page.evaluate(() => window.closeSocket("rr3"));
+        await page.waitForFunction(() => window.getEvents("rr3").status.includes("Reconnected."), null, { timeout: 10_000 });
+
+        // Response must reach the client on its new socket
+        releaseRequest();
+        expect(await page.evaluate(() => window.requestResult)).toBe("ok");
         ts.close();
     });
 

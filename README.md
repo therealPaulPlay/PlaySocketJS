@@ -127,7 +127,7 @@ new PlaySocket(id?: string, options: PlaySocketOptions)
 | Name | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
 | `init()` | - | `Promise<string>` | Initialize the WebSocket connection, resolves with the client ID. |
-| `createRoom()` | `initialStorage?: object, size?: number` | `Promise<string>` | Create a new room, resolves with the room ID. Max. 500 participants. |
+| `createRoom()` | `initialStorage?: object` | `Promise<string>` | Create a new room, resolves with the room ID. |
 | `joinRoom()` | `roomId: string` | `Promise<void>` | Join an existing room. |
 | `destroy()` | `reason?: string` | `void` | Leave room, close the connection, and destroy the instance. |
 | `updateStorage()` | `key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage. |
@@ -243,6 +243,16 @@ server.onEvent("requestReceived", async ({ roomId, clientId, name, data }) => {
 });
 ```
 
+Limiting the room size:
+
+```javascript
+const server = new PlaySocketServer();
+
+server.onEvent("clientJoinRequested", (clientId, roomId) => {
+    if (server.rooms[roomId].participants.length >= 10) return "Room full";
+});
+```
+
 Combining PlaySocket with a custom authentication system:
 
 ```javascript
@@ -253,10 +263,14 @@ server.onEvent("clientRegistrationRequested", async (clientId, data) => {
     try {
         // Your custom auth logic...
         // For example, data could contain a token
-        authedClients.push(clientId);
     } catch (error) {
         return "Error occurred during auth"; // Blocks the registration
     }
+});
+
+// On successful registration, mark the client as authed
+server.onEvent("clientRegistered", (clientId, data) => {
+    authedClients.push(clientId);
 });
 
 server.onEvent("clientDisconnected", async (clientId) => {
@@ -308,18 +322,18 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 #### Methods
 
 > [!IMPORTANT]
-> Rooms created by the server are always owned by the host ID "server". Such rooms are not auto-deleted when all participants have left, so you need to take care of their lifecycle.
+> Rooms created by the server have no host (`host` is null). Such rooms are not auto-deleted when all participants have left, so you need to take care of their lifecycle.
 
 | Name | Parameters | Return type | Description |
 |--------|------------|-------------|-------------|
-| `stop()` | - | `void` | Closes active client connections and the underlying http server (if it's standalone). |
+| `stop()` | - | `void` | Closes active client connections (without triggering events) and the underlying http server (if it's standalone). |
 | `kick()` | `clientId: string, reason?: string` | `void` | Kick a client by their client ID. |
 | `move()` | `clientId: string, roomId: string` | `void` | Move a client that is already in a room to a different room. |
 | `onEvent()` | `event: string, callback: Function` | `() => void` | Register a server-side event callback. Returns unsubscribe function. |
 | `getRoomStorage()` | `roomId: string, options?: { dangerouslySkipCloning?: boolean }` | `object` | Get a snapshot of the current room storage. Pass `dangerouslySkipCloning: true` to get the uncloned store for performance reasons. |
 | `getUpdateDetails()` | `update: object` | `object` | Get the details (`key`, `type`, `value` and `secondValue`) of a storage update for building validation logic. |
 | `updateRoomStorage()` | `roomId: string, key: string, type: string, value: any, secondValue?: any` | `void` | Update a key in the shared storage of a room. |
-| `createRoom()` | `initialStorage?: object, size?: number` | `object` | Create a server-owned room (returns object containing room ID and state).|
+| `createRoom()` | `initialStorage?: object` | `object` | Create a server-owned room (returns object containing room ID and state).|
 | `destroyRoom()` | `roomId: string` | `void` | Destroy a room & kick all participants. |
 
 #### Events
@@ -335,7 +349,7 @@ The callback signature is `callback(verified, code?, message?)` where `code` ref
 | `roomCreated` | `roomId: string` | Room was created. | - |
 | `roomDestroyed` | `roomId: string` | Room was destroyed. | - |
 | `roomCreationRequested` | `{clientId: string, initialStorage: object}` | Client requested to create room. | Return `object` to override initial storage, `false` or rejection reason `string` to block. |
-| `storageUpdated` | `{clientId: string, roomId: string, update: object, storage: object}` | Room storage updated. | - |
+| `storageUpdated` | `{clientId: string \| null, roomId: string, update: object, storage: object}` | Room storage updated (`null` as the clientId for server-authored updates). | - |
 | `storageUpdateRequested` | `{clientId: string, roomId: string, update: object, storage: object}` | Client requested storage update. | Return `false` or rejection reason `string` to block the update. Callback must be synchronous. |
 | `requestReceived` | `{clientId: string, roomId?: string, name: string, data?: any}` | Request from client. | Return `false` or rejection reason `string` to block. |
 

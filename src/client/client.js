@@ -52,11 +52,10 @@ export default class PlaySocket {
     // Room properties
     /** @type {string | null | undefined} */
     #roomHost;
-    /** @type {boolean | undefined} */
-    #inRoom; // If the client is currently in  a room or not
+    /** @type {string | null} */
+    #roomId = null; // ID of the room the client is currently in
     #participantCount = 0;
     #crdtManager;
-    #roomVersion = 0; // Update version (used to compare local vs. remote state to detect package loss)
 
     // Event handling
     /** @type {Map<string, Function[]>} */
@@ -227,11 +226,10 @@ export default class PlaySocket {
 
                     case "join_accepted":
                         if (this.#debug) console.log(LOG_PREFIX + "State received for join:", message.state);
-                        this.#inRoom = true;
+                        this.#roomId = message.roomId;
                         this.#crdtManager.importState(message.state);
                         this.#participantCount = message.participantCount;
                         this.#roomHost = message.host;
-                        this.#roomVersion = message.version;
                         this.#triggerEvent("storageUpdated", this.storage);
                         if (this.#pendingJoin) {
                             this.#triggerEvent("status", "Connected to room.");
@@ -253,13 +251,16 @@ export default class PlaySocket {
                         if (message.roomData) {
                             if (this.#debug) console.log(LOG_PREFIX + "State received for reconnect:", message.roomData.state);
                             this.#crdtManager.importState(message.roomData.state);
-                            this.#roomVersion = message.roomData.version;
                             this.#participantCount = message.roomData.participantCount;
                             this.#setHost(message.roomData.host); // Set host before in case there are .isHost checks in the storageUpdate fallback
                             this.#triggerEvent("storageUpdated", this.storage);
-                        } else if (this.#inRoom) {
-                            // If no room data was received, but client thinks they are in a room
-                            return this.destroy("Reconnected, but room no longer exists.");
+
+                            // If the client was moved to another room while it was disconnected
+                            if (this.#roomId && message.roomData.roomId !== this.#roomId) {
+                                this.#triggerEvent("status", "Moved to room.");
+                                this.#triggerEvent("moved", message.roomData.roomId);
+                            }
+                            this.#roomId = message.roomData.roomId;
                         }
                         this.#triggerEvent("status", "Reconnected.");
                         if (this.#pendingReconnect) this.#pendingReconnect.resolve();
@@ -270,7 +271,7 @@ export default class PlaySocket {
                         break;
 
                     case "room_created":
-                        this.#inRoom = true;
+                        this.#roomId = message.roomId;
                         this.#participantCount = message.participantCount;
                         this.#triggerEvent("status", "Room created.");
                         this.#crdtManager.importState(message.state);
@@ -283,14 +284,9 @@ export default class PlaySocket {
                         break;
 
                     case "property_updated":
-                        this.#roomVersion++; // Increment room version
                         if (this.#debug) console.log(LOG_PREFIX + "Property update received:", message.update);
                         this.#crdtManager.importPropertyUpdate(message.update);
                         if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
-                        if (this.#roomVersion != message.version && this.#initialized && this.#socket?.readyState === WebSocket.OPEN) {
-                            console.error(ERROR_PREFIX + "Detected skipped property update, forcing reconnect");
-                            this.#socket?.close();
-                        }
                         break;
 
                     case "property_update_rejected":
@@ -410,10 +406,9 @@ export default class PlaySocket {
     /**
      * Create a new room and become host
      * @param {object | null} [initialStorage] - Initial state
-     * @param {number} [size] - Max number of participants
      * @returns {Promise<string>} Resolves with room ID
      */
-    async createRoom(initialStorage, size) {
+    async createRoom(initialStorage) {
         if (!this.#initialized) throw new Error("Not initialized");
 
         return /** @type {Promise<string>} */ (Promise.race([
@@ -422,8 +417,7 @@ export default class PlaySocket {
                 this.#pendingCreate = { resolve, reject };
                 this.#sendToServer({
                     type: "create_room",
-                    initialStorage,
-                    size
+                    initialStorage
                 });
             }),
             this.#createTimeout("Room creation")
@@ -465,7 +459,7 @@ export default class PlaySocket {
      * @param {*} [secondValue] - Second value (needed for some operations)
      */
     updateStorage(key, type, value, secondValue) {
-        if (!this.#inRoom) {
+        if (!this.#roomId) {
             console.error(ERROR_PREFIX + "Failed to update storage, not in a room")
             return;
         };
@@ -528,11 +522,10 @@ export default class PlaySocket {
         // Reset state
         clearTimeout(this.#reconnectTimeout);
         this.#roomHost = null;
-        this.#inRoom = false;
+        this.#roomId = null;
         this.#participantCount = 0;
         this.#isReconnecting = false;
         this.#reconnectCount = 0;
-        this.#roomVersion = 0;
 
         // Reject pending promises if currently active
         if (this.#pendingJoin) this.#pendingJoin.reject(new Error("Destroyed"));
