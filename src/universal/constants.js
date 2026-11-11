@@ -9,7 +9,7 @@ export const HEARTBEAT_INTERVAL = 5000;
 /**
  * Library version, must match package.json
  */
-export const VERSION = "6.0.0";
+export const VERSION = "6.1.0";
 
 /**
  * Logging prefixes

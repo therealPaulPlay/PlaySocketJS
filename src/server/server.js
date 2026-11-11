@@ -295,6 +295,7 @@ export default class PlaySocketServer {
                         this.#rooms[newRoom.id].participants.push(ws.clientId) // Add client to the room
                         this.#clientRooms.set(ws.clientId, newRoom.id); // Add client to the client-room map
                         this.#getClient(ws.clientId)?.send(encode({ type: "room_created", state: newRoom.state, roomId: newRoom.id, participantCount: this.#rooms[newRoom.id].participants.length }), { binary: true });
+                        this.#triggerEvent("clientJoinedRoom", ws.clientId, newRoom.id);
                     } catch (error) {
                         console.error(ERROR_PREFIX + "Error creating room:", error);
                         this.#getClient(ws.clientId)?.send(encode({ type: "room_creation_failed", reason: error.message }), { binary: true });

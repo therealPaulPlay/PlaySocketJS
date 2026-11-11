@@ -220,7 +220,7 @@ test.describe("Server events", () => {
         ts.close();
     });
 
-    test("clientJoinedRoom fires after successful join", async ({ context }) => {
+    test("clientJoinedRoom fires for the room creator and after successful join", async ({ context }) => {
         const log = [];
         const ts = await createTestServer({
             eventHandlers: { clientJoinedRoom: (clientId, roomId) => { log.push({ clientId, roomId }); } }
@@ -234,7 +234,7 @@ test.describe("Server events", () => {
         await p2.evaluate(({ wsUrl }) => window.initClient("cj2", wsUrl), { wsUrl: ts.wsUrl });
         await p2.evaluate(({ roomId }) => window.joinRoom("cj2", roomId), { roomId });
 
-        expect(log.some(e => e.clientId === "cj2" && e.roomId === roomId)).toBe(true);
+        expect(log).toEqual([{ clientId: "cj1", roomId }, { clientId: "cj2", roomId }]);
 
         await p1.close(); await p2.close();
         ts.close();
