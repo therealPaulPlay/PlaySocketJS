@@ -135,7 +135,8 @@ export default class PlaySocketServer {
             this.#wss.clients.forEach(ws => {
                 if (!ws.isAlive) return ws.terminate();
                 ws.isAlive = false;
-                ws.ping();
+                ws.ping(); // Protocol ping that comes back as pong to let server detect dead clients
+                if (ws.clientId) ws.send(encode({ type: "heartbeat" }), { binary: true }); // Browsers hide protocol pings from JS, so the client needs this to detect a dead connection
             });
         }, HEARTBEAT_INTERVAL);
     }

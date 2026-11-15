@@ -1,6 +1,6 @@
 import { encode, decode } from "@msgpack/msgpack";
 import CRDTManager from "../universal/crdtManager.js";
-import { VERSION, ERROR_PREFIX, WARNING_PREFIX, LOG_PREFIX } from "../universal/constants.js";
+import { HEARTBEAT_INTERVAL, VERSION, ERROR_PREFIX, WARNING_PREFIX, LOG_PREFIX } from "../universal/constants.js";
 
 const TIMEOUT_MS = 3000; // 3 second timeout for WS messages
 
@@ -78,6 +78,8 @@ export default class PlaySocket {
     // Timeouts or intervals
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     #reconnectTimeout;
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    #heartbeatTimeout;
     #reconnectCount = 0;
     #isReconnecting = false;
 
@@ -208,6 +210,7 @@ export default class PlaySocket {
      */
     #setupSocketHandlers() {
         this.#socket.onmessage = (event) => {
+            this.#resetHeartbeatTimeout();
             try {
                 const message = /** @type {ServerMessage & Record<string, any>} */ (decode(new Uint8Array(event.data)));
                 if (!message.type) return;
@@ -334,13 +337,28 @@ export default class PlaySocket {
         }
 
         // Handle socket close & attempt reconnect
-        this.#socket.onclose = () => {
-            if (!this.#initialized || this.#isReconnecting) return;
-            this.#triggerEvent("status", "Disconnected.");
-            this.#reconnectCount = 0;
-            this.#attemptReconnect();
-        }
+        this.#socket.onclose = () => this.#handleDisconnect();
     };
+
+    /**
+     * Close the current socket and start reconnecting
+     */
+    #handleDisconnect() {
+        if (!this.#initialized || this.#isReconnecting) return;
+        this.#socket.onclose = this.#socket.onerror = this.#socket.onmessage = null; // Late arriving events shouldn't affect the next socket
+        this.#socket.close();
+        this.#triggerEvent("status", "Disconnected.");
+        this.#reconnectCount = 0;
+        this.#attemptReconnect();
+    }
+
+    /**
+     * Treat the connection as dead if not even a server heartbeat arrived in time (browsers can take minutes to fire onclose on dead connections)
+     */
+    #resetHeartbeatTimeout() {
+        clearTimeout(this.#heartbeatTimeout);
+        this.#heartbeatTimeout = setTimeout(() => this.#handleDisconnect(), HEARTBEAT_INTERVAL * 1.5); // Slightly more than the heartbeat interval to account for latency
+    }
 
     /**
      * Attempt to reconnect with a fixed number of retries
@@ -521,6 +539,7 @@ export default class PlaySocket {
 
         // Reset state
         clearTimeout(this.#reconnectTimeout);
+        clearTimeout(this.#heartbeatTimeout);
         this.#roomHost = null;
         this.#roomId = null;
         this.#participantCount = 0;

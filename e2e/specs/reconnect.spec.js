@@ -3,6 +3,7 @@ import { createServer as createTcpServer, connect } from "node:net";
 import { createTestServer, getNextPort } from "../helpers/test-server.js";
 import { openPage, sleep } from "../helpers/playwright-helpers.js";
 import { RECONNECT_GRACE_PERIOD } from "../../src/server/server.js";
+import { HEARTBEAT_INTERVAL } from "../../src/universal/constants.js";
 
 let ts;
 
@@ -262,6 +263,33 @@ test.describe("Reconnection", () => {
         await sleep(RECONNECT_GRACE_PERIOD + 500);
         expect(ts.server.rooms[roomId]?.participants).toEqual(["ho1"]);
         expect(await page.evaluate(() => window.storage("ho1").score)).toBe(7);
+        relay.close();
+    });
+
+    test("connection silently stops delivering data (e.g. internet down) - client detects it via heartbeat and reconnects", async ({ page }) => {
+        // Relay that can stop forwarding traffic without closing either side
+        const relayPort = getNextPort();
+        const sockets = [];
+        const relay = createTcpServer((client) => {
+            const upstream = connect(ts.port);
+            sockets.push(client, upstream);
+            [client, upstream].forEach(socket => socket.on("error", () => { }));
+            client.pipe(upstream).pipe(client);
+        });
+        await new Promise(resolve => relay.listen(relayPort, resolve));
+
+        await openPage(page, ts.httpUrl, "test-client.html");
+        await page.evaluate(({ wsUrl }) => window.initClient("hb1", wsUrl), { wsUrl: `ws://localhost:${relayPort}/ws` });
+        await page.evaluate(() => window.createRoom("hb1", { score: 3 }));
+
+        // Black-hole the connection, the browser never fires onclose since its TCP connection to the relay stays healthy
+        sockets.forEach(socket => socket.unpipe());
+        await page.waitForFunction(() => window.getEvents("hb1").status.some(s => s.includes("Reconnected")), null, { timeout: 10_000 });
+
+        // The new connection must survive idling past the client's heartbeat timeout
+        await sleep(HEARTBEAT_INTERVAL * 2);
+        expect(await page.evaluate(() => window.getEvents("hb1").status.filter(s => s === "Disconnected.").length)).toBe(1);
+        sockets.forEach(socket => socket.destroy());
         relay.close();
     });
 });
